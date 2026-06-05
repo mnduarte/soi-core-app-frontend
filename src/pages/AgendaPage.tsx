@@ -12,6 +12,7 @@ import { Icon } from '../components/common/Icon';
 import { Avatar } from '../components/common/Avatar';
 import { StatusBadge, FichaPendingBadge } from '../components/common/StatusBadge';
 import { ResolveMenu } from '../components/common/ResolveMenu';
+import { NewClinicalEntryModal } from '../components/patient/NewClinicalEntryModal';
 import { useIsMobile } from '../hooks/useIsMobile';
 import {
   hhmm,
@@ -78,6 +79,10 @@ export default function AgendaPage() {
   const [view, setView] = useState<View>('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
 
+  // Turno que se está documentando: abre la entrada de evolución con el turno
+  // ya enlazado. Al guardar, el backend apaga su badge "ficha pendiente".
+  const [fichaTarget, setFichaTarget] = useState<Appointment | null>(null);
+
   // Tick "now" every minute so unresolved + Now-line refresh on their own.
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -126,6 +131,9 @@ export default function AgendaPage() {
 
   const handleReschedule = (appt: Appointment) =>
     openModal('newAppointment', { patientId: appt.patientId });
+
+  // "Cargar evolución de esta visita": documentar el turno desde la agenda.
+  const handleOpenFicha = (appt: Appointment) => setFichaTarget(appt);
 
   const todayLabel = selectedDate.toLocaleDateString('es-AR', {
     weekday: 'long',
@@ -280,6 +288,7 @@ export default function AgendaPage() {
           onOpenPatient={id => navigate(`/patients/${id}`)}
           onResolve={handleResolve}
           onReschedule={handleReschedule}
+          onOpenFicha={handleOpenFicha}
           isMobile={isMobile}
         />
       )}
@@ -296,6 +305,15 @@ export default function AgendaPage() {
           appts={appts}
           selectedDate={selectedDate}
           onPickDay={d => { setSelectedDate(d); setView('day'); }}
+        />
+      )}
+
+      {fichaTarget && (
+        <NewClinicalEntryModal
+          open
+          onClose={() => setFichaTarget(null)}
+          patientId={fichaTarget.patientId}
+          appointmentId={fichaTarget._id}
         />
       )}
     </div>
@@ -422,6 +440,7 @@ function DayView({
   onOpenPatient,
   onResolve,
   onReschedule,
+  onOpenFicha,
   isMobile,
 }: {
   appts: Appointment[];
@@ -431,6 +450,7 @@ function DayView({
   onOpenPatient: (id: string) => void;
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
+  onOpenFicha: (appt: Appointment) => void;
   isMobile: boolean;
 }) {
   const [hoveredSlot, setHoveredSlot] = useState<number | null>(null);
@@ -523,13 +543,13 @@ function DayView({
                   </div>
                   <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                     <StatusBadge status={appt.status} />
-                    {fichaPending && <FichaPendingBadge onClick={() => onOpenPatient(appt.patientId)} />}
+                    {fichaPending && <FichaPendingBadge onClick={() => onOpenFicha(appt)} />}
                   </div>
                 </div>
                 <ResolveMenu
                   appt={appt}
                   onResolve={onResolve}
-                  onOpenFicha={() => onOpenPatient(appt.patientId)}
+                  onOpenFicha={onOpenFicha}
                   onReschedule={onReschedule}
                 />
               </div>

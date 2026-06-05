@@ -353,6 +353,15 @@ a { color: inherit; text-decoration: none; }
 }
 .card__title { font-size: 14px; font-weight: 600; }
 .card__sub { font-size: 12px; color: var(--text-tertiary); }
+
+/* Tablas que no entran a lo ancho (ej. cuenta corriente Debe/Haber/Saldo):
+   scrollean horizontal dentro de la card en vez de desbordar la pantalla. */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 720px) {
+  /* En pantallas chicas el header de la card apila título y acciones. */
+  .card__header { flex-wrap: wrap; }
+}
 .card__body { padding: 20px; }
 
 /* Input */
@@ -823,3 +832,54 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .dash-appt-row__badges  { grid-area: badges; justify-content: flex-start; }
   .dash-appt-row__menu    { grid-area: menu; }
 }
+
+/* Patient header — collapses as the content area scrolls. The regions that
+   carry secondary info (contact, stats, action buttons) live inside
+   .patient-head__collapsible and animate to zero height when collapsed. */
+.patient-head { transition: padding 0.2s ease; }
+.patient-head__collapsible {
+  overflow: hidden;
+  max-height: 200px;
+  opacity: 1;
+  transition: max-height 0.28s ease, opacity 0.16s ease;
+}
+.patient-head[data-collapsed='true'] .patient-head__collapsible {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* Clinical-history timeline thread (the vertical line + dot per entry). */
+.timeline__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 16px;
+  padding: 16px 0;
+  padding-left: 14px;
+}
+.timeline__item::before {
+  /* the thread, running between dots */
+  content: '';
+  position: absolute;
+  left: 104px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-default);
+}
+.timeline__item:first-child::before { top: 22px; }
+.timeline__item:last-child::before { bottom: calc(100% - 22px); }
+.timeline__dot {
+  position: absolute;
+  left: 100px;
+  top: 18px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--brand-primary);
+  z-index: 1;
+}
+.timeline__dot--current { background: var(--brand-primary); }
+.timeline__date { padding-left: 0; }
+.timeline__body { padding-left: 18px; }

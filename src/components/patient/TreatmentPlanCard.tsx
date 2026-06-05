@@ -84,7 +84,13 @@ export function TreatmentPlanCard({ patientId }: TreatmentPlanCardProps) {
   const updateItemMutation = useMutation({
     mutationFn: ({ planId, itemId, dto }: { planId: string; itemId: string; dto: Partial<TreatmentItem> }) =>
       treatmentPlansApi.updateItem(patientId, planId, itemId, dto),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['treatment-plans', patientId] }),
+    // Completar un ítem genera el cargo en la cuenta corriente del backend, así
+    // que refrescamos saldo y movimientos además del plan.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['treatment-plans', patientId] });
+      qc.invalidateQueries({ queryKey: ['balance'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+    },
   });
 
   const removeItemMutation = useMutation({

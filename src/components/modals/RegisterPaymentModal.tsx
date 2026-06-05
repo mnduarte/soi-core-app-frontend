@@ -64,8 +64,9 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
   });
 
   const amountNum = parseInt(amount.replace(/\D/g, ''), 10) || 0;
+  // Saldo deuda-positiva: > 0 = debe. Cobrar reduce la deuda.
   const currentBalance = balanceData?.balance ?? 0;
-  const newBalance = currentBalance + amountNum;
+  const newBalance = currentBalance - amountNum;
 
   const mutation = useMutation({
     mutationFn: transactionsApi.create,
@@ -93,8 +94,8 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
     });
   };
 
-  const QUICK_AMOUNTS = currentBalance < 0
-    ? [Math.abs(currentBalance), Math.round(Math.abs(currentBalance) / 2), 10000, 25000]
+  const QUICK_AMOUNTS = currentBalance > 0
+    ? [currentBalance, Math.round(currentBalance / 2), 10000, 25000]
     : [10000, 20000, 30000, 50000];
 
   return (
@@ -133,8 +134,8 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
           style={{
             margin: '10px 0 16px',
             padding: '12px 14px',
-            background: currentBalance < 0 ? '#FEF2F2' : 'var(--bg-muted)',
-            border: currentBalance < 0 ? '1px solid #FECACA' : '1px solid var(--border-subtle)',
+            background: currentBalance > 0 ? '#FEF2F2' : 'var(--bg-muted)',
+            border: currentBalance > 0 ? '1px solid #FECACA' : '1px solid var(--border-subtle)',
             borderRadius: 8,
             display: 'flex',
             alignItems: 'center',
@@ -149,7 +150,7 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
               style={{
                 fontSize: 18,
                 fontWeight: 700,
-                color: currentBalance < 0 ? 'var(--danger)' : 'var(--success)',
+                color: currentBalance > 0 ? 'var(--danger)' : 'var(--success)',
               }}
             >
               {fmtMoney(currentBalance)}
@@ -163,7 +164,7 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
               style={{
                 fontSize: 18,
                 fontWeight: 700,
-                color: newBalance < 0 ? 'var(--danger)' : 'var(--success)',
+                color: newBalance > 0 ? 'var(--danger)' : 'var(--success)',
               }}
             >
               {fmtMoney(newBalance)}

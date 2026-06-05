@@ -20,7 +20,10 @@ export default function LoginPage() {
       navigate('/');
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const raw = (err as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
+      // El backend envuelve el error: message puede ser string, un objeto { message } o un array (validación).
+      const inner = raw && typeof raw === 'object' ? (raw as { message?: unknown }).message : raw;
+      const msg = Array.isArray(inner) ? inner.join(', ') : typeof inner === 'string' ? inner : undefined;
       setError(msg ?? 'Error al iniciar sesión');
     },
   });
@@ -74,7 +77,7 @@ export default function LoginPage() {
               lineHeight: 1.55,
             }}
           >
-            Pacientes, agenda, ficha odontológica, fotos y pagos. Pensado para usar todo el
+            Pacientes, agenda, ficha, fotos y pagos. Pensado para usar todo el
             día — y sentirse rápido en cualquier dispositivo.
           </p>
 
@@ -158,7 +161,7 @@ export default function LoginPage() {
           <label className="field-label">Email</label>
           <input
             className="input"
-            type="email"
+            type="text"
             value={email}
             onChange={e => setEmail(e.target.value)}
             required

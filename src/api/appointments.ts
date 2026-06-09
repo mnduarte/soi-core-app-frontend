@@ -44,6 +44,11 @@ export const appointmentsApi = {
       .patch<{ data: Appointment }>(`/appointments/${id}`, { ficha })
       .then(r => r.data.data),
 
+  markReminderSent: (id: string) =>
+    apiClient
+      .patch<{ data: Appointment }>(`/appointments/${id}/reminder-sent`)
+      .then(r => r.data.data),
+
   remove: (id: string) =>
     apiClient.delete(`/appointments/${id}`),
 };

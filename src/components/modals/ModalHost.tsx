@@ -2,6 +2,7 @@ import { useUIStore } from '../../store/ui.store';
 import { NewAppointmentModal } from './NewAppointmentModal';
 import { NewPatientModal } from './NewPatientModal';
 import { RegisterPaymentModal } from './RegisterPaymentModal';
+import { UploadPhotosModal } from './UploadPhotosModal';
 
 export function ModalHost() {
   const modal = useUIStore(s => s.modal);
@@ -20,6 +21,11 @@ export function ModalHost() {
       />
       <RegisterPaymentModal
         open={modal?.kind === 'registerPayment'}
+        onClose={closeModal}
+        defaultPatientId={modal?.props?.patientId}
+      />
+      <UploadPhotosModal
+        open={modal?.kind === 'uploadPhotos'}
         onClose={closeModal}
         defaultPatientId={modal?.props?.patientId}
       />

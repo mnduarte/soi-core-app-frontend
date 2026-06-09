@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal, FormField } from '../common/Modal';
 import { Icon } from '../common/Icon';
-import { Toggle } from '../common/Toggle';
 import { DatePicker } from '../common/DatePicker';
 import { PatientPicker } from '../common/PatientPicker';
 import { appointmentsApi } from '../../api/appointments';
@@ -47,7 +46,6 @@ export function NewAppointmentModal({ open, onClose, defaultPatientId }: NewAppo
   const [duration, setDuration] = useState(30);
   const [title, setTitle] = useState('Control');
   const [notes, setNotes] = useState('');
-  const [reminder, setReminder] = useState(true);
   const [error, setError] = useState('');
 
   // Sync patientId from props on open, and wipe the whole form on close so the
@@ -64,7 +62,6 @@ export function NewAppointmentModal({ open, onClose, defaultPatientId }: NewAppo
       setDuration(30);
       setTitle('Control');
       setNotes('');
-      setReminder(true);
       setError('');
     }
   }, [open, defaultPatientId]);
@@ -279,27 +276,6 @@ export function NewAppointmentModal({ open, onClose, defaultPatientId }: NewAppo
         />
       </FormField>
 
-      <div
-        style={{
-          padding: '10px 12px',
-          background: '#F0FDF4',
-          border: '1px solid #BBF7D0',
-          borderRadius: 8,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          marginTop: 4,
-        }}
-      >
-        <Icon name="whatsapp" size={16} style={{ color: '#25D366' }} />
-        <div style={{ flex: 1, fontSize: 12.5 }}>
-          <div style={{ fontWeight: 500, color: '#15803D' }}>Enviar recordatorio por WhatsApp</div>
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            24 horas antes del turno · automático
-          </div>
-        </div>
-        <Toggle checked={reminder} onChange={setReminder} />
-      </div>
     </Modal>
   );
 }

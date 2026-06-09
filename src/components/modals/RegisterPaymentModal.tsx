@@ -7,6 +7,7 @@ import { PatientPicker } from '../common/PatientPicker';
 import { transactionsApi } from '../../api/transactions';
 import { patientsApi } from '../../api/patients';
 import { useUIStore } from '../../store/ui.store';
+import { useAuthStore } from '../../store/auth.store';
 import { fmtMoney } from '../../lib/format';
 
 interface RegisterPaymentModalProps {
@@ -23,9 +24,42 @@ const METHODS: { k: string; l: string; i: 'cash' | 'send' | 'receipt' | 'zap' }[
   { k: 'MP', l: 'MercadoPago', i: 'zap' },
 ];
 
+// Friendly labels for the WhatsApp receipt message — uppercase enums are
+// not what we want the patient reading.
+const METHOD_LABEL: Record<string, string> = {
+  CASH: 'efectivo',
+  TRANSFER: 'transferencia',
+  DEBIT: 'débito',
+  CREDIT: 'crédito',
+  MP: 'Mercado Pago',
+};
+
+function buildReceiptMessage(args: {
+  firstName: string;
+  clinicName: string;
+  amount: number;
+  methodKey: string;
+  description: string;
+  newBalance: number;
+}): string {
+  const method = METHOD_LABEL[args.methodKey] ?? args.methodKey;
+  const balanceLine =
+    args.newBalance > 0
+      ? `Saldo pendiente: ${fmtMoney(args.newBalance)}.`
+      : args.newBalance < 0
+      ? `Tenés un saldo a favor de ${fmtMoney(Math.abs(args.newBalance))}.`
+      : 'Tu cuenta queda en cero.';
+  return (
+    `Hola ${args.firstName} 👋 Confirmamos tu pago de ${fmtMoney(args.amount)} ` +
+    `(${method}) en ${args.clinicName}. Concepto: ${args.description}. ` +
+    `${balanceLine} ¡Gracias!`
+  );
+}
+
 export function RegisterPaymentModal({ open, onClose, defaultPatientId }: RegisterPaymentModalProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
+  const clinic = useAuthStore(s => s.clinic);
 
   const [patientId, setPatientId] = useState<string | null>(defaultPatientId ?? null);
   const [amount, setAmount] = useState('');
@@ -74,6 +108,23 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
       qc.invalidateQueries({ queryKey: ['balance'] });
       qc.invalidateQueries({ queryKey: ['transactions'] });
       showToast(`Cobro registrado — ${fmtMoney(amountNum)}`);
+
+      // Receipt via WhatsApp — only when the toggle is on and the patient
+      // actually has a phone we can reach. Same "open wa.me, let the
+      // dentist hit Send" pattern as the rest of the app.
+      if (sendReceipt && patient?.phone) {
+        const phone = patient.phone.replace(/\D/g, '');
+        const msg = buildReceiptMessage({
+          firstName: patient.name.split(' ')[0] ?? patient.name,
+          clinicName: clinic?.name ?? 'tu consultorio',
+          amount: amountNum,
+          methodKey: method,
+          description: description.trim() || 'Pago a cuenta',
+          newBalance,
+        });
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      }
+
       onClose();
     },
     onError: (err: unknown) => {
@@ -253,16 +304,22 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
           display: 'flex',
           alignItems: 'center',
           gap: 10,
+          opacity: patient?.phone ? 1 : 0.55,
         }}
       >
         <Icon name="whatsapp" size={16} style={{ color: '#25D366' }} />
         <div style={{ flex: 1, fontSize: 12.5 }}>
           <div style={{ fontWeight: 500 }}>Enviar comprobante por WhatsApp</div>
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            {patient?.phone ?? '—'}
+            {patient?.phone
+              ? `Abre WhatsApp con el comprobante — vos confirmás el envío · ${patient.phone}`
+              : 'El paciente no tiene WhatsApp cargado'}
           </div>
         </div>
-        <Toggle checked={sendReceipt} onChange={setSendReceipt} />
+        <Toggle
+          checked={sendReceipt && !!patient?.phone}
+          onChange={v => patient?.phone && setSendReceipt(v)}
+        />
       </div>
     </Modal>
   );

@@ -60,7 +60,14 @@ apiClient.interceptors.response.use(
       processQueue(refreshErr, null);
       useAuthStore.getState().clearAuth();
       localStorage.removeItem('refreshToken');
-      window.location.href = '/login';
+      // Backend tells us the session was kicked because the user logged
+      // in from another device. Surface it on the login page rather than
+      // dropping them into a silent reauth.
+      const code = (refreshErr as {
+        response?: { data?: { message?: { code?: string } } };
+      })?.response?.data?.message?.code;
+      window.location.href =
+        code === 'SESSION_REPLACED' ? '/login?reason=session-replaced' : '/login';
       return Promise.reject(refreshErr);
     } finally {
       isRefreshing = false;

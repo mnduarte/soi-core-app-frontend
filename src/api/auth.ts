@@ -1,8 +1,26 @@
 import { apiClient } from './client';
 
 export interface LoginPayload {
-  email: string;
+  identifier?: string;
+  email?: string;
   password: string;
+}
+
+export interface LookupResponse {
+  exists: boolean;
+  displayName?: string;
+  mustChangePassword?: boolean;
+  clinic?: {
+    name: string;
+    brandColor: string;
+    logoStyle: 'tooth' | 'mono';
+  } | null;
+}
+
+export interface SetupPasswordPayload {
+  identifier: string;
+  currentPassword: string;
+  newPassword: string;
 }
 
 export interface LoginResponse {
@@ -20,12 +38,31 @@ export interface LoginResponse {
     name: string;
     logoUrl?: string;
     isReadonly: boolean;
+    subscriptionEndsAt?: string | null;
+    trialEndsAt?: string | null;
+    brandColor?: string;
+    status?: 'TRIAL' | 'ACTIVE' | 'SUSPENDED';
   };
 }
 
 export const authApi = {
   login: (dto: LoginPayload) =>
     apiClient.post<{ data: LoginResponse }>('/auth/login', dto).then(r => r.data.data),
+
+  lookup: (identifier: string) =>
+    apiClient
+      .post<{ data: LookupResponse }>('/auth/lookup', { identifier })
+      .then(r => r.data.data),
+
+  setupPassword: (dto: SetupPasswordPayload) =>
+    apiClient
+      .post<{ data: LoginResponse }>('/auth/setup-password', dto)
+      .then(r => r.data.data),
+
+  requestPasswordReset: (dto: { identifier: string; note?: string }) =>
+    apiClient
+      .post<{ data: { ok: boolean } }>('/auth/request-password-reset', dto)
+      .then(r => r.data.data),
 
   refresh: (refreshToken: string) =>
     apiClient.post<{ data: LoginResponse }>('/auth/refresh', { refreshToken }).then(r => r.data.data),

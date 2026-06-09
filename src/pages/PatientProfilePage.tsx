@@ -14,6 +14,7 @@ import { TabBar } from '../components/common/TabBar';
 import { PatientHeader } from '../components/patient/PatientHeader';
 import { OdontogramCard } from '../components/patient/OdontogramCard';
 import { TreatmentPlanCard } from '../components/patient/TreatmentPlanCard';
+import { GalleryContainer } from '../components/gallery/GalleryContainer';
 import {
   ObservationsCard,
   NextAppointmentCard,
@@ -114,7 +115,7 @@ export default function PatientProfilePage() {
         )}
 
         {tab === 'historial' && <HistorialTab patientId={patient._id} />}
-        {tab === 'galeria' && <GaleriaPlaceholder />}
+        {tab === 'galeria' && <GalleryContainer patientId={patient._id} embedded />}
         {tab === 'pagos' && <PagosTab patient={patient} />}
         {tab === 'datos' && <DatosTab patient={patient} />}
       </div>
@@ -506,22 +507,3 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ===========================================================
-// GALERÍA
-// ===========================================================
-function GaleriaPlaceholder() {
-  return (
-    <div className="card">
-      <div
-        style={{
-          padding: 48,
-          textAlign: 'center',
-          color: 'var(--text-tertiary)',
-          fontSize: 13,
-        }}
-      >
-        Galería — próximamente. Requiere integración con Cloudinary (signed uploads).
-      </div>
-    </div>
-  );
-}

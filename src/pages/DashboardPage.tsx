@@ -27,6 +27,35 @@ function endOfDayISO(d = new Date()): string {
   return x.toISOString();
 }
 
+// "hoy" / "mañana" / "el mié 10 jun" — used by the reminder template so the
+// patient sees natural Spanish instead of an ISO date.
+function dayLabelEs(iso: string, now = new Date()): string {
+  const target = new Date(iso);
+  const startToday = new Date(now); startToday.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor(
+    (new Date(target).setHours(0, 0, 0, 0) - startToday.getTime()) / 86_400_000,
+  );
+  if (diffDays === 0) return 'hoy';
+  if (diffDays === 1) return 'mañana';
+  const day = target.toLocaleDateString('es-AR', { weekday: 'short' });
+  const date = target.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+  return `el ${day} ${date}`;
+}
+
+function buildReminderMessage(args: {
+  firstName: string;
+  clinic: string;
+  whenLabel: string;
+  time: string;
+  title?: string;
+}): string {
+  const motivo = args.title ? `\nMotivo: ${args.title}` : '';
+  return (
+    `Hola ${args.firstName} 👋 Te recordamos tu turno en ${args.clinic} ` +
+    `para ${args.whenLabel} a las ${args.time}.${motivo}\n¡Te esperamos!`
+  );
+}
+
 function toastForStatus(name: string, status: AppointmentStatus): string {
   switch (status) {
     case 'COMPLETED':   return `Atendido — ${name}. Ficha pendiente de completar.`;
@@ -52,6 +81,19 @@ export default function DashboardPage() {
   const { data: appts = [] } = useQuery({
     queryKey: ['appointments', 'today'],
     queryFn: () => appointmentsApi.findAll({ from: startOfDayISO(), to: endOfDayISO() }),
+  });
+
+  // 48h-ahead window for the WhatsApp reminders card. Covers late-today +
+  // tomorrow so the dentist can clear the morning queue in one pass.
+  const fortyEightAhead = useMemo(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 48);
+    return d.toISOString();
+  }, []);
+  const { data: upcomingAppts = [] } = useQuery({
+    queryKey: ['appointments', 'upcoming-48h'],
+    queryFn: () =>
+      appointmentsApi.findAll({ from: new Date().toISOString(), to: fortyEightAhead }),
   });
 
   const { data: patients = [] } = useQuery({
@@ -96,6 +138,38 @@ export default function DashboardPage() {
 
   const handleResolve = (id: string, status: AppointmentStatus) =>
     resolveMutation.mutate({ id, status });
+
+  // Reminders pendientes: turnos futuros ≤48h sin recordatorio enviado y que
+  // no estén ya cancelados / atendidos / no-show.
+  const pendingReminders = useMemo(() => {
+    return upcomingAppts
+      .filter(a => !a.reminderSent && !isTerminal(a))
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  }, [upcomingAppts]);
+
+  const markReminderMutation = useMutation({
+    mutationFn: (id: string) => appointmentsApi.markReminderSent(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+    },
+  });
+
+  const handleSendReminder = (appt: Appointment, patient: Patient | undefined) => {
+    if (!patient?.phone) {
+      showToast('El paciente no tiene WhatsApp cargado.');
+      return;
+    }
+    const phone = patient.phone.replace(/\D/g, '');
+    const msg = buildReminderMessage({
+      firstName: patient.name.split(' ')[0] ?? patient.name,
+      clinic: clinic?.name ?? 'tu consultorio',
+      whenLabel: dayLabelEs(appt.startsAt),
+      time: hhmm(appt.startsAt),
+      title: appt.title,
+    });
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    markReminderMutation.mutate(appt._id);
+  };
 
   return (
     <div className="content fade-in">
@@ -196,6 +270,114 @@ export default function DashboardPage() {
                 <QuickAction icon="camera" label="Subir fotos" onClick={() => alert('Próximamente — necesita integración Cloudinary')} />
                 <QuickAction icon="receipt" label="Cobrar pago" onClick={() => openModal('registerPayment')} />
               </div>
+            </div>
+          </div>
+
+          {/* Recordatorios para enviar */}
+          <div className="card">
+            <div className="card__header">
+              <div>
+                <div className="card__title">Recordatorios para enviar</div>
+                <div className="card__sub">
+                  Próximas 48h ·{' '}
+                  {pendingReminders.length === 0
+                    ? 'todo al día'
+                    : `${pendingReminders.length} pendiente${pendingReminders.length === 1 ? '' : 's'}`}
+                </div>
+              </div>
+              {pendingReminders.length > 0 && (
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => navigate('/agenda')}
+                  title="Ver agenda completa"
+                >
+                  Ver agenda <Icon name="arrowRight" size={12} />
+                </button>
+              )}
+            </div>
+            <div>
+              {pendingReminders.length === 0 ? (
+                <div
+                  style={{
+                    padding: 24,
+                    textAlign: 'center',
+                    color: 'var(--text-tertiary)',
+                    fontSize: 12.5,
+                  }}
+                >
+                  No hay recordatorios pendientes ✨
+                </div>
+              ) : (
+                pendingReminders.slice(0, 5).map((appt, i) => {
+                  const patient = patientMap.get(appt.patientId);
+                  const last = i === Math.min(pendingReminders.length, 5) - 1;
+                  const hasPhone = !!patient?.phone;
+                  return (
+                    <div
+                      key={appt._id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '10px 20px',
+                        borderBottom: last ? 'none' : '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      {patient && (
+                        <Avatar
+                          name={patient.name}
+                          lastName={patient.lastName}
+                          id={patient._id}
+                          size="sm"
+                        />
+                      )}
+                      <div
+                        style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                        onClick={() => navigate(`/patients/${appt.patientId}`)}
+                      >
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 500,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {patient ? `${patient.name} ${patient.lastName}` : 'Paciente'}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: 'var(--text-tertiary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {dayLabelEs(appt.startsAt)} {hhmm(appt.startsAt)}
+                          {appt.title ? ` · ${appt.title}` : ''}
+                          {!hasPhone && ' · sin WhatsApp'}
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn--sm"
+                        disabled={!hasPhone || markReminderMutation.isPending}
+                        onClick={() => handleSendReminder(appt, patient)}
+                        style={{
+                          background: hasPhone ? '#25D366' : 'var(--bg-muted)',
+                          color: hasPhone ? '#fff' : 'var(--text-tertiary)',
+                          flexShrink: 0,
+                        }}
+                        title={hasPhone ? 'Abrir WhatsApp con el mensaje listo' : 'Falta cargar el teléfono'}
+                      >
+                        <Icon name="whatsapp" size={13} />
+                        <span style={{ marginLeft: 4 }}>Avisar</span>
+                      </button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 

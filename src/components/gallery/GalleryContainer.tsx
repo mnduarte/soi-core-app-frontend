@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Icon } from '../common/Icon';
+import { Icon, type IconName } from '../common/Icon';
 import {
   galleryApi,
   PHOTO_TYPE_LABEL,
@@ -23,7 +23,7 @@ interface GalleryContainerProps {
   embedded?: boolean;
 }
 
-const VIEWS: { key: View; label: string; icon: string }[] = [
+const VIEWS: { key: View; label: string; icon: IconName }[] = [
   { key: 'timeline', label: 'Timeline', icon: 'history' },
   { key: 'grid', label: 'Grid', icon: 'grid' },
   { key: 'compare', label: 'Comparar antes/después', icon: 'layers' },

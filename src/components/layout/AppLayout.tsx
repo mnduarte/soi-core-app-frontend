@@ -8,6 +8,7 @@ import { ToastHost } from '../common/Toast';
 import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { useIdleLogout } from '../../hooks/useIdleLogout';
+import { useSessionGuard } from '../../hooks/useSessionGuard';
 import { SubscriptionBanner } from './SubscriptionBanner';
 
 function getCrumbs(pathname: string): string[] {
@@ -30,6 +31,7 @@ export default function AppLayout() {
   const clearAuth = useAuthStore(s => s.clearAuth);
   const crumbs = getCrumbs(pathname);
   useIdleLogout();
+  useSessionGuard();
 
   const topbarRight = (
     <>

@@ -140,6 +140,10 @@ export default function LoginPage() {
       setError('Tu sesión expiró por inactividad. Ingresá de nuevo.');
     } else if (params.get('reason') === 'session-replaced') {
       setError('Tu sesión se cerró porque entraste desde otro dispositivo.');
+    } else if (params.get('reason') === 'suspended') {
+      setError('La cuenta está suspendida. Contactá al administrador.');
+    } else if (params.get('reason') === 'expired') {
+      setError('La suscripción venció. Contactá al administrador.');
     }
     const u = params.get('u');
     if (!u) return;

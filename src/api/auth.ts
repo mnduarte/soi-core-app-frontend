@@ -70,6 +70,15 @@ export const authApi = {
   logout: (refreshToken: string) =>
     apiClient.post('/auth/logout', { refreshToken }),
 
+  // Polled every ~30s while the app is open to enforce suspension / session
+  // eviction near-real-time. reason maps to a /login?reason=... message.
+  sessionStatus: () =>
+    apiClient
+      .get<{ data: { ok: boolean; reason?: 'SUSPENDED' | 'EXPIRED' | 'SESSION_REPLACED' | 'BLOCKED' } }>(
+        '/auth/session-status',
+      )
+      .then(r => r.data.data),
+
   acceptInvitation: (dto: {
     token: string;
     name: string;

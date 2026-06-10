@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "_comment": "SPA fallback so deep links (e.g. /patients/123) don't 404 on refresh. Static files keep being served directly; anything that doesn't match falls back to index.html where React Router takes over.",
   "rewrites": [
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ],

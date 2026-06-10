@@ -156,7 +156,7 @@ export function PatientHeader({ patient, collapsed = false }: PatientHeaderProps
             </button>
             <button
               className="btn btn--secondary btn--sm"
-              onClick={() => alert('Próximamente — necesita integración Cloudinary')}
+              onClick={() => openModal('uploadPhotos', { patientId: patient._id })}
             >
               <Icon name="camera" size={12} /> Subir fotos
             </button>

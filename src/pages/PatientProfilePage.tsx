@@ -95,8 +95,18 @@ export default function PatientProfilePage() {
 
       <div
         onScroll={e => {
-          const st = e.currentTarget.scrollTop;
-          setCollapsed(prev => (prev ? st > 12 : st > 48));
+          const el = e.currentTarget;
+          // Collapsing the header grows this scroll area; on short content that
+          // removes the overflow and the header oscillates (the mobile "loop").
+          // Only collapse when there's clearly more to scroll than the header's
+          // collapse delta, so the collapsed state still has room to scroll.
+          const maxScroll = el.scrollHeight - el.clientHeight;
+          if (maxScroll < 300) {
+            setCollapsed(false);
+            return;
+          }
+          const st = el.scrollTop;
+          setCollapsed(prev => (prev ? st > 12 : st > 64));
         }}
         style={{ flex: 1, overflow: 'auto', padding: 24, background: 'var(--bg-app)' }}
       >

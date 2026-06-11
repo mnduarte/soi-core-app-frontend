@@ -54,6 +54,7 @@ export default function AppLayout() {
 
   return (
     <>
+      <div className="app-shell">
       {isImpersonating && (
         // Slate-900 bar sitting above the whole shell so it's impossible to
         // miss. The contrast is intentional — the operator should never forget
@@ -115,6 +116,7 @@ export default function AppLayout() {
           <Topbar crumbs={crumbs} right={topbarRight} onMenuClick={() => setSidebarOpen(true)} />
           <Outlet />
         </div>
+      </div>
       </div>
       <ModalHost />
       <ToastHost />

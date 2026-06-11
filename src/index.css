@@ -101,10 +101,22 @@ a { color: inherit; text-decoration: none; }
 /* ============================================
    APP LAYOUT
    ============================================ */
+/* Full-viewport shell: the impersonation bar + subscription banner + app sit
+   in a fixed-height column so the BODY never scrolls. Only .content scrolls
+   internally, which keeps the topbar (and banner) always visible — on mobile
+   100dvh excludes the browser URL bar, unlike 100vh. */
+.app-shell {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .app {
   display: grid;
   grid-template-columns: 244px 1fr;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

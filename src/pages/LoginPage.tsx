@@ -363,6 +363,18 @@ export default function LoginPage() {
 
       {/* Right form */}
       <div className="login-form-side">
+        {/* Brand banner — only visible on mobile, where the blue panel is hidden. */}
+        <div className="login-mobile-brand">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Icon name="tooth" size={19} />
+            <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em' }}>SOI</span>
+            <span style={{ opacity: 0.7, fontSize: 12.5 }}>· Sistema Odontológico Integral</span>
+          </div>
+          <div style={{ fontSize: 12.5, opacity: 0.85, lineHeight: 1.5 }}>
+            Pacientes, agenda, ficha, fotos y pagos — todo tu consultorio en un solo lugar.
+          </div>
+        </div>
+
         {step === 'identifier' && (
           <form onSubmit={handleIdentifierSubmit} className="login-card login-step">
             <div

@@ -96,20 +96,21 @@ export default function PatientProfilePage() {
       <div
         onScroll={e => {
           const el = e.currentTarget;
-          // Collapsing the header grows this scroll area; on short content that
-          // removes the overflow and the header oscillates (the mobile "loop").
-          // Only collapse when there's clearly more to scroll than the header's
-          // collapse delta, so the collapsed state still has room to scroll.
+          // Collapsing the header grows this scroll area. Two things keep it from
+          // oscillating on phones: a min-height on the content (.patient-tab-scroll
+          // in CSS) so there's always room to scroll, and an asymmetric threshold —
+          // collapse past 72px but only expand again right at the very top.
           const maxScroll = el.scrollHeight - el.clientHeight;
-          if (maxScroll < 300) {
+          if (maxScroll < 200) {
             setCollapsed(false);
             return;
           }
           const st = el.scrollTop;
-          setCollapsed(prev => (prev ? st > 12 : st > 64));
+          setCollapsed(prev => (prev ? st > 8 : st > 72));
         }}
         style={{ flex: 1, overflow: 'auto', padding: 24, background: 'var(--bg-app)' }}
       >
+        <div className="patient-tab-scroll">
         {tab === 'ficha' && (
           <div className="r-aside">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -128,6 +129,7 @@ export default function PatientProfilePage() {
         {tab === 'galeria' && <GalleryContainer patientId={patient._id} embedded />}
         {tab === 'pagos' && <PagosTab patient={patient} />}
         {tab === 'datos' && <DatosTab patient={patient} />}
+        </div>
       </div>
     </div>
   );

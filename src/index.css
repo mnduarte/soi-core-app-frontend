@@ -557,11 +557,35 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .topbar .search { display: none; }
   .content { padding: 18px 16px; }
   .page-header { flex-direction: column; align-items: stretch; gap: 14px; }
+  /* Patient profile: keep the scroll area tall enough that collapsing the
+     header never removes the overflow — otherwise it oscillates on phones. */
+  .patient-tab-scroll { min-height: calc(100dvh + 40px); }
 }
+
+/* Mobile login: the blue brand panel is hidden, so show a compact brand
+   banner above the form instead of an all-white screen. */
+.login-mobile-brand { display: none; }
 
 @media (max-width: 860px) {
   .login-wrap { grid-template-columns: 1fr !important; }
   .login-side { display: none !important; }
+  .login-form-side {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 26px 18px;
+  }
+  .login-mobile-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    max-width: 380px;
+    margin-bottom: 26px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    color: white;
+    background: linear-gradient(135deg, #2F54EB 0%, #1E3FBE 55%, #14296F 100%);
+  }
 }
 
 /* ============================================

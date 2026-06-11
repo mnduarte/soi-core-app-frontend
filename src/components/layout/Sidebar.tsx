@@ -49,8 +49,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       <div className="sidebar__brand">
         <BrandLogo />
         <div>
-          <div className="sidebar__brand-name">SOI</div>
-          <div className="sidebar__brand-sub">{clinic?.name ?? '—'}</div>
+          <div className="sidebar__brand-name">{clinic?.name ?? 'SOI'}</div>
+          <div className="sidebar__brand-sub">{user?.name ?? ''}</div>
         </div>
       </div>
 

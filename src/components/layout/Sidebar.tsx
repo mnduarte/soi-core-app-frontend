@@ -26,6 +26,12 @@ const NAV: NavGroup[] = [
       { to: '/payments', label: 'Pagos', icon: 'receipt' },
     ],
   },
+  {
+    group: 'Soporte',
+    items: [
+      { to: '/ayuda', label: 'Ayuda', icon: 'help' },
+    ],
+  },
 ];
 
 interface SidebarProps {

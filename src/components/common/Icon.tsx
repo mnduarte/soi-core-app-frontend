@@ -9,10 +9,11 @@ export type IconName =
   | 'arrowRight' | 'arrowLeft' | 'arrowUp' | 'arrowDown'
   | 'sparkles' | 'cash' | 'alert' | 'menu' | 'grid' | 'list' | 'layers'
   | 'history' | 'link' | 'star' | 'send' | 'zap' | 'flame'
-  | 'sun' | 'moon' | 'smartphone' | 'clipboard' | 'undo' | 'eye' | 'eyeOff';
+  | 'sun' | 'moon' | 'smartphone' | 'clipboard' | 'undo' | 'eye' | 'eyeOff' | 'help';
 
 const ICONS: Record<IconName, ReactNode> = {
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></>,
+  help: <><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></>,
   eyeOff: <><path d="M9.9 4.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a13 13 0 0 1-2.1 2.9" /><path d="M6.6 6.6A13 13 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 3.4-.6" /><path d="M9.5 9.5a3 3 0 0 0 4.2 4.2" /><path d="m2 2 20 20" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
   bell: <><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></>,

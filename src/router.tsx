@@ -27,6 +27,7 @@ const router = createBrowserRouter([
       { path: 'patients/:id', lazy: () => import('./pages/PatientProfilePage').then(m => ({ Component: m.default })) },
       { path: 'gallery', lazy: () => import('./pages/GalleryPage').then(m => ({ Component: m.default })) },
       { path: 'payments', lazy: () => import('./pages/PaymentsPage').then(m => ({ Component: m.default })) },
+      { path: 'ayuda', lazy: () => import('./pages/HelpPage').then(m => ({ Component: m.default })) },
     ],
   },
 ]);

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOI — Guía rápida</title>
+<style>
+  :root {
+    --brand: #2F54EB;
+    --ink: #0F172A;
+    --muted: #64748B;
+    --line: #E2E8F0;
+    --red: #E11D48;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--ink);
+    background: #F1F5F9;
+    line-height: 1.5;
+  }
+  .page {
+    background: white;
+    max-width: 880px;
+    margin: 24px auto;
+    padding: 40px 48px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .cover { text-align: center; padding: 80px 48px; }
+  .cover .logo { font-size: 52px; }
+  .cover h1 { font-size: 34px; margin: 12px 0 6px; letter-spacing: -0.02em; }
+  .cover p { color: var(--muted); font-size: 16px; margin: 0; }
+  .cover .url { margin-top: 18px; font-size: 14px; color: var(--brand); font-weight: 600; }
+
+  .eyebrow { color: var(--brand); font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+  h2 { font-size: 24px; margin: 4px 0 6px; letter-spacing: -0.02em; }
+  .lead { color: var(--muted); margin: 0 0 18px; }
+
+  /* Screenshot with red overlay pins.
+     Each .pin uses --x/--y (top-left corner) and --w/--h, all in % of the shot. */
+  .shot { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 14px 0 6px; }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot .placeholder {
+    aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center;
+    background: #F8FAFC; color: var(--muted); font-size: 14px; text-align: center; padding: 20px;
+  }
+  .pin {
+    position: absolute;
+    left: var(--x); top: var(--y); width: var(--w); height: var(--h);
+    border: 3px solid var(--red);
+    border-radius: 10px;
+    box-shadow: 0 0 0 9999px rgba(225,29,72,0.04);
+  }
+  .pin.round { border-radius: 50%; }
+  .pin .tag {
+    position: absolute; left: 50%; top: -14px; transform: translate(-50%, -100%);
+    background: var(--red); color: white; font-size: 12px; font-weight: 700;
+    padding: 4px 9px; border-radius: 7px; white-space: nowrap;
+  }
+  .pin .tag::after {
+    content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: var(--red); border-bottom: 0;
+  }
+
+  ol.steps { margin: 12px 0 0; padding-left: 0; list-style: none; counter-reset: s; }
+  ol.steps li { position: relative; padding: 7px 0 7px 34px; font-size: 14.5px; border-bottom: 1px solid var(--line); }
+  ol.steps li:last-child { border-bottom: 0; }
+  ol.steps li::before {
+    counter-increment: s; content: counter(s);
+    position: absolute; left: 0; top: 7px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #EEF2FF; color: var(--brand); font-weight: 700; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  b { color: var(--ink); }
+  .note { margin-top: 16px; background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 9px; padding: 12px 14px; font-size: 13.5px; color: #3730A3; }
+
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; margin: 0; border-radius: 0; max-width: none; padding: 28px 32px; page-break-after: always; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════ COVER ════════ -->
+<section class="page cover">
+  <div class="logo">🦷</div>
+  <h1>SOI — Guía rápida</h1>
+  <p>Sistema Odontológico Integral · cómo usar tu consultorio, paso a paso.</p>
+  <div class="url">soi-odontologia-integral.vercel.app</div>
+  <div class="no-print note" style="text-align:left; max-width:560px; margin:28px auto 0;">
+    <b>Para exportar a PDF:</b> abrí este archivo en el navegador → <b>Imprimir</b> (Ctrl/Cmd&nbsp;+&nbsp;P) →
+    Destino <b>“Guardar como PDF”</b>. Los círculos rojos se posicionan sobre cada botón; si alguno
+    no cae justo, avisá el número de paso y lo corregimos.
+  </div>
+</section>
+
+<!-- ════════ 1. ACTIVAR ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 1</div>
+  <h2>Activá tu cuenta</h2>
+  <p class="lead">La primera vez, desde el mensaje que te enviamos por WhatsApp.</p>
+
+  <div class="shot">
+    <img src="img/01-invite-whatsapp.png" alt="Invitación por WhatsApp"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/01-invite-whatsapp.png&lt;/div&gt;'">
+    <div class="pin round" style="--x:5%; --y:54%; --w:80%; --h:14%"><span class="tag">Abrí este link</span></div>
+  </div>
+
+  <div class="shot">
+    <img src="img/02-activar.png" alt="Crear contraseña"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/02-activar.png&lt;/div&gt;'">
+    <div class="pin" style="--x:64%; --y:88%; --w:28%; --h:7%"><span class="tag">Crear contraseña y entrar</span></div>
+  </div>
+
+  <ol class="steps">
+    <li>Abrí el <b>link</b> que te llegó por WhatsApp.</li>
+    <li>Ingresá la <b>contraseña temporal</b> (la del mensaje) y elegí una <b>contraseña nueva</b> (mínimo 8 caracteres).</li>
+    <li>Tocá <b>Crear contraseña y entrar</b>. ¡Listo!</li>
+  </ol>
+</section>
+
+<!-- ════════ 2. INGRESAR ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 2</div>
+  <h2>Ingresar</h2>
+  <p class="lead">Tu acceso de todos los días.</p>
+
+  <div class="shot">
+    <img src="img/03-login.png" alt="Login"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/03-login.png&lt;/div&gt;'">
+    <div class="pin round" style="--x:90%; --y:60%; --w:5%; --h:4%"><span class="tag">Ver contraseña</span></div>
+    <div class="pin" style="--x:64%; --y:69%; --w:27%; --h:6%"><span class="tag">Ingresar al consultorio</span></div>
+  </div>
+
+  <ol class="steps">
+    <li>Escribí tu <b>usuario</b> → <b>Continuar</b>.</li>
+    <li>Poné tu <b>contraseña</b> (tocá el <b>ojo</b> para verla).</li>
+    <li>Tocá <b>Ingresar al consultorio</b>.</li>
+    <li>¿La olvidaste? Tocá <b>¿Olvidaste?</b> — te enviamos una nueva por WhatsApp.</li>
+  </ol>
+</section>
+
+<!-- ════════ 3. NUEVO PACIENTE ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 3</div>
+  <h2>Crear un paciente</h2>
+  <p class="lead">Desde <b>Pacientes → Nuevo paciente</b>. Solo lo esencial.</p>
+
+  <div class="shot">
+    <img src="img/05-nuevo-paciente.png" alt="Nuevo paciente"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/05-nuevo-paciente.png&lt;/div&gt;'">
+    <div class="pin" style="--x:5%; --y:25%; --w:90%; --h:14%"><span class="tag">Nombre, apellido y teléfono</span></div>
+    <div class="pin" style="--x:79%; --y:92%; --w:18%; --h:6%"><span class="tag">Crear ficha</span></div>
+  </div>
+
+  <ol class="steps">
+    <li>Cargá <b>nombre, apellido y teléfono</b>. El resto se completa después.</li>
+    <li>Tocá <b>Crear ficha</b> — o <b>Guardar y agendar turno</b> si ya querés darle un turno.</li>
+  </ol>
+</section>
+
+<!-- ════════ 4. NUEVO TURNO ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 4</div>
+  <h2>Agendar un turno</h2>
+  <p class="lead">Desde la agenda o desde la ficha del paciente.</p>
+
+  <div class="shot">
+    <img src="img/06-nuevo-turno.png" alt="Nuevo turno"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/06-nuevo-turno.png&lt;/div&gt;'">
+    <div class="pin" style="--x:5%; --y:22%; --w:90%; --h:7%"><span class="tag">Elegí el paciente</span></div>
+    <div class="pin" style="--x:71%; --y:92%; --w:25%; --h:5.5%"><span class="tag">Confirmar turno</span></div>
+  </div>
+
+  <ol class="steps">
+    <li>Elegí el <b>paciente</b>, la <b>fecha</b>, la <b>hora</b> y el <b>motivo</b>.</li>
+    <li>Dejá activado el <b>recordatorio por WhatsApp</b> (se manda 24 hs antes).</li>
+    <li>Tocá <b>Confirmar turno</b>.</li>
+  </ol>
+</section>
+
+<!-- ════════ 5. ATENDER ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 5</div>
+  <h2>Atender un turno</h2>
+  <p class="lead">En la agenda, marcá el turno como atendido.</p>
+
+  <div class="shot">
+    <img src="img/07-agenda-atendido.png" alt="Agenda — atendido"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/07-agenda-atendido.png&lt;/div&gt;'">
+    <div class="pin" style="--x:74%; --y:24%; --w:9%; --h:6%"><span class="tag">Atendido</span></div>
+  </div>
+
+  <ol class="steps">
+    <li>En el turno tocá <b>Atendido</b> (o el menú <b>⋯</b> → <b>Marcar atendido</b>).</li>
+    <li>Queda un aviso amarillo <b>“Ficha pendiente”</b> hasta que documentes la visita.</li>
+  </ol>
+</section>
+
+<!-- ════════ 6. CARGAR EVOLUCIÓN ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 6</div>
+  <h2>Cargar la evolución</h2>
+  <p class="lead">Documentar la visita queda enlazado al turno y apaga “Ficha pendiente”.</p>
+
+  <div class="shot">
+    <img src="img/12-evolucion.png" alt="Nueva entrada de evolución"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/12-evolucion.png — el modal “Nueva entrada de evolución”&lt;/div&gt;'">
+  </div>
+
+  <ol class="steps">
+    <li>Tocá el aviso amarillo <b>“Ficha pendiente”</b> → se abre <b>Nueva entrada de evolución</b>.</li>
+    <li>Elegí el <b>tipo</b>, escribí la nota (o usá una <b>plantilla rápida</b>) → <b>Guardar entrada</b>.</li>
+    <li>El aviso desaparece solo. ✅</li>
+  </ol>
+</section>
+
+<!-- ════════ 7. ODONTOGRAMA Y PLAN ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 7</div>
+  <h2>Odontograma y plan</h2>
+  <p class="lead">Marcá dientes y cargá tratamientos con su precio.</p>
+
+  <div class="shot">
+    <img src="img/08-odontograma.png" alt="Odontograma"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/08-odontograma.png&lt;/div&gt;'">
+    <div class="pin" style="--x:18%; --y:78%; --w:64%; --h:18%"><span class="tag">Click en una cara del diente</span></div>
+  </div>
+
+  <div class="shot">
+    <img src="img/09-plan.png" alt="Plan de tratamiento"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/09-plan.png — la card “Plan de tratamiento” con el botón Agregar&lt;/div&gt;'">
+  </div>
+
+  <ol class="steps">
+    <li>En el <b>odontograma</b>, hacé click en una cara del diente para marcarla.</li>
+    <li>En <b>Plan de tratamiento</b> → <b>Agregar</b>, cargá la prestación con su <b>precio</b>.</li>
+    <li>Al terminar el tratamiento, marcá el ítem como <b>Completado</b> → se genera el <b>cargo</b> en la cuenta del paciente.</li>
+  </ol>
+</section>
+
+<!-- ════════ 8. PAGOS ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 8</div>
+  <h2>Cobrar y recordar pagos</h2>
+  <p class="lead">Cuenta corriente simple, con recordatorio por WhatsApp.</p>
+
+  <div class="shot">
+    <img src="img/10-pagos.png" alt="Pagos"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/10-pagos.png — la pestaña Pagos (Registrar cobro + Recordar pago por WhatsApp)&lt;/div&gt;'">
+  </div>
+
+  <ol class="steps">
+    <li>En la ficha → pestaña <b>Pagos</b> → <b>Registrar cobro</b> (monto + método). El saldo baja solo.</li>
+    <li>Si el paciente debe, tocá <b>Recordar pago por WhatsApp</b>: el mensaje sale listo, vos confirmás.</li>
+    <li>En el menú <b>Pagos</b> ves todos los pacientes con saldo de un vistazo.</li>
+  </ol>
+</section>
+
+<!-- ════════ 9. FOTOS ════════ -->
+<section class="page">
+  <div class="eyebrow">Paso 9</div>
+  <h2>Fotos del paciente</h2>
+  <p class="lead">Galería por sesiones, con comparación antes/después.</p>
+
+  <div class="shot">
+    <img src="img/11-subir-fotos.png" alt="Subir fotos"
+         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/11-subir-fotos.png — el modal de Subir fotos&lt;/div&gt;'">
+  </div>
+
+  <ol class="steps">
+    <li>En la ficha tocá <b>Subir fotos</b> (o la pestaña <b>Galería</b>).</li>
+    <li>Arrastrá las fotos o tocá <b>Elegir archivos</b> / <b>Sacar foto</b>.</li>
+    <li>Asigná <b>tipo</b> (intraoral, extraoral, radiografía) y una <b>sesión</b> → <b>Subir</b>.</li>
+  </ol>
+
+  <div class="note">¿Dudas? Escribinos por <b>WhatsApp</b> y te ayudamos. La idea es que uses SOI todo el día sin trabarte. 🦷</div>
+</section>
+
+</body>
+</html>

@@ -887,7 +887,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
 /* Login step transition — each step slides in from the right when it mounts
    (identifier → password → setup). */
 @keyframes loginStepIn {
-  from { opacity: 0; transform: translateX(28px); }
+  from { opacity: 0; transform: translateX(56px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-.login-step { animation: loginStepIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.login-step { animation: loginStepIn 0.42s cubic-bezier(0.16, 1, 0.3, 1); }

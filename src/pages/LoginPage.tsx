@@ -192,10 +192,15 @@ export default function LoginPage() {
     onError: err => {
       if (pickErrorCode(err) === 'MUST_CHANGE_PASSWORD') {
         setStep('setup');
-        setError('Necesitás crear una nueva contraseña la primera vez.');
+        setNotice('Es tu primera vez: creá una contraseña nueva para entrar.');
         return;
       }
-      setError(pickErrorMessage(err, 'Error al iniciar sesión'));
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const msg = pickErrorMessage(err, 'Error al iniciar sesión');
+      // 403 = cuenta bloqueada (suspendida / vencida) → aviso ámbar, no un error
+      // rojo de credenciales. 401 = contraseña incorrecta → error rojo.
+      if (status === 403) setNotice(msg);
+      else setError(msg);
     },
   });
 

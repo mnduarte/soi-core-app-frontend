@@ -90,6 +90,7 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState('');
   const [lookup, setLookup] = useState<LookupResponse | null>(null);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [tempPassword, setTempPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -358,7 +359,7 @@ export default function LoginPage() {
       {/* Right form */}
       <div className="login-form-side">
         {step === 'identifier' && (
-          <form onSubmit={handleIdentifierSubmit} className="login-card">
+          <form onSubmit={handleIdentifierSubmit} className="login-card login-step">
             <div
               style={{
                 fontSize: 12,
@@ -428,7 +429,7 @@ export default function LoginPage() {
         )}
 
         {step === 'password' && (
-          <form onSubmit={handlePasswordSubmit} className="login-card">
+          <form onSubmit={handlePasswordSubmit} className="login-card login-step">
             <div
               style={{
                 fontSize: 12,
@@ -509,16 +510,38 @@ export default function LoginPage() {
                 ¿Olvidaste?
               </button>
             </div>
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              autoFocus
-              autoComplete="current-password"
-              style={{ marginBottom: 20 }}
-            />
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <input
+                className="input"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                autoFocus
+                autoComplete="current-password"
+                style={{ width: '100%', paddingRight: 42 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                title={showPassword ? 'Ocultar' : 'Mostrar'}
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-tertiary)',
+                  padding: 6,
+                  display: 'flex',
+                }}
+              >
+                <Icon name={showPassword ? 'eyeOff' : 'eye'} size={16} />
+              </button>
+            </div>
 
             <button
               type="submit"
@@ -661,7 +684,7 @@ export default function LoginPage() {
         )}
 
         {step === 'setup' && (
-          <form onSubmit={handleSetupSubmit} className="login-card">
+          <form onSubmit={handleSetupSubmit} className="login-card login-step">
             <div
               style={{
                 fontSize: 12,

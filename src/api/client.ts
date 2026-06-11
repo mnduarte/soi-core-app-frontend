@@ -26,7 +26,14 @@ apiClient.interceptors.response.use(
   res => res,
   async err => {
     const original = err.config;
-    if (err.response?.status !== 401 || original._retry) {
+    // Auth-flow endpoints (login, lookup, setup-password, refresh, …) return
+    // 401 to mean "bad credentials", NOT "token expired". Never run the
+    // refresh-retry on those — otherwise a wrong password triggers a spurious
+    // refresh + retry and the request hangs. (session-status DOES want the
+    // refresh, so it's excluded from this guard.)
+    const url: string = original?.url ?? '';
+    const isAuthFlow = url.includes('/auth/') && !url.includes('/auth/session-status');
+    if (err.response?.status !== 401 || original._retry || isAuthFlow) {
       return Promise.reject(err);
     }
 

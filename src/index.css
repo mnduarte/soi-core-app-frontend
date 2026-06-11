@@ -883,3 +883,11 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .timeline__dot--current { background: var(--brand-primary); }
 .timeline__date { padding-left: 0; }
 .timeline__body { padding-left: 18px; }
+
+/* Login step transition — each step slides in from the right when it mounts
+   (identifier → password → setup). */
+@keyframes loginStepIn {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.login-step { animation: loginStepIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }

@@ -36,6 +36,22 @@ export function useSessionGuard() {
     if (!data || data.ok) return;
     clearAuth();
     const param = REASON_PARAM[data.reason ?? 'BLOCKED'];
-    window.location.href = param ? `/login?reason=${param}` : '/login';
+    // replace() so the now-invalid page is dropped from history — pressing
+    // "back" won't return to it.
+    window.location.replace(param ? `/login?reason=${param}` : '/login');
   }, [data, clearAuth]);
+
+  // Back/forward cache: a forced-logout navigation doesn't re-run route loaders
+  // when the user hits "back", so an authenticated page could be restored from
+  // bfcache and flash until the next poll. If the session is gone (no refresh
+  // token in storage), bounce straight to login instead of showing the panel.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted && !localStorage.getItem('refreshToken')) {
+        window.location.replace('/login');
+      }
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, []);
 }

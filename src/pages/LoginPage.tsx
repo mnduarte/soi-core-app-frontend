@@ -55,6 +55,32 @@ function pickErrorCode(err: unknown): string | undefined {
   return undefined;
 }
 
+// error = red (wrong credentials / validation). notice = amber (account
+// status: suspended, expired, session ended) so they're clearly different.
+function Banner({ kind, text }: { kind: 'error' | 'notice'; text: string }) {
+  const isErr = kind === 'error';
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 8,
+        alignItems: 'flex-start',
+        background: isErr ? 'var(--danger-bg)' : '#FEF3C7',
+        color: isErr ? 'var(--danger)' : '#92400E',
+        border: isErr ? 'none' : '1px solid #FCD34D',
+        padding: '10px 12px',
+        borderRadius: 8,
+        fontSize: 12.5,
+        marginBottom: 12,
+        lineHeight: 1.45,
+      }}
+    >
+      <Icon name="alert" size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+      <span>{text}</span>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore(s => s.setAuth);
@@ -68,6 +94,9 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  // Account-status messages (suspended, expired, evicted, idle). Rendered in a
+  // distinct amber style so they don't read like a wrong-password error.
+  const [notice, setNotice] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotIdentifier, setForgotIdentifier] = useState('');
   const [forgotNote, setForgotNote] = useState('');
@@ -137,13 +166,13 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('idle') === '1') {
-      setError('Tu sesión expiró por inactividad. Ingresá de nuevo.');
+      setNotice('Tu sesión se cerró por inactividad. Ingresá de nuevo.');
     } else if (params.get('reason') === 'session-replaced') {
-      setError('Tu sesión se cerró porque entraste desde otro dispositivo.');
+      setNotice('Tu sesión se cerró porque entraste desde otro dispositivo.');
     } else if (params.get('reason') === 'suspended') {
-      setError('La cuenta está suspendida. Contactá al administrador.');
+      setNotice('Esta cuenta está suspendida. Escribinos para reactivarla.');
     } else if (params.get('reason') === 'expired') {
-      setError('La suscripción venció. Contactá al administrador.');
+      setNotice('La suscripción venció. Escribinos para reactivar tu cuenta.');
     }
     const u = params.get('u');
     if (!u) return;
@@ -201,6 +230,7 @@ export default function LoginPage() {
   const handleIdentifierSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     const trimmed = identifier.trim();
     if (!trimmed) {
       setError('Ingresá tu usuario.');
@@ -212,6 +242,7 @@ export default function LoginPage() {
   const handlePasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     loginMutation.mutate({ identifier, password });
   };
 
@@ -277,7 +308,7 @@ export default function LoginPage() {
               color: 'white',
             }}
           >
-            Tu consultorio,<br />sin papeles ni Excel.
+            Todo tu consultorio,<br />en un solo lugar.
           </h1>
           <p
             style={{
@@ -288,15 +319,15 @@ export default function LoginPage() {
               lineHeight: 1.55,
             }}
           >
-            Pacientes, agenda, ficha, fotos y pagos. Pensado para usar todo el
-            día — y sentirse rápido en cualquier dispositivo.
+            Pacientes, agenda, ficha odontológica, fotos y pagos — ordenado,
+            rápido y a mano desde cualquier dispositivo.
           </p>
 
           <div style={{ display: 'flex', gap: 24, marginTop: 36 }}>
             {[
-              { v: '8–16', l: 'pacientes/día' },
-              { v: '600', l: 'fichas activas' },
-              { v: '10s', l: 'ficha lista' },
+              { v: 'Agenda', l: 'turnos y recordatorios' },
+              { v: 'Fichas', l: 'odontograma y fotos' },
+              { v: 'Pagos', l: 'cuenta corriente' },
             ].map(s => (
               <div key={s.l}>
                 <div style={{ fontSize: 22, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
@@ -355,20 +386,8 @@ export default function LoginPage() {
               Empezá por tu usuario.
             </div>
 
-            {error && (
-              <div
-                style={{
-                  background: 'var(--danger-bg)',
-                  color: 'var(--danger)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  fontSize: 12.5,
-                  marginBottom: 12,
-                }}
-              >
-                {error}
-              </div>
-            )}
+            {notice && <Banner kind="notice" text={notice} />}
+            {error && <Banner kind="error" text={error} />}
 
             <label className="field-label">Usuario</label>
             <input
@@ -439,20 +458,8 @@ export default function LoginPage() {
                 : 'Ingresá tu contraseña para continuar.'}
             </div>
 
-            {error && (
-              <div
-                style={{
-                  background: 'var(--danger-bg)',
-                  color: 'var(--danger)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  fontSize: 12.5,
-                  marginBottom: 12,
-                }}
-              >
-                {error}
-              </div>
-            )}
+            {notice && <Banner kind="notice" text={notice} />}
+            {error && <Banner kind="error" text={error} />}
 
             <div className="row row--between" style={{ marginBottom: 6 }}>
               <label className="field-label" style={{ marginBottom: 0 }}>
@@ -684,20 +691,8 @@ export default function LoginPage() {
                 : 'Vamos a configurar tu contraseña para que solo vos puedas entrar.'}
             </div>
 
-            {error && (
-              <div
-                style={{
-                  background: 'var(--danger-bg)',
-                  color: 'var(--danger)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  fontSize: 12.5,
-                  marginBottom: 12,
-                }}
-              >
-                {error}
-              </div>
-            )}
+            {notice && <Banner kind="notice" text={notice} />}
+            {error && <Banner kind="error" text={error} />}
 
             <label className="field-label">Contraseña temporal</label>
             <div

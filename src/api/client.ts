@@ -66,8 +66,9 @@ apiClient.interceptors.response.use(
       const code = (refreshErr as {
         response?: { data?: { message?: { code?: string } } };
       })?.response?.data?.message?.code;
-      window.location.href =
-        code === 'SESSION_REPLACED' ? '/login?reason=session-replaced' : '/login';
+      window.location.replace(
+        code === 'SESSION_REPLACED' ? '/login?reason=session-replaced' : '/login',
+      );
       return Promise.reject(refreshErr);
     } finally {
       isRefreshing = false;

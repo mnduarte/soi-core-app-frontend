@@ -19,7 +19,7 @@ export type TreatmentItemStatus =
 export interface TreatmentItem {
   _id: string;
   description: string;
-  toothNumber?: number;
+  toothNumber?: string;
   surface?: string;
   price: number;
   status: TreatmentItemStatus;
@@ -39,7 +39,7 @@ export interface TreatmentPlan {
 
 export interface AddTreatmentItemInput {
   description: string;
-  toothNumber?: number;
+  toothNumber?: string;
   surface?: string;
   status?: TreatmentItemStatus;
   estimatedDate?: string;

@@ -17,7 +17,7 @@ const ALLERGY_OPTIONS = ['Penicilina', 'Látex', 'Anestésicos', 'Aspirina', 'Ot
 interface FormState {
   name: string;
   lastName: string;
-  age: string;
+  birthDate: string;
   phone: string;
   email: string;
   obraSocial: string;
@@ -30,7 +30,7 @@ interface FormState {
 const EMPTY: FormState = {
   name: '',
   lastName: '',
-  age: '',
+  birthDate: '',
   phone: '',
   email: '',
   obraSocial: '',
@@ -40,12 +40,16 @@ const EMPTY: FormState = {
   notes: '',
 };
 
-function ageToBirthDate(age: string): string | undefined {
-  const n = parseInt(age, 10);
-  if (!n || n < 0 || n > 150) return undefined;
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - n, 5, 15);
-  return d.toISOString();
+// Age derived from a birthdate (YYYY-MM-DD), for the live hint next to the field.
+function computeAge(iso: string): number | null {
+  if (!iso) return null;
+  const b = new Date(iso);
+  if (Number.isNaN(b.getTime())) return null;
+  const now = new Date();
+  let a = now.getFullYear() - b.getFullYear();
+  const m = now.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
+  return a >= 0 && a < 150 ? a : null;
 }
 
 export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
@@ -80,6 +84,7 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
   });
 
   const isValid = data.name.trim() && data.lastName.trim();
+  const birthAge = computeAge(data.birthDate);
 
   const buildPayload = () => ({
     name: data.name.trim(),
@@ -89,7 +94,7 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
     locality: data.locality.trim() || undefined,
     obraSocial: data.obraSocial || undefined,
     nAfiliado: data.nAfiliado.trim() || undefined,
-    birthDate: ageToBirthDate(data.age),
+    birthDate: data.birthDate || undefined,
     medicalHistory:
       data.allergies.length || data.notes.trim()
         ? {
@@ -165,12 +170,13 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
         </FormField>
       </div>
       <div className="form-row form-row--3">
-        <FormField label="Edad">
+        <FormField label="Fecha de nacimiento" hint={birthAge != null ? `${birthAge} años` : undefined}>
           <input
             className="input"
-            placeholder="32"
-            value={data.age}
-            onChange={e => upd('age', e.target.value.replace(/\D/g, ''))}
+            type="date"
+            max={new Date().toISOString().slice(0, 10)}
+            value={data.birthDate}
+            onChange={e => upd('birthDate', e.target.value)}
           />
         </FormField>
         <FormField label="Teléfono" hint="Para WhatsApp">

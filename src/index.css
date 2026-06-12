@@ -791,6 +791,15 @@ table.tbl { width: 100%; border-collapse: collapse; }
   clip-path: inset(0 round 3px);
   overflow: hidden;
 }
+/* Mobile: bigger teeth so each surface is comfortably tappable with a finger.
+   The arch scrolls horizontally (it already does), so we trade a bit more
+   scrolling for tap targets that aren't tiny. */
+@media (max-width: 720px) {
+  .odo-tooth__svg { max-width: 44px; }
+  .odo-row { min-width: 352px; }
+  .odo-tooth__num { font-size: 11px; }
+  .odo-grid { padding: 10px 8px; }
+}
 /* Surfaces. Stroke is in viewBox units (32x32). Empty surfaces use a soft
    neutral stroke so the divisions are visible without competing with the bold
    fills; once a surface is filled, the stroke switches to match its fill so

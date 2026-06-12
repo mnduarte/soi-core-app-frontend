@@ -334,6 +334,10 @@ function UnresolvedBanner({
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
 }) {
+  // Collapsed by default so it never buries the day's agenda below it. The
+  // count stays visible in warning color; expanding shows a bounded, scrollable
+  // list instead of pushing everything off-screen.
+  const [open, setOpen] = useState(false);
   return (
     <div style={{ padding: '12px 20px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
       <div
@@ -344,24 +348,43 @@ function UnresolvedBanner({
           overflow: 'hidden',
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
+            width: '100%',
             padding: '10px 14px',
-            borderBottom: '1px solid color-mix(in srgb, var(--warning) 20%, var(--border-subtle))',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            textAlign: 'left',
+            borderBottom: open
+              ? '1px solid color-mix(in srgb, var(--warning) 20%, var(--border-subtle))'
+              : 'none',
           }}
         >
           <Icon name="alert" size={15} style={{ color: 'var(--warning)' }} />
           <div style={{ fontSize: 13, fontWeight: 600 }}>
             {unresolved.length} turno{unresolved.length !== 1 ? 's' : ''} sin resolver
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-            · ya pasó su horario — ¿qué pasó?
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', flex: 1 }}>
+            · {open ? 'tocá para ocultar' : 'tocá para resolver'}
           </div>
-        </div>
-        <div>
+          <Icon
+            name="chevronDown"
+            size={16}
+            style={{
+              color: 'var(--text-tertiary)',
+              transform: open ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.2s',
+            }}
+          />
+        </button>
+        {open && (
+        <div style={{ maxHeight: 'min(46vh, 420px)', overflowY: 'auto' }}>
           {unresolved.map((appt, i) => {
             const p = patientMap.get(appt.patientId);
             return (
@@ -424,6 +447,7 @@ function UnresolvedBanner({
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

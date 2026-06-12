@@ -54,7 +54,7 @@ export function AddPlanItemModal({ open, onClose, patientId }: AddPlanItemModalP
     mutationFn: () =>
       treatmentPlansApi.addItem(patientId, {
         description: description.trim(),
-        toothNumber: diente ? parseInt(diente, 10) : undefined,
+        toothNumber: diente.trim() || undefined,
         status,
         estimatedDate: estimatedDate || undefined,
       }),
@@ -109,12 +109,12 @@ export function AddPlanItemModal({ open, onClose, patientId }: AddPlanItemModalP
       )}
 
       <div className="form-row form-row--2">
-        <FormField label="Diente (FDI)" hint="Opcional · ej. 16, 24…">
+        <FormField label="Diente(s)" hint="Opcional · ej. 16 · 16, 24 · anterosuperiores">
           <input
-            className="input mono"
-            placeholder="16"
+            className="input"
+            placeholder="16, 24 o un grupo"
             value={diente}
-            onChange={e => setDiente(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+            onChange={e => setDiente(e.target.value.slice(0, 40))}
             autoFocus
           />
         </FormField>

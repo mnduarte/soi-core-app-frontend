@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../api/patients';
 import { clinicalEntriesApi, type ClinicalEntryType } from '../api/clinical-entries';
 import { NewClinicalEntryModal } from '../components/patient/NewClinicalEntryModal';
@@ -469,12 +469,137 @@ function PagosTab({ patient }: { patient: Patient }) {
 // DATOS
 // ===========================================================
 function DatosTab({ patient }: { patient: Patient }) {
-  const age = ageFromBirthDate(patient.birthDate);
+  const qc = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(() => ({
+    name: patient.name,
+    lastName: patient.lastName,
+    birthDate: patient.birthDate ? patient.birthDate.slice(0, 10) : '',
+    dni: patient.dni ?? '',
+    phone: patient.phone ?? '',
+    email: patient.email ?? '',
+    address: patient.address ?? '',
+    locality: patient.locality ?? '',
+    obraSocial: patient.obraSocial ?? '',
+    nAfiliado: patient.nAfiliado ?? '',
+  }));
+  const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      patientsApi.update(patient._id, {
+        name: form.name.trim(),
+        lastName: form.lastName.trim(),
+        birthDate: form.birthDate || undefined,
+        dni: form.dni.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
+        address: form.address.trim() || undefined,
+        locality: form.locality.trim() || undefined,
+        obraSocial: form.obraSocial.trim() || undefined,
+        nAfiliado: form.nAfiliado.trim() || undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['patient', patient._id] });
+      qc.invalidateQueries({ queryKey: ['patients'] });
+      showToast('Datos actualizados');
+      setEditing(false);
+    },
+    onError: e =>
+      showToast(
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+          'No se pudieron guardar los datos',
+      ),
+  });
+
+  const age = ageFromBirthDate(editing ? form.birthDate : patient.birthDate);
+
+  if (editing) {
+    return (
+      <div className="r-aside">
+        <div className="card">
+          <div className="card__header">
+            <div className="card__title">Editar datos del paciente</div>
+          </div>
+          <div className="card__body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <EditField label="Nombre">
+              <input className="input" value={form.name} onChange={e => set('name', e.target.value)} />
+            </EditField>
+            <EditField label="Apellido">
+              <input className="input" value={form.lastName} onChange={e => set('lastName', e.target.value)} />
+            </EditField>
+            <EditField label="Fecha de nacimiento" hint={age != null ? `${age} años` : undefined}>
+              <input
+                className="input"
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={form.birthDate}
+                onChange={e => set('birthDate', e.target.value)}
+              />
+            </EditField>
+            <EditField label="DNI">
+              <input className="input" value={form.dni} onChange={e => set('dni', e.target.value)} />
+            </EditField>
+            <EditField label="Teléfono">
+              <input className="input" value={form.phone} onChange={e => set('phone', e.target.value)} />
+            </EditField>
+            <EditField label="Email">
+              <input className="input" value={form.email} onChange={e => set('email', e.target.value)} />
+            </EditField>
+            <EditField label="Domicilio">
+              <input className="input" value={form.address} onChange={e => set('address', e.target.value)} />
+            </EditField>
+            <EditField label="Localidad">
+              <input className="input" value={form.locality} onChange={e => set('locality', e.target.value)} />
+            </EditField>
+            <EditField label="Obra social">
+              <select className="input" value={form.obraSocial} onChange={e => set('obraSocial', e.target.value)}>
+                <option value="">Particular</option>
+                {['OSDE', 'Swiss Medical', 'Galeno', 'IOMA', 'PAMI', 'Otra'].map(o => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            </EditField>
+            <EditField label="Nº de afiliado">
+              <input className="input" value={form.nAfiliado} onChange={e => set('nAfiliado', e.target.value)} />
+            </EditField>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              justifyContent: 'flex-end',
+              padding: '12px 16px',
+              borderTop: '1px solid var(--border-subtle)',
+            }}
+          >
+            <button className="btn btn--ghost" onClick={() => setEditing(false)} disabled={mutation.isPending}>
+              Cancelar
+            </button>
+            <button
+              className="btn btn--primary"
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending || !form.name.trim() || !form.lastName.trim()}
+            >
+              <Icon name="check" size={14} /> {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="r-aside">
       <div className="card">
-        <div className="card__header">
+        <div className="card__header row row--between">
           <div className="card__title">Datos personales</div>
+          <button className="btn btn--ghost btn--sm" onClick={() => setEditing(true)}>
+            <Icon name="edit" size={13} /> Editar
+          </button>
         </div>
         <div className="card__body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <Field label="Nombre" value={`${patient.name} ${patient.lastName}`} />
@@ -496,6 +621,20 @@ function DatosTab({ patient }: { patient: Patient }) {
           <Field label="Nº de afiliado" value={patient.nAfiliado ?? '—'} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function EditField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="field-label">
+        {label}
+        {hint && (
+          <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: 6 }}>· {hint}</span>
+        )}
+      </div>
+      {children}
     </div>
   );
 }

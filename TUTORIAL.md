@@ -48,8 +48,8 @@ Te enviamos un **link por WhatsApp** para activar tu cuenta.
 
 1. En **Agenda** → **Nuevo turno** (o desde la ficha del paciente).
 2. Elegí **paciente, fecha, hora y motivo**.
-3. Dejá activado el **recordatorio por WhatsApp** (se manda 24 hs antes).
-4. Tocá **Confirmar turno**.
+3. Tocá **Confirmar turno**.
+4. Cuando quieras, enviale al paciente un **recordatorio por WhatsApp** del turno.
 
 `[📸 Captura: modal "Nuevo turno"]`
 

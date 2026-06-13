@@ -26,7 +26,7 @@
   .shot { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 14px 0 6px; }
   .shot img { display: block; width: 100%; height: auto; }
   .shot .placeholder { aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; background: #F8FAFC; color: var(--muted); font-size: 14px; text-align: center; padding: 20px; }
-  .pin { position: absolute; left: var(--x); top: var(--y); width: var(--w); height: var(--h); border: 3px solid var(--red); border-radius: 10px; box-shadow: 0 0 0 9999px rgba(225,29,72,0.04); }
+  .pin { position: absolute; left: var(--x); top: var(--y); width: var(--w); height: var(--h); border: 3px solid var(--red); border-radius: 10px; }
   .pin.round { border-radius: 50%; }
   .pin .tag { position: absolute; left: 50%; top: -14px; transform: translate(-50%, -100%); background: var(--red); color: white; font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 7px; white-space: nowrap; }
   .pin .tag.below { top: auto; bottom: -14px; transform: translate(-50%, 100%); }
@@ -60,9 +60,9 @@
   <p class="tagline">Sistema Odontológico Integral</p>
   <p class="welcome">¡Bienvenido/a! 👋 SOI es la forma simple de llevar tu consultorio: <b>agenda, fichas, fotos y pagos en un solo lugar</b> — sin papeles ni Excel, desde la compu, la tablet o el celular. Esta guía te muestra todo, paso a paso.</p>
   <div class="props">
-    <div class="prop"><div class="ico">📅</div><b>Agenda y turnos</b><span>Tu día ordenado, con recordatorios por WhatsApp 24&nbsp;hs antes.</span></div>
+    <div class="prop"><div class="ico">📅</div><b>Agenda y turnos</b><span>Tu día ordenado. Enviá recordatorios de turno a tus pacientes por WhatsApp.</span></div>
     <div class="prop"><div class="ico">🦷</div><b>Ficha completa</b><span>Odontograma, evolución clínica y fotos de cada paciente.</span></div>
-    <div class="prop"><div class="ico">💵</div><b>Pagos al día</b><span>Cuenta corriente, cobros y avisos de deuda en un toque.</span></div>
+    <div class="prop"><div class="ico">💵</div><b>Pagos al día</b><span>Cuenta corriente, cobros y recordatorios de deuda, siempre a mano.</span></div>
     <div class="prop"><div class="ico">📱</div><b>Donde estés</b><span>Funciona igual en computadora, tablet y celular.</span></div>
   </div>
   <div class="url">soi-odontologia-integral.vercel.app</div>
@@ -136,8 +136,8 @@
   </div>
   <ol class="steps">
     <li>Elegí el <b>paciente</b>, la <b>fecha</b>, la <b>hora</b> y el <b>motivo</b>.</li>
-    <li>El <b>recordatorio por WhatsApp</b> se manda 24 hs antes.</li>
     <li>Tocá <b>Confirmar turno</b>.</li>
+    <li>Cuando quieras, enviale al paciente un <b>recordatorio por WhatsApp</b> del turno.</li>
   </ol>
 </section>
 

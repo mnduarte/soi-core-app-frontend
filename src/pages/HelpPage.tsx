@@ -91,8 +91,8 @@ const FLOWS: Flow[] = [
     ],
     steps: [
       'Elegí el **paciente**, la **fecha**, la **hora** y el **motivo**.',
-      'El **recordatorio por WhatsApp** se manda 24 hs antes.',
       'Tocá **Confirmar turno**.',
+      'Cuando quieras, enviale al paciente un **recordatorio por WhatsApp** del turno.',
     ],
   },
   {
@@ -188,7 +188,7 @@ function PinBox({ p }: { p: Pin }) {
         height: `${p.h}%`,
         border: `2.5px solid ${RED}`,
         borderRadius: p.round ? '50%' : 8,
-        boxShadow: '0 1px 4px rgba(225,29,72,0.25)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
       }}
     >
       <span

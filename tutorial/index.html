@@ -5,90 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>SOI — Guía rápida</title>
 <style>
-  :root {
-    --brand: #2F54EB;
-    --ink: #0F172A;
-    --muted: #64748B;
-    --line: #E2E8F0;
-    --red: #E11D48;
-  }
+  :root { --brand: #2F54EB; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --red: #E11D48; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: var(--ink);
-    background: #F1F5F9;
-    line-height: 1.5;
-  }
-  .page {
-    background: white;
-    max-width: 880px;
-    margin: 24px auto;
-    padding: 40px 48px;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: #F1F5F9; line-height: 1.5; }
+  .page { background: white; max-width: 880px; margin: 24px auto; padding: 40px 48px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
   .cover { text-align: center; padding: 80px 48px; }
   .cover .logo { font-size: 52px; }
   .cover h1 { font-size: 34px; margin: 12px 0 6px; letter-spacing: -0.02em; }
   .cover p { color: var(--muted); font-size: 16px; margin: 0; }
   .cover .url { margin-top: 18px; font-size: 14px; color: var(--brand); font-weight: 600; }
-
   .eyebrow { color: var(--brand); font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
   h2 { font-size: 24px; margin: 4px 0 6px; letter-spacing: -0.02em; }
   .lead { color: var(--muted); margin: 0 0 18px; }
-
-  /* Screenshot with red overlay pins.
-     Each .pin uses --x/--y (top-left corner) and --w/--h, all in % of the shot. */
   .shot { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 14px 0 6px; }
   .shot img { display: block; width: 100%; height: auto; }
-  .shot .placeholder {
-    aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center;
-    background: #F8FAFC; color: var(--muted); font-size: 14px; text-align: center; padding: 20px;
-  }
-  .pin {
-    position: absolute;
-    left: var(--x); top: var(--y); width: var(--w); height: var(--h);
-    border: 3px solid var(--red);
-    border-radius: 10px;
-    box-shadow: 0 0 0 9999px rgba(225,29,72,0.04);
-  }
+  .shot .placeholder { aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; background: #F8FAFC; color: var(--muted); font-size: 14px; text-align: center; padding: 20px; }
+  .pin { position: absolute; left: var(--x); top: var(--y); width: var(--w); height: var(--h); border: 3px solid var(--red); border-radius: 10px; box-shadow: 0 0 0 9999px rgba(225,29,72,0.04); }
   .pin.round { border-radius: 50%; }
-  .pin .tag {
-    position: absolute; left: 50%; top: -14px; transform: translate(-50%, -100%);
-    background: var(--red); color: white; font-size: 12px; font-weight: 700;
-    padding: 4px 9px; border-radius: 7px; white-space: nowrap;
-  }
+  .pin .tag { position: absolute; left: 50%; top: -14px; transform: translate(-50%, -100%); background: var(--red); color: white; font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 7px; white-space: nowrap; }
   .pin .tag.below { top: auto; bottom: -14px; transform: translate(-50%, 100%); }
-  .pin .tag::after {
-    content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
-    border: 5px solid transparent; border-top-color: var(--red); border-bottom: 0;
-  }
+  .pin .tag::after { content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--red); border-bottom: 0; }
   .pin .tag.below::after { bottom: auto; top: -5px; border-top: 0; border-bottom-color: var(--red); }
-
   ol.steps { margin: 12px 0 0; padding-left: 0; list-style: none; counter-reset: s; }
   ol.steps li { position: relative; padding: 7px 0 7px 34px; font-size: 14.5px; border-bottom: 1px solid var(--line); }
   ol.steps li:last-child { border-bottom: 0; }
-  ol.steps li::before {
-    counter-increment: s; content: counter(s);
-    position: absolute; left: 0; top: 7px;
-    width: 22px; height: 22px; border-radius: 50%;
-    background: #EEF2FF; color: var(--brand); font-weight: 700; font-size: 12px;
-    display: flex; align-items: center; justify-content: center;
-  }
+  ol.steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 7px; width: 22px; height: 22px; border-radius: 50%; background: #EEF2FF; color: var(--brand); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; }
   b { color: var(--ink); }
   .note { margin-top: 16px; background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 9px; padding: 12px 14px; font-size: 13.5px; color: #3730A3; }
-
-  @media print {
-    body { background: white; }
-    .page { box-shadow: none; margin: 0; border-radius: 0; max-width: none; padding: 28px 32px; page-break-after: always; }
-    .no-print { display: none; }
-  }
+  @media print { body { background: white; } .page { box-shadow: none; margin: 0; border-radius: 0; max-width: none; padding: 28px 32px; page-break-after: always; } .no-print { display: none; } }
 </style>
 </head>
 <body>
 
-<!-- ════════ COVER ════════ -->
 <section class="page cover">
   <div class="logo">🦷</div>
   <h1>SOI — Guía rápida</h1>
@@ -96,89 +44,73 @@
   <div class="url">soi-odontologia-integral.vercel.app</div>
   <div class="no-print note" style="text-align:left; max-width:580px; margin:28px auto 0;">
     <b>Para exportar a PDF:</b> abrí este archivo en el navegador → <b>Imprimir</b> (Ctrl/Cmd&nbsp;+&nbsp;P) →
-    Destino <b>“Guardar como PDF”</b>. Los círculos rojos se posicionan sobre cada botón; si alguno
-    no cae justo, decí el número de paso y lo corregimos.
+    Destino <b>“Guardar como PDF”</b>.
   </div>
 </section>
 
-<!-- ════════ 1. ACTIVAR ════════ -->
+<!-- 1 ACTIVAR -->
 <section class="page">
   <div class="eyebrow">Paso 1</div>
   <h2>Activá tu cuenta</h2>
   <p class="lead">La primera vez, desde el mensaje que te enviamos por WhatsApp.</p>
-
   <div class="shot">
-    <img src="img/01-invite.png" alt="Invitación por WhatsApp"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/01-invite.png&lt;/div&gt;'">
-    <div class="pin" style="--x:4%; --y:50%; --w:82%; --h:9%"><span class="tag">Abrí este link</span></div>
+    <img src="img/01-invite.jpg" alt="Invitación por WhatsApp">
+    <div class="pin" style="--x:6%; --y:48%; --w:82%; --h:11%"><span class="tag">Abrí este link</span></div>
   </div>
-
   <div class="shot">
-    <img src="img/02-activar.png" alt="Crear contraseña"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/02-activar.png&lt;/div&gt;'">
-    <div class="pin" style="--x:64%; --y:87%; --w:28%; --h:7%"><span class="tag">Crear contraseña y entrar</span></div>
+    <img src="img/02-activar.jpg" alt="Crear contraseña">
+    <div class="pin" style="--x:57%; --y:72%; --w:35%; --h:8%"><span class="tag">Crear contraseña y entrar</span></div>
   </div>
-
   <ol class="steps">
     <li>Abrí el <b>link</b> del WhatsApp.</li>
     <li>Ingresá la <b>contraseña temporal</b> (la del mensaje) y elegí una <b>contraseña nueva</b> (mínimo 8 caracteres).</li>
-    <li>Tocá <b>Crear contraseña y entrar</b>. ¡Listo!</li>
+    <li>Tocá <b>Crear contraseña y entrar</b>.</li>
+    <li>De ahí en más, entrás a la misma pantalla con tu <b>usuario y contraseña</b>.</li>
   </ol>
 </section>
 
-<!-- ════════ 2. INGRESAR ════════ -->
+<!-- 2 DASHBOARD -->
 <section class="page">
   <div class="eyebrow">Paso 2</div>
-  <h2>Ingresar</h2>
-  <p class="lead">Tu acceso de todos los días.</p>
-
+  <h2>Tu tablero</h2>
+  <p class="lead">Lo primero que ves: turnos del día, fichas y pagos pendientes, y accesos rápidos.</p>
   <div class="shot">
-    <img src="img/03-login.png" alt="Login"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/03-login.png&lt;/div&gt;'">
-    <div class="pin round" style="--x:89%; --y:59%; --w:5%; --h:4%"><span class="tag below">Ver contraseña</span></div>
-    <div class="pin" style="--x:64%; --y:68%; --w:27%; --h:6%"><span class="tag">Ingresar al consultorio</span></div>
+    <img src="img/03-dashboard.jpg" alt="Dashboard">
+    <div class="pin" style="--x:1%; --y:18%; --w:21%; --h:13%"><span class="tag">Tu menú</span></div>
   </div>
-
   <ol class="steps">
-    <li>Escribí tu <b>usuario</b> → <b>Continuar</b>.</li>
-    <li>Poné tu <b>contraseña</b> (tocá el <b>ojo</b> para verla).</li>
-    <li>Tocá <b>Ingresar al consultorio</b>.</li>
-    <li>¿La olvidaste? Tocá <b>¿Olvidaste?</b> — te enviamos una nueva por WhatsApp.</li>
+    <li>En el <b>menú</b> de la izquierda están <b>Agenda</b>, <b>Pacientes</b>, <b>Galería</b> y <b>Pagos</b>.</li>
+    <li>Las <b>Acciones rápidas</b> te dejan crear un turno, un paciente o cobrar en un toque.</li>
   </ol>
 </section>
 
-<!-- ════════ 3. NUEVO PACIENTE ════════ -->
+<!-- 3 NUEVO PACIENTE -->
 <section class="page">
   <div class="eyebrow">Paso 3</div>
   <h2>Crear un paciente</h2>
   <p class="lead">Desde <b>Pacientes → Nuevo paciente</b>. Solo lo esencial.</p>
-
   <div class="shot">
-    <img src="img/04-paciente.png" alt="Nuevo paciente"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/04-paciente.png&lt;/div&gt;'">
-    <div class="pin" style="--x:5%; --y:24%; --w:90%; --h:13%"><span class="tag">Nombre, apellido y teléfono</span></div>
-    <div class="pin" style="--x:79%; --y:92%; --w:18%; --h:6%"><span class="tag">Crear ficha</span></div>
+    <img src="img/04-paciente.jpg" alt="Nuevo paciente">
+    <div class="pin" style="--x:5%; --y:35%; --w:30%; --h:9%"><span class="tag">Fecha de nacimiento</span></div>
+    <div class="pin" style="--x:76%; --y:93%; --w:21%; --h:6%"><span class="tag">Crear ficha</span></div>
   </div>
-
   <ol class="steps">
-    <li>Cargá <b>nombre, apellido y teléfono</b>. El resto se completa después.</li>
-    <li>Tocá <b>Crear ficha</b> — o <b>Guardar y agendar turno</b> si ya querés darle un turno.</li>
+    <li>Cargá <b>nombre, apellido y teléfono</b>.</li>
+    <li>La <b>fecha de nacimiento</b> calcula la edad sola.</li>
+    <li>Tocá <b>Crear ficha</b> — o <b>Guardar y agendar turno</b>.</li>
   </ol>
 </section>
 
-<!-- ════════ 4. NUEVO TURNO ════════ -->
+<!-- 4 NUEVO TURNO -->
 <section class="page">
   <div class="eyebrow">Paso 4</div>
   <h2>Agendar un turno</h2>
   <p class="lead">Desde la agenda o desde la ficha del paciente.</p>
-
   <div class="shot">
-    <img src="img/05-turno.png" alt="Nuevo turno"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/05-turno.png&lt;/div&gt;'">
-    <div class="pin" style="--x:5%; --y:21%; --w:90%; --h:7%"><span class="tag">Elegí el paciente</span></div>
-    <div class="pin" style="--x:71%; --y:92%; --w:25%; --h:5.5%"><span class="tag">Confirmar turno</span></div>
+    <img src="img/05-turno.jpg" alt="Nuevo turno">
+    <div class="pin" style="--x:5%; --y:18%; --w:90%; --h:7%"><span class="tag">Elegí el paciente</span></div>
+    <div class="pin" style="--x:70%; --y:91%; --w:26%; --h:6%"><span class="tag">Confirmar turno</span></div>
   </div>
-
   <ol class="steps">
     <li>Elegí el <b>paciente</b>, la <b>fecha</b>, la <b>hora</b> y el <b>motivo</b>.</li>
     <li>El <b>recordatorio por WhatsApp</b> se manda 24 hs antes.</li>
@@ -186,110 +118,98 @@
   </ol>
 </section>
 
-<!-- ════════ 5. ATENDER ════════ -->
+<!-- 5 ATENDER -->
 <section class="page">
   <div class="eyebrow">Paso 5</div>
   <h2>Atender un turno</h2>
-  <p class="lead">En la agenda, marcá el turno como atendido.</p>
-
+  <p class="lead">En la agenda, en el turno tocá el menú <b>⋯</b>.</p>
   <div class="shot">
-    <img src="img/06-atender.png" alt="Agenda — atendido"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/06-atender.png&lt;/div&gt;'">
-    <div class="pin" style="--x:74%; --y:24%; --w:9%; --h:6%"><span class="tag">Atendido</span></div>
+    <img src="img/06-atender.jpg" alt="Marcar atendido">
+    <div class="pin" style="--x:12%; --y:33%; --w:27%; --h:5%"><span class="tag">Marcar atendido</span></div>
   </div>
-
   <ol class="steps">
-    <li>En el turno tocá <b>Atendido</b> (o el menú <b>⋯</b> → <b>Marcar atendido</b>).</li>
+    <li>En el turno tocá <b>⋯</b> → <b>Marcar atendido</b>.</li>
     <li>Queda un aviso <b>“Ficha pendiente”</b> hasta que documentes la visita (paso 6).</li>
   </ol>
 </section>
 
-<!-- ════════ 6. CARGAR EVOLUCIÓN ════════ -->
+<!-- 6 EVOLUCIÓN -->
 <section class="page">
   <div class="eyebrow">Paso 6</div>
   <h2>Cargar la evolución</h2>
-  <p class="lead">Documentar la visita queda en la historia clínica y apaga “Ficha pendiente”.</p>
-
+  <p class="lead">En la pestaña <b>Historial</b>. Queda en la historia clínica con fecha.</p>
   <div class="shot">
-    <img src="img/07-evolucion.png" alt="Nueva entrada de evolución"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/07-evolucion.png&lt;/div&gt;'">
-    <div class="pin" style="--x:5%; --y:27%; --w:91%; --h:9%"><span class="tag">Elegí el tipo</span></div>
-    <div class="pin" style="--x:70%; --y:90%; --w:26%; --h:8%"><span class="tag">Guardar entrada</span></div>
+    <img src="img/07-evolucion.jpg" alt="Historial — nueva entrada">
+    <div class="pin" style="--x:38%; --y:46%; --w:16%; --h:5%"><span class="tag">Nueva entrada</span></div>
   </div>
-
   <ol class="steps">
-    <li>En la pestaña <b>Historial</b> → <b>+ Nueva entrada</b> (o tocá el aviso “Ficha pendiente”).</li>
+    <li>Pestaña <b>Historial</b> → <b>+ Nueva entrada</b>.</li>
     <li>Elegí el <b>tipo</b> (Tratamiento / Control / Foto / Nota), escribí la nota — o tocá una <b>frase rápida</b>.</li>
     <li>Tocá <b>Guardar entrada</b>. ✅</li>
   </ol>
 </section>
 
-<!-- ════════ 7. ODONTOGRAMA Y PLAN ════════ -->
+<!-- 7 ODONTOGRAMA -->
 <section class="page">
   <div class="eyebrow">Paso 7</div>
-  <h2>Odontograma y plan</h2>
-  <p class="lead">Marcá dientes y cargá tratamientos con su precio.</p>
-
+  <h2>Odontograma</h2>
+  <p class="lead">En la pestaña <b>Ficha</b>. Cada diente tiene 5 caras clickeables.</p>
   <div class="shot">
-    <img src="img/08-plan.png" alt="Odontograma y plan"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/08-plan.png&lt;/div&gt;'">
-    <div class="pin" style="--x:3%; --y:8%; --w:64%; --h:30%"><span class="tag">Click en una cara del diente</span></div>
-    <div class="pin" style="--x:83%; --y:78%; --w:14%; --h:5%"><span class="tag">Agregar al plan</span></div>
+    <img src="img/08-odontograma.jpg" alt="Odontograma">
+    <div class="pin" style="--x:8%; --y:78%; --w:30%; --h:13%"><span class="tag">Click en una cara del diente</span></div>
   </div>
-
   <ol class="steps">
-    <li>En el <b>odontograma</b>, hacé click en una cara del diente para marcarla.</li>
-    <li>En <b>Plan de tratamiento</b> → <b>Agregar</b>, cargá la prestación con su <b>precio</b>.</li>
+    <li>Elegí <b>Existente</b> (ya hecho) o <b>Requerida</b> (a hacer) y el código (caries, corona…).</li>
+    <li>Hacé <b>click en la cara</b> del diente para marcarla.</li>
+  </ol>
+</section>
+
+<!-- 8 PLAN -->
+<section class="page">
+  <div class="eyebrow">Paso 8</div>
+  <h2>Plan de tratamiento</h2>
+  <p class="lead">Debajo del odontograma. Cargá las prestaciones con su precio.</p>
+  <div class="shot">
+    <img src="img/09-plan.jpg" alt="Plan de tratamiento">
+    <div class="pin" style="--x:40%; --y:82%; --w:13%; --h:5%"><span class="tag">Agregar al plan</span></div>
+  </div>
+  <ol class="steps">
+    <li>Tocá <b>+ Agregar</b> y cargá la prestación, el/los <b>diente(s)</b> y el <b>precio</b>.</li>
     <li>Al terminar el tratamiento, marcá el ítem como <b>Completado</b> → se genera el <b>cargo</b> en la cuenta del paciente.</li>
   </ol>
 </section>
 
-<!-- ════════ 8. PAGOS ════════ -->
+<!-- 9 PAGOS -->
 <section class="page">
-  <div class="eyebrow">Paso 8</div>
+  <div class="eyebrow">Paso 9</div>
   <h2>Cobrar y recordar pagos</h2>
-  <p class="lead">Cuenta corriente simple, con recordatorio por WhatsApp.</p>
-
+  <p class="lead">Pestaña <b>Pagos</b>: cuenta corriente simple, con recordatorio por WhatsApp.</p>
   <div class="shot">
-    <img src="img/09-pagos.png" alt="Pagos"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/09-pagos.png&lt;/div&gt;'">
-    <div class="pin" style="--x:61%; --y:37%; --w:15%; --h:5.5%"><span class="tag">Registrar cobro</span></div>
-    <div class="pin" style="--x:73%; --y:59%; --w:24%; --h:5%"><span class="tag below">Recordar por WhatsApp</span></div>
+    <img src="img/10-pagos.jpg" alt="Pagos">
+    <div class="pin" style="--x:42%; --y:42%; --w:16%; --h:5%"><span class="tag">Registrar cobro</span></div>
+    <div class="pin" style="--x:63%; --y:66%; --w:33%; --h:5%"><span class="tag below">Recordar por WhatsApp</span></div>
   </div>
-
-  <div class="shot">
-    <img src="img/10-cobro.png" alt="Registrar cobro"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/10-cobro.png&lt;/div&gt;'">
-    <div class="pin" style="--x:5%; --y:48%; --w:91%; --h:9%"><span class="tag">Monto</span></div>
-    <div class="pin" style="--x:70%; --y:91%; --w:26%; --h:6.5%"><span class="tag">Confirmar cobro</span></div>
-  </div>
-
   <ol class="steps">
-    <li>En la ficha → pestaña <b>Pagos</b> → <b>Registrar cobro</b> (monto + método). El saldo se ajusta solo.</li>
-    <li>Dejá activado <b>Enviar comprobante por WhatsApp</b> si querés mandarle el recibo.</li>
+    <li><b>Registrar cobro</b> (monto + método). El saldo se ajusta solo.</li>
     <li>Si el paciente debe, tocá <b>Recordar pago por WhatsApp</b>: el mensaje sale listo, vos confirmás.</li>
   </ol>
 </section>
 
-<!-- ════════ 9. FOTOS ════════ -->
+<!-- 10 FOTOS -->
 <section class="page">
-  <div class="eyebrow">Paso 9</div>
+  <div class="eyebrow">Paso 10</div>
   <h2>Fotos del paciente</h2>
   <p class="lead">Galería por sesiones, con comparación antes/después.</p>
-
   <div class="shot">
-    <img src="img/11-fotos.png" alt="Subir fotos"
-         onerror="this.outerHTML='&lt;div class=&quot;placeholder&quot;&gt;Falta: img/11-fotos.png&lt;/div&gt;'">
-    <div class="pin" style="--x:27%; --y:65%; --w:46%; --h:8%"><span class="tag">Elegí o sacá la foto</span></div>
-    <div class="pin" style="--x:73%; --y:91%; --w:23%; --h:6.5%"><span class="tag">Subir</span></div>
+    <img src="img/11-fotos.jpg" alt="Subir fotos">
+    <div class="pin" style="--x:28%; --y:40%; --w:43%; --h:6%"><span class="tag">Elegí o sacá la foto</span></div>
+    <div class="pin" style="--x:78%; --y:91%; --w:18%; --h:6%"><span class="tag">Subir</span></div>
   </div>
-
   <ol class="steps">
-    <li>En la ficha tocá <b>Subir fotos</b> (o la pestaña <b>Galería</b> → <b>Subir</b>).</li>
+    <li>Tocá <b>Subir fotos</b> (o la pestaña <b>Galería</b> → <b>Subir</b>).</li>
     <li>Arrastrá las fotos o tocá <b>Elegir archivos</b> / <b>Sacar foto</b>.</li>
-    <li>Asigná <b>tipo</b> (intraoral, extraoral, radiografía) y una <b>sesión</b> → <b>Subir</b>.</li>
+    <li>Asigná <b>tipo</b> y una <b>sesión</b> → <b>Subir</b>.</li>
   </ol>
-
   <div class="note">¿Dudas? Escribinos por <b>WhatsApp</b> y te ayudamos. La idea es que uses SOI todo el día sin trabarte. 🦷</div>
 </section>
 

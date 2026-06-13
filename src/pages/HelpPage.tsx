@@ -66,7 +66,7 @@ const FLOWS: Flow[] = [
         src: '/ayuda/04-paciente.jpg',
         pins: [
           { x: 5, y: 35, w: 30, h: 9, tag: 'Fecha de nacimiento' },
-          { x: 76, y: 93, w: 21, h: 6, tag: 'Crear ficha' },
+          { x: 76, y: 88, w: 21, h: 6, tag: 'Crear ficha' },
         ],
       },
     ],
@@ -85,7 +85,7 @@ const FLOWS: Flow[] = [
         src: '/ayuda/05-turno.jpg',
         pins: [
           { x: 5, y: 18, w: 90, h: 7, tag: 'Elegí el paciente' },
-          { x: 70, y: 91, w: 26, h: 6, tag: 'Confirmar turno' },
+          { x: 68, y: 88, w: 25, h: 6, tag: 'Confirmar turno' },
         ],
       },
     ],
@@ -132,7 +132,7 @@ const FLOWS: Flow[] = [
     icon: 'list',
     title: 'Plan de tratamiento',
     sub: 'Debajo del odontograma. Cargá las prestaciones con su precio.',
-    shots: [{ src: '/ayuda/09-plan.jpg', pins: [{ x: 40, y: 82, w: 13, h: 5, tag: 'Agregar al plan' }] }],
+    shots: [{ src: '/ayuda/09-plan.jpg', pins: [{ x: 42, y: 85, w: 14, h: 5, tag: 'Agregar al plan' }] }],
     steps: [
       'Tocá **+ Agregar** y cargá la prestación, el/los **diente(s)** y el **precio**.',
       'Al terminar, marcá el ítem como **Completado** → se genera el **cargo** en la cuenta del paciente.',

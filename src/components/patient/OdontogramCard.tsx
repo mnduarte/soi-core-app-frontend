@@ -592,7 +592,8 @@ function ReferenceCard() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', fontSize: 11, color: 'var(--text-secondary)' }}>
         <div><b className="mono">V</b> Vestibular / bucal</div>
-        <div><b className="mono">L</b> Lingual / palatino</div>
+        <div><b className="mono">P</b> Palatino (superiores)</div>
+        <div><b className="mono">L</b> Lingual (inferiores)</div>
         <div><b className="mono">M</b> Mesial</div>
         <div><b className="mono">D</b> Distal</div>
         <div><b className="mono">O</b> Oclusal / incisal</div>

@@ -7,6 +7,8 @@ interface AuthUser {
   email: string;
   role: string;
   isClinical: boolean;
+  // Honorific shown before the name (Dr./Dra.). Null/NONE = assistant, no prefix.
+  title?: 'DR' | 'DRA' | 'NONE' | null;
 }
 
 interface ClinicInfo {

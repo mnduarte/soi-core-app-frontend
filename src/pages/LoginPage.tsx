@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { authApi, type LookupResponse } from '../api/auth';
 import { apiClient } from '../api/client';
 import { useAuthStore } from '../store/auth.store';
+import { withTitle } from '../lib/format';
 import { Icon } from '../components/common/Icon';
 import { BrandLogo } from '../components/common/BrandLogo';
 
@@ -281,6 +282,7 @@ export default function LoginPage() {
   };
 
   const displayFirst = firstNameOf(lookup?.displayName);
+  const greetName = withTitle(displayFirst, lookup?.title);
 
   return (
     <div className="login-wrap">
@@ -457,7 +459,7 @@ export default function LoginPage() {
                 marginBottom: 8,
               }}
             >
-              Bienvenido{displayFirst ? `, ${displayFirst}` : ''}
+              Bienvenido{greetName ? `, ${greetName}` : ''}
             </div>
             <h2
               style={{
@@ -468,7 +470,7 @@ export default function LoginPage() {
                 color: 'var(--text-primary)',
               }}
             >
-              Hola {displayFirst || 'de nuevo'} 👋
+              Hola {greetName || 'de nuevo'} 👋
             </h2>
             <div className="page-sub" style={{ marginBottom: 28 }}>
               {lookup?.clinic?.name
@@ -712,7 +714,7 @@ export default function LoginPage() {
                 marginBottom: 8,
               }}
             >
-              Bienvenido{displayFirst ? `, ${displayFirst}` : ''}
+              Bienvenido{greetName ? `, ${greetName}` : ''}
             </div>
             <h2
               style={{
@@ -723,7 +725,7 @@ export default function LoginPage() {
                 color: 'var(--text-primary)',
               }}
             >
-              ¡Hola {displayFirst || ''}! 👋
+              ¡Hola {greetName || ''}! 👋
             </h2>
             <div className="page-sub" style={{ marginBottom: 28 }}>
               {lookup?.clinic?.name

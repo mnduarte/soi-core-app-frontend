@@ -9,6 +9,7 @@ export interface LoginPayload {
 export interface LookupResponse {
   exists: boolean;
   displayName?: string;
+  title?: 'DR' | 'DRA' | 'NONE' | null;
   mustChangePassword?: boolean;
   clinic?: {
     name: string;
@@ -32,6 +33,7 @@ export interface LoginResponse {
     email: string;
     role: string;
     isClinical: boolean;
+    title?: 'DR' | 'DRA' | 'NONE' | null;
   };
   clinic: {
     id: string;

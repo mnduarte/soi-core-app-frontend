@@ -16,7 +16,7 @@ interface AddPlanItemModalProps {
 }
 
 const COMMON_PRESTACIONES = [
-  'Control', 'Limpieza', 'Conducto', 'Composite', 'Extracción',
+  'Control', 'Limpieza y profilaxis', 'Conducto', 'Composite', 'Extracción',
   'Ortodoncia — ajuste', 'Blanqueamiento', 'Corona', 'Implante',
 ];
 

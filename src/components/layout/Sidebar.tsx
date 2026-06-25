@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import { authApi } from '../../api/auth';
+import { withTitle } from '../../lib/format';
 import { Icon, type IconName } from '../common/Icon';
 import { BrandLogo } from '../common/BrandLogo';
 import { Avatar } from '../common/Avatar';
@@ -56,7 +57,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <BrandLogo />
         <div>
           <div className="sidebar__brand-name">{clinic?.name ?? 'SOI'}</div>
-          <div className="sidebar__brand-sub">{user?.name ?? ''}</div>
+          <div className="sidebar__brand-sub">{withTitle(user?.name, user?.title)}</div>
         </div>
       </div>
 
@@ -89,7 +90,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <Avatar name={user?.name ?? '?'} id={user?.id} size="md" />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {user?.name}
+            {withTitle(user?.name, user?.title)}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{user?.role}</div>
         </div>

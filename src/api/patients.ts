@@ -36,4 +36,27 @@ export const patientsApi = {
 
   remove: (id: string) =>
     apiClient.delete(`/patients/${id}`),
+
+  // Reads a paper record photo (base64, no data: prefix) → extracted fields +
+  // possible existing patient match (to avoid double-loading).
+  scanFicha: (image: string, mediaType: string) =>
+    apiClient
+      .post<{ data: ScanFichaResult }>('/patients/scan', { image, mediaType })
+      .then(r => r.data.data),
 };
+
+export interface ScanFichaResult {
+  extracted: {
+    name?: string;
+    lastName?: string;
+    birthDate?: string;
+    dni?: string;
+    phone?: string;
+    email?: string;
+    obraSocial?: string;
+    address?: string;
+    locality?: string;
+    notes?: string;
+  };
+  existing: { _id: string; name: string; lastName: string } | null;
+}

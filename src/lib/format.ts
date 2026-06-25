@@ -30,6 +30,15 @@ export const ageFromBirthDate = (birthDate?: string): number | null => {
   return age;
 };
 
+// Prefixes a name with its honorific. DR → "Dr. X", DRA → "Dra. X",
+// NONE/null/undefined (assistant) → just the name.
+export const withTitle = (name?: string, title?: 'DR' | 'DRA' | 'NONE' | null): string => {
+  if (!name) return '';
+  if (title === 'DR') return `Dr. ${name}`;
+  if (title === 'DRA') return `Dra. ${name}`;
+  return name;
+};
+
 export const initialsOf = (first: string, last?: string): string => {
   const f = (first ?? '').trim();
   const l = (last ?? '').trim();

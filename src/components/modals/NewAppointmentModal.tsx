@@ -15,7 +15,7 @@ interface NewAppointmentModalProps {
 
 const DURATIONS = [15, 30, 45, 60, 90];
 const TREATMENTS = [
-  'Control', 'Limpieza', 'Conducto', 'Composite', 'Extracción',
+  'Control', 'Limpieza y profilaxis', 'Conducto', 'Composite', 'Extracción',
   'Ortodoncia — ajuste', 'Blanqueamiento', 'Corona', 'Consulta inicial', 'Radiografía',
 ];
 

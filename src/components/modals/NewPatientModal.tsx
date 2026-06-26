@@ -18,7 +18,7 @@ const ALLERGY_OPTIONS = ['Penicilina', 'Látex', 'Anestésicos', 'Aspirina', 'Ot
 interface FormState {
   name: string;
   lastName: string;
-  birthDate: string;
+  age: string;
   dni: string;
   phone: string;
   email: string;
@@ -33,7 +33,7 @@ interface FormState {
 const EMPTY: FormState = {
   name: '',
   lastName: '',
-  birthDate: '',
+  age: '',
   dni: '',
   phone: '',
   email: '',
@@ -132,11 +132,14 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
       const { data: b64, mediaType } = await fileToScaledBase64(file);
       const res = await patientsApi.scanFicha(b64, mediaType);
       const ex = res.extracted;
+      // La ficha vieja puede traer la edad escrita o la fecha de nacimiento; si
+      // viene la fecha la convertimos a edad para precargar el campo.
+      const scannedAge = ex.age ?? (ex.birthDate ? computeAge(ex.birthDate)?.toString() : undefined);
       setData(d => ({
         ...d,
         name: ex.name ?? d.name,
         lastName: ex.lastName ?? d.lastName,
-        birthDate: ex.birthDate ?? d.birthDate,
+        age: scannedAge ?? d.age,
         dni: ex.dni ?? d.dni,
         phone: ex.phone ?? d.phone,
         email: ex.email ?? d.email,
@@ -196,7 +199,6 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
   });
 
   const isValid = data.name.trim() && data.lastName.trim();
-  const birthAge = computeAge(data.birthDate);
 
   const buildPayload = () => ({
     name: data.name.trim(),
@@ -206,7 +208,7 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
     locality: data.locality.trim() || undefined,
     obraSocial: data.obraSocial || undefined,
     nAfiliado: data.nAfiliado.trim() || undefined,
-    birthDate: data.birthDate || undefined,
+    age: data.age.trim() ? Number(data.age) : undefined,
     dni: data.dni.trim() || undefined,
     address: data.address.trim() || undefined,
     medicalHistory:
@@ -411,13 +413,16 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
         </FormField>
       </div>
       <div className="form-row form-row--3">
-        <FormField label="Fecha de nacimiento" hint={birthAge != null ? `${birthAge} años` : undefined}>
+        <FormField label="Edad" hint="años">
           <input
             className="input"
-            type="date"
-            max={new Date().toISOString().slice(0, 10)}
-            value={data.birthDate}
-            onChange={e => upd('birthDate', e.target.value)}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={130}
+            placeholder="35"
+            value={data.age}
+            onChange={e => upd('age', e.target.value)}
           />
         </FormField>
         <FormField label="Teléfono" hint="Para WhatsApp">

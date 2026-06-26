@@ -30,6 +30,11 @@ export const ageFromBirthDate = (birthDate?: string): number | null => {
   return age;
 };
 
+// Edad a mostrar: usa el campo `age` (lo carga el doctor a mano) y, para fichas
+// viejas sin ese dato, la deriva de `birthDate`.
+export const patientAge = (p: { age?: number | null; birthDate?: string }): number | null =>
+  p.age != null ? p.age : ageFromBirthDate(p.birthDate);
+
 // Prefixes a name with its honorific. DR → "Dr. X", DRA → "Dra. X",
 // NONE/null/undefined (assistant) → just the name.
 export const withTitle = (name?: string, title?: 'DR' | 'DRA' | 'NONE' | null): string => {

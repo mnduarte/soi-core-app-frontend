@@ -8,7 +8,7 @@ import { useUIStore } from '../../store/ui.store';
 import { Avatar } from '../common/Avatar';
 import { Icon } from '../common/Icon';
 import { WhatsAppReminderModal } from './WhatsAppReminderModal';
-import { ageFromBirthDate, fmtMoney } from '../../lib/format';
+import { patientAge, fmtMoney } from '../../lib/format';
 
 interface PatientHeaderProps {
   patient: Patient;
@@ -62,7 +62,7 @@ export function PatientHeader({ patient, collapsed = false }: PatientHeaderProps
   const daysUntil = (iso?: string) =>
     iso ? Math.ceil((new Date(iso).getTime() - now) / 86_400_000) : null;
 
-  const age = ageFromBirthDate(patient.birthDate);
+  const age = patientAge(patient);
   const bal = balance?.balance ?? 0;
 
   return (

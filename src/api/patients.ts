@@ -6,6 +6,7 @@ export interface Patient {
   lastName: string;
   dni?: string;
   birthDate?: string;
+  age?: number;
   phone?: string;
   email?: string;
   address?: string;
@@ -53,6 +54,7 @@ export interface ScanFichaResult {
     name?: string;
     lastName?: string;
     birthDate?: string;
+    age?: string;
     dni?: string;
     phone?: string;
     email?: string;

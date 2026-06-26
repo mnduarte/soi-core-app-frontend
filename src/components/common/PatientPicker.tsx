@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../../api/patients';
 import { useUIStore } from '../../store/ui.store';
-import { ageFromBirthDate } from '../../lib/format';
+import { patientAge } from '../../lib/format';
 import { Icon } from './Icon';
 import { Avatar } from './Avatar';
 
 function patientSubtext(p: Patient): string {
-  const age = ageFromBirthDate(p.birthDate);
+  const age = patientAge(p);
   const bits: string[] = [];
   if (age != null) bits.push(`${age}a`);
   if (p.obraSocial) bits.push(p.obraSocial);

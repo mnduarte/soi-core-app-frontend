@@ -7,7 +7,7 @@ import { NewClinicalEntryModal } from '../components/patient/NewClinicalEntryMod
 import { AddChargeModal } from '../components/patient/AddChargeModal';
 import { WhatsAppReminderModal } from '../components/patient/WhatsAppReminderModal';
 import { transactionsApi } from '../api/transactions';
-import { ageFromBirthDate, fmtMoney } from '../lib/format';
+import { patientAge, fmtMoney } from '../lib/format';
 import { useUIStore } from '../store/ui.store';
 import { Icon } from '../components/common/Icon';
 import { TabBar } from '../components/common/TabBar';
@@ -512,7 +512,7 @@ function DatosTab({ patient }: { patient: Patient }) {
   const [form, setForm] = useState(() => ({
     name: patient.name,
     lastName: patient.lastName,
-    birthDate: patient.birthDate ? patient.birthDate.slice(0, 10) : '',
+    age: patientAge(patient) != null ? String(patientAge(patient)) : '',
     dni: patient.dni ?? '',
     phone: patient.phone ?? '',
     email: patient.email ?? '',
@@ -528,7 +528,7 @@ function DatosTab({ patient }: { patient: Patient }) {
       patientsApi.update(patient._id, {
         name: form.name.trim(),
         lastName: form.lastName.trim(),
-        birthDate: form.birthDate || undefined,
+        age: form.age.trim() ? Number(form.age) : undefined,
         dni: form.dni.trim() || undefined,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
@@ -550,7 +550,9 @@ function DatosTab({ patient }: { patient: Patient }) {
       ),
   });
 
-  const age = ageFromBirthDate(editing ? form.birthDate : patient.birthDate);
+  const age = editing
+    ? (form.age.trim() ? Number(form.age) : null)
+    : patientAge(patient);
 
   if (editing) {
     return (
@@ -566,13 +568,16 @@ function DatosTab({ patient }: { patient: Patient }) {
             <EditField label="Apellido">
               <input className="input" value={form.lastName} onChange={e => set('lastName', e.target.value)} />
             </EditField>
-            <EditField label="Fecha de nacimiento" hint={age != null ? `${age} años` : undefined}>
+            <EditField label="Edad" hint="años">
               <input
                 className="input"
-                type="date"
-                max={new Date().toISOString().slice(0, 10)}
-                value={form.birthDate}
-                onChange={e => set('birthDate', e.target.value)}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={130}
+                placeholder="35"
+                value={form.age}
+                onChange={e => set('age', e.target.value)}
               />
             </EditField>
             <EditField label="DNI">

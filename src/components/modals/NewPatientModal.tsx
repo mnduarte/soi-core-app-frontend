@@ -166,6 +166,18 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
     onClose();
   };
 
+  const restoreAndGo = async () => {
+    if (!duplicate) return;
+    try {
+      await patientsApi.restore(duplicate._id);
+      showToast('Paciente recuperado con su historial ✓');
+      navigate(`/patients/${duplicate._id}`);
+      onClose();
+    } catch {
+      showToast('No se pudo recuperar el paciente');
+    }
+  };
+
   const upd = <K extends keyof FormState>(k: K, v: FormState[K]) => setData(d => ({ ...d, [k]: v }));
 
   const toggleAllergy = (a: string) => {
@@ -345,17 +357,35 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
         >
           <Icon name="alert" size={16} style={{ flexShrink: 0, marginTop: 2 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, marginBottom: 8 }}>
-              Ya existe un paciente parecido: <b>{duplicate.name} {duplicate.lastName}</b>. ¿Qué querés hacer?
-            </div>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn--secondary btn--sm" onClick={goToExisting}>
-                Ir a su ficha <Icon name="arrowRight" size={13} />
-              </button>
-              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setDuplicate(null)}>
-                Cargar igual (riesgo de duplicado)
-              </button>
-            </div>
+            {duplicate.deleted ? (
+              <>
+                <div style={{ fontSize: 13, marginBottom: 8 }}>
+                  Este paciente estaba <b>eliminado</b>: <b>{duplicate.name} {duplicate.lastName}</b>. Conviene <b>recuperarlo</b> para no perder su historial (ficha, fotos, pagos).
+                </div>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn--secondary btn--sm" onClick={restoreAndGo}>
+                    <Icon name="undo" size={13} /> Recuperar paciente
+                  </button>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setDuplicate(null)}>
+                    Cargar como nuevo (duplicado)
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, marginBottom: 8 }}>
+                  Ya existe un paciente parecido: <b>{duplicate.name} {duplicate.lastName}</b>. ¿Qué querés hacer?
+                </div>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn--secondary btn--sm" onClick={goToExisting}>
+                    Ir a su ficha <Icon name="arrowRight" size={13} />
+                  </button>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setDuplicate(null)}>
+                    Cargar igual (riesgo de duplicado)
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

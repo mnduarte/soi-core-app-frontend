@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import type { Patient } from '../../api/patients';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { patientsApi, type Patient } from '../../api/patients';
 import { appointmentsApi } from '../../api/appointments';
 import { transactionsApi } from '../../api/transactions';
 import { useUIStore } from '../../store/ui.store';
@@ -19,8 +19,23 @@ interface PatientHeaderProps {
 
 export function PatientHeader({ patient, collapsed = false }: PatientHeaderProps) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const openModal = useUIStore(s => s.openModal);
+  const showToast = useUIStore(s => s.showToast);
   const [reminding, setReminding] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleDelete = async () => {
+    if (!window.confirm(`¿Eliminar a ${patient.name} ${patient.lastName}? Se puede recuperar después.`)) return;
+    try {
+      await patientsApi.remove(patient._id);
+      qc.invalidateQueries({ queryKey: ['patients'] });
+      showToast('Paciente eliminado');
+      navigate('/patients');
+    } catch {
+      showToast('No se pudo eliminar el paciente');
+    }
+  };
 
   const { data: balance } = useQuery({
     queryKey: ['balance', patient._id],
@@ -172,9 +187,60 @@ export function PatientHeader({ patient, collapsed = false }: PatientHeaderProps
             >
               <Icon name="calendar" size={12} /> Nuevo turno
             </button>
-            <button className="btn btn--ghost btn--icon">
-              <Icon name="more" />
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button className="btn btn--ghost btn--icon" onClick={() => setMenuOpen(o => !o)}>
+                <Icon name="more" />
+              </button>
+              {menuOpen && (
+                <>
+                  <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      marginTop: 4,
+                      minWidth: 190,
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 10,
+                      boxShadow: 'var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.15))',
+                      overflow: 'hidden',
+                      zIndex: 50,
+                    }}
+                  >
+                    <button
+                      className="patient-menu-item"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        navigate(`/patients/${patient._id}?tab=datos`);
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                        padding: '10px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 13, textAlign: 'left', color: 'var(--text-secondary)',
+                      }}
+                    >
+                      <Icon name="edit" size={14} /> Editar datos
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        handleDelete();
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                        padding: '10px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 13, textAlign: 'left', color: 'var(--danger)',
+                        borderTop: '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      <Icon name="trash" size={14} /> Eliminar paciente
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

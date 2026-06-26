@@ -166,17 +166,38 @@ export default function AgendaPage() {
     return { total: dayList.length, completed, confirmed, pending };
   }, [dayList]);
 
+  const viewSeg = (
+    <div className="seg">
+      {(['day', 'week', 'month'] as const).map(v => (
+        <button
+          key={v}
+          type="button"
+          className={`seg__btn ${view === v ? 'is-active' : ''}`}
+          onClick={() => setView(v)}
+        >
+          {{ day: 'Día', week: 'Semana', month: 'Mes' }[v]}
+        </button>
+      ))}
+    </div>
+  );
+
+  const newApptBtn = (
+    <button className="btn btn--primary btn--sm" onClick={() => openModal('newAppointment')}>
+      <Icon name="plus" size={12} /> Nuevo turno
+    </button>
+  );
+
   return (
     <div className="content" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Toolbar */}
       <div
         style={{
-          padding: '16px 20px',
+          padding: isMobile ? '12px 16px' : '16px 20px',
           borderBottom: '1px solid var(--border-subtle)',
           background: 'var(--bg-surface)',
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
+          gap: isMobile ? 8 : 12,
           flexWrap: 'wrap',
         }}
       >
@@ -192,7 +213,7 @@ export default function AgendaPage() {
           >
             Agenda
           </div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, margin: '2px 0 0', textTransform: 'capitalize' }}>
+          <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, margin: '2px 0 0', textTransform: 'capitalize' }}>
             {todayLabel}
           </h1>
         </div>
@@ -209,53 +230,56 @@ export default function AgendaPage() {
           </button>
         </div>
 
-        <div className="seg">
-          {(['day', 'week', 'month'] as const).map(v => (
-            <button
-              key={v}
-              type="button"
-              className={`seg__btn ${view === v ? 'is-active' : ''}`}
-              onClick={() => setView(v)}
-            >
-              {{ day: 'Día', week: 'Semana', month: 'Mes' }[v]}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ marginLeft: 'auto' }} className="row">
-          <button className="btn btn--secondary btn--sm">
-            <Icon name="filter" size={12} /> Filtros
-          </button>
-          <button className="btn btn--primary btn--sm" onClick={() => openModal('newAppointment')}>
-            <Icon name="plus" size={12} /> Nuevo turno
-          </button>
-        </div>
+        {/* "Filtros" se quitó: no estaba conectado a nada todavía.
+            En mobile, el segmento Día/Semana/Mes y "Nuevo turno" comparten una
+            fila completa, con el botón pegado a la derecha. En desktop queda
+            como antes: segmento a la izquierda y "Nuevo turno" al extremo. */}
+        {isMobile ? (
+          <div
+            className="row"
+            style={{ flex: '1 1 100%', gap: 8, justifyContent: 'space-between' }}
+          >
+            {viewSeg}
+            {newApptBtn}
+          </div>
+        ) : (
+          <>
+            {viewSeg}
+            <div style={{ marginLeft: 'auto' }} className="row">
+              {newApptBtn}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Stats */}
+      {/* Stats — en mobile entran en una sola línea (labels abreviados,
+          repartidos a lo ancho, sin wrap) para no comerse el alto de la lista. */}
       <div
         style={{
-          padding: '14px 20px',
+          padding: isMobile ? '10px 14px' : '14px 20px',
           borderBottom: '1px solid var(--border-subtle)',
           background: 'var(--bg-surface)',
           display: 'flex',
-          gap: 28,
-          flexWrap: 'wrap',
+          gap: isMobile ? 4 : 28,
+          flexWrap: isMobile ? 'nowrap' : 'wrap',
+          justifyContent: isMobile ? 'space-between' : 'flex-start',
           rowGap: 12,
         }}
       >
         {[
-          { l: 'Turnos', v: stats.total, c: 'var(--text-primary)' },
-          { l: 'Atendidos', v: stats.completed, c: 'var(--text-tertiary)' },
-          { l: 'Confirmados', v: stats.confirmed, c: 'var(--brand-primary)' },
-          { l: 'En curso', v: stats.pending, c: 'var(--info)' },
-          { l: 'Sin resolver', v: unresolved.length, c: unresolved.length ? 'var(--danger)' : 'var(--text-tertiary)' },
+          { l: 'Turnos', s: 'Turnos', v: stats.total, c: 'var(--text-primary)' },
+          { l: 'Atendidos', s: 'Atend.', v: stats.completed, c: 'var(--text-tertiary)' },
+          { l: 'Confirmados', s: 'Confirm.', v: stats.confirmed, c: 'var(--brand-primary)' },
+          { l: 'En curso', s: 'En curso', v: stats.pending, c: 'var(--info)' },
+          { l: 'Sin resolver', s: 'Sin res.', v: unresolved.length, c: unresolved.length ? 'var(--danger)' : 'var(--text-tertiary)' },
         ].map(s => (
-          <div key={s.l}>
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{s.l}</div>
+          <div key={s.l} style={{ textAlign: isMobile ? 'center' : 'left', flex: isMobile ? 1 : undefined, minWidth: 0 }}>
+            <div style={{ fontSize: isMobile ? 10 : 11, color: 'var(--text-tertiary)', marginBottom: 2, whiteSpace: 'nowrap' }}>
+              {isMobile ? s.s : s.l}
+            </div>
             <div
               style={{
-                fontSize: 16,
+                fontSize: isMobile ? 15 : 16,
                 fontWeight: 600,
                 color: s.c,
                 fontVariantNumeric: 'tabular-nums',

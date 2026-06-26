@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../api/patients';
 import { clinicalEntriesApi, type ClinicalEntryType } from '../api/clinical-entries';
@@ -26,10 +26,43 @@ type TabKey = 'ficha' | 'historial' | 'galeria' | 'pagos' | 'datos';
 export default function PatientProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<TabKey>('ficha');
-  // Collapses the header once the content scrolls. Hysteresis (12 vs 48) avoids
+
+  // Open a specific tab when arrived via ?tab=datos (e.g. "Editar datos" menu).
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && ['ficha', 'historial', 'galeria', 'pagos', 'datos'].includes(t)) {
+      setTab(t as TabKey);
+    }
+  }, [searchParams]);
+  // Collapses the header once the content scrolls. Hysteresis (8 vs 72) avoids
   // flicker right around the threshold.
   const [collapsed, setCollapsed] = useState(false);
+
+  // Scroll-collapse perf: the handler used to read scrollHeight/clientHeight on
+  // every scroll event, forcing a synchronous reflow each frame → the header
+  // collapse felt janky/dropped frames. Now we cache the max-scroll (refreshed
+  // by a ResizeObserver when the content/viewport changes) and the handler only
+  // reads scrollTop, deferred to one rAF per frame.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const maxScrollRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+
+  const onScroll = useCallback(() => {
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const el = scrollRef.current;
+      if (!el) return;
+      if (maxScrollRef.current < 200) {
+        setCollapsed(false);
+        return;
+      }
+      const st = el.scrollTop;
+      setCollapsed(prev => (prev ? st > 8 : st > 72));
+    });
+  }, []);
 
   const { data: patient, isLoading, isError } = useQuery({
     queryKey: ['patient', id],
@@ -44,6 +77,22 @@ export default function PatientProfilePage() {
     queryFn: () => clinicalEntriesApi.findAll(id!),
     enabled: Boolean(id),
   });
+
+  // Keep the cached max-scroll fresh without touching layout on every scroll:
+  // remeasure on mount, when the tab changes, when the patient loads, and
+  // whenever the content or viewport resizes (data loading in, photos, etc.).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => {
+      maxScrollRef.current = el.scrollHeight - el.clientHeight;
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [tab, patient]);
 
   if (isLoading) {
     return (
@@ -94,20 +143,8 @@ export default function PatientProfilePage() {
       </div>
 
       <div
-        onScroll={e => {
-          const el = e.currentTarget;
-          // Collapsing the header grows this scroll area. Two things keep it from
-          // oscillating on phones: a min-height on the content (.patient-tab-scroll
-          // in CSS) so there's always room to scroll, and an asymmetric threshold —
-          // collapse past 72px but only expand again right at the very top.
-          const maxScroll = el.scrollHeight - el.clientHeight;
-          if (maxScroll < 200) {
-            setCollapsed(false);
-            return;
-          }
-          const st = el.scrollTop;
-          setCollapsed(prev => (prev ? st > 8 : st > 72));
-        }}
+        ref={scrollRef}
+        onScroll={onScroll}
         style={{ flex: 1, overflow: 'auto', padding: 24, background: 'var(--bg-app)' }}
       >
         <div className="patient-tab-scroll">

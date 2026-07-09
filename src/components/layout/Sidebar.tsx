@@ -11,30 +11,32 @@ interface NavGroup {
   items: { to: string; label: string; icon: IconName; end?: boolean; kbd?: string }[];
 }
 
+// Nota: Dashboard, Galería, Pagos, Pacientes viejos y Ayuda quedan OCULTOS del
+// menú por ahora (las rutas siguen activas). Para volver a mostrarlos, descomentar.
 const NAV: NavGroup[] = [
   {
     group: 'Principal',
     items: [
-      { to: '/', label: 'Dashboard', icon: 'home', end: true, kbd: 'G' },
+      // { to: '/', label: 'Dashboard', icon: 'home', end: true, kbd: 'G' },
       { to: '/agenda', label: 'Agenda', icon: 'calendar', kbd: 'A' },
       { to: '/patients', label: 'Pacientes', icon: 'users', kbd: 'P' },
       { to: '/ficha-rapida', label: 'Ficha rápida', icon: 'clipboard', kbd: 'F' },
     ],
   },
-  {
-    group: 'Clínico',
-    items: [
-      { to: '/gallery', label: 'Galería', icon: 'image' },
-      { to: '/payments', label: 'Pagos', icon: 'receipt' },
-      { to: '/pacientes-viejos', label: 'Pacientes viejos', icon: 'history' },
-    ],
-  },
-  {
-    group: 'Soporte',
-    items: [
-      { to: '/ayuda', label: 'Ayuda', icon: 'help' },
-    ],
-  },
+  // {
+  //   group: 'Clínico',
+  //   items: [
+  //     { to: '/gallery', label: 'Galería', icon: 'image' },
+  //     { to: '/payments', label: 'Pagos', icon: 'receipt' },
+  //     { to: '/pacientes-viejos', label: 'Pacientes viejos', icon: 'history' },
+  //   ],
+  // },
+  // {
+  //   group: 'Soporte',
+  //   items: [
+  //     { to: '/ayuda', label: 'Ayuda', icon: 'help' },
+  //   ],
+  // },
 ];
 
 interface SidebarProps {

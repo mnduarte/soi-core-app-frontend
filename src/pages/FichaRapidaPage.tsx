@@ -96,7 +96,8 @@ export default function FichaRapidaPage() {
       return { t, saldo };
     });
   }, [txs]);
-  const balance = rows.length ? rows[rows.length - 1].saldo : 0;
+  const totalDebe = rows.reduce((s, r) => s + (r.t.type === 'CHARGE' ? r.t.amount : 0), 0);
+  const totalHaber = rows.reduce((s, r) => s + (r.t.type === 'PAYMENT' ? r.t.amount : 0), 0);
 
   // ---- formulario de carga ----
   const [kind, setKind] = useState<Kind>('PAYMENT');
@@ -172,8 +173,8 @@ export default function FichaRapidaPage() {
       showToast('Ingresá un monto', 'error');
       return;
     }
-    const dto = {
-      patientId: patient._id,
+    // El PATCH de edición NO lleva patientId (el backend no lo acepta).
+    const base = {
       type: kind,
       amount: amt,
       paymentMethod: kind === 'PAYMENT' ? method : undefined,
@@ -183,10 +184,10 @@ export default function FichaRapidaPage() {
     const firstName = patient.name.split(' ')[0];
     try {
       if (editingId) {
-        await updateMut.mutateAsync({ id: editingId, dto });
+        await updateMut.mutateAsync({ id: editingId, dto: base });
         showToast('¡Guardado! Movimiento actualizado');
       } else {
-        await addMut.mutateAsync(dto);
+        await addMut.mutateAsync({ patientId: patient._id, ...base });
         showToast(
           kind === 'PAYMENT'
             ? `¡Listo! Pago de ${fmtMoney(amt)} — ${firstName}`
@@ -491,9 +492,9 @@ export default function FichaRapidaPage() {
                 <div>
                   <div style={label}>Tipo</div>
                   <div className="seg">
-                    {(['PAYMENT', 'CHARGE'] as const).map(k => (
+                    {(['CHARGE', 'PAYMENT'] as const).map(k => (
                       <button key={k} type="button" className={`seg__btn ${kind === k ? 'is-active' : ''}`} onClick={() => setKind(k)}>
-                        {k === 'PAYMENT' ? 'Pago' : 'Cargo'}
+                        {k === 'CHARGE' ? 'Debe' : 'Haber'}
                       </button>
                     ))}
                   </div>
@@ -543,19 +544,18 @@ export default function FichaRapidaPage() {
                     <Th>Prestación realizada</Th>
                     <Th right>Debe</Th>
                     <Th right>Haber</Th>
-                    <Th right>Saldo</Th>
                     <Th right>Acciones</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={6} style={{ padding: 28, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+                      <td colSpan={5} style={{ padding: 28, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
                         Sin movimientos todavía. Cargá el primero arriba ↑
                       </td>
                     </tr>
                   )}
-                  {rows.map(({ t, saldo }) => (
+                  {rows.map(({ t }) => (
                     <tr
                       key={t._id}
                       className="fr-row"
@@ -574,12 +574,6 @@ export default function FichaRapidaPage() {
                       <td style={{ ...cell, textAlign: 'right', color: t.type === 'PAYMENT' ? 'var(--success)' : undefined }} className="mono">
                         {t.type === 'PAYMENT' ? fmtMoney(t.amount) : '—'}
                       </td>
-                      <td
-                        style={{ ...cell, textAlign: 'right', fontWeight: 700, color: saldo > 0 ? 'var(--danger)' : saldo < 0 ? 'var(--success)' : 'var(--text-primary)' }}
-                        className="mono"
-                      >
-                        {fmtMoney(saldo)}
-                      </td>
                       <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <span style={{ display: 'inline-flex', gap: 2 }}>
                           <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEdit(t)}>
@@ -596,13 +590,12 @@ export default function FichaRapidaPage() {
               </table>
 
               {rows.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'baseline', padding: '14px 16px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-muted)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Saldo actual</span>
-                  <span className="mono" style={{ fontSize: 18, fontWeight: 700, color: balance > 0 ? 'var(--danger)' : balance < 0 ? 'var(--success)' : 'var(--text-primary)' }}>
-                    {fmtMoney(balance)}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 22, alignItems: 'baseline', padding: '14px 16px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-muted)', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    Debe total <b className="mono" style={{ fontSize: 15 }}>{fmtMoney(totalDebe)}</b>
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                    {balance > 0 ? 'debe' : balance < 0 ? 'a favor' : 'al día'}
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    Haber total <b className="mono" style={{ fontSize: 15, color: 'var(--success)' }}>{fmtMoney(totalHaber)}</b>
                   </span>
                 </div>
               )}

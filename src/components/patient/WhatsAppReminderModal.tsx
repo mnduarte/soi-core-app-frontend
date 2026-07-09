@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, FormField } from '../common/Modal';
 import { Icon } from '../common/Icon';
 import { fmtMoney } from '../../lib/format';
+import { toWhatsAppNumber } from '../../lib/phone';
 
 interface ReminderPatient {
   name: string;
@@ -32,9 +33,9 @@ function buildMessage(tone: Tone, firstName: string, debtStr: string, clinic: st
     return `Hola ${firstName}, te contactamos de ${clinic}. Figura un saldo pendiente de ${debtStr} en tu cuenta. Te pedimos por favor regularizarlo a la brevedad. Ante cualquier duda, quedamos a disposición.`;
   }
   if (tone === 'link') {
-    return `Hola ${firstName} 👋 Te escribimos de ${clinic}. Tenés un saldo pendiente de ${debtStr}. Podés abonarlo desde este link: https://pago.soi.app — ¡Gracias!`;
+    return `Hola ${firstName}, te escribimos de ${clinic}. Tenés un saldo pendiente de ${debtStr}. Podés abonarlo desde este link: https://pago.soi.app — ¡Gracias!`;
   }
-  return `Hola ${firstName} 👋 Te escribimos de ${clinic}. Te recordamos que tenés un saldo pendiente de ${debtStr}. Podés abonar por transferencia, débito o Mercado Pago. ¡Cualquier duda avisanos! 🦷`;
+  return `Hola ${firstName}, te escribimos de ${clinic}. Te recordamos que tenés un saldo pendiente de ${debtStr}. Podés abonar por transferencia, débito o Mercado Pago. ¡Cualquier duda avisanos!`;
 }
 
 export function WhatsAppReminderModal({
@@ -63,7 +64,7 @@ export function WhatsAppReminderModal({
   }, [open, tone, firstName, debtStr, clinicName, edited]);
 
   const send = () => {
-    const phone = (patient.phone ?? '').replace(/\D/g, '');
+    const phone = toWhatsAppNumber(patient.phone);
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
     onClose();
   };

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   appointmentsApi,
   type Appointment,
@@ -13,6 +13,8 @@ import { Avatar } from '../components/common/Avatar';
 import { StatusBadge, FichaPendingBadge } from '../components/common/StatusBadge';
 import { ResolveMenu } from '../components/common/ResolveMenu';
 import { NewClinicalEntryModal } from '../components/patient/NewClinicalEntryModal';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { LibretaView } from '../components/agenda/LibretaView';
 import { useIsMobile } from '../hooks/useIsMobile';
 import {
   hhmm,
@@ -22,7 +24,7 @@ import {
   needsResolution,
 } from '../lib/appointment';
 
-type View = 'day' | 'week' | 'month';
+type View = 'libreta' | 'day' | 'week' | 'month';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8..19
 const PX_PER_MIN = 1.4;
@@ -76,8 +78,15 @@ export default function AgendaPage() {
   const qc = useQueryClient();
   const isMobile = useIsMobile(900);
 
-  const [view, setView] = useState<View>('day');
+  const [view, setView] = useState<View>('libreta');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [searchParams] = useSearchParams();
+
+  // Si llegamos con ?patientId (ej. desde "Guardar y agendar turno"), aseguramos
+  // la vista Libreta para que el alta rápida precargue el paciente.
+  useEffect(() => {
+    if (searchParams.get('patientId')) setView('libreta');
+  }, [searchParams]);
 
   // Turno que se está documentando: abre la entrada de evolución con el turno
   // ya enlazado. Al guardar, el backend apaga su badge "ficha pendiente".
@@ -91,7 +100,7 @@ export default function AgendaPage() {
   }, []);
 
   const range = useMemo(() => {
-    if (view === 'day') return { from: startOfDay(selectedDate), to: endOfDay(selectedDate) };
+    if (view === 'day' || view === 'libreta') return { from: startOfDay(selectedDate), to: endOfDay(selectedDate) };
     if (view === 'week') return { from: startOfWeek(selectedDate), to: endOfWeek(selectedDate) };
     return { from: startOfMonth(selectedDate), to: endOfMonth(selectedDate) };
   }, [view, selectedDate]);
@@ -120,8 +129,8 @@ export default function AgendaPage() {
       appointmentsApi.updateStatus(id, status),
     onSuccess: updated => {
       qc.invalidateQueries({ queryKey: ['appointments'] });
-      const p = patientMap.get(updated.patientId);
-      const name = p ? `${p.name} ${p.lastName}` : 'paciente';
+      const p = updated.patientId ? patientMap.get(updated.patientId) : undefined;
+      const name = p ? `${p.name} ${p.lastName}` : updated.patientName ?? 'paciente';
       showToast(toastForStatus(name, updated.status));
     },
   });
@@ -132,8 +141,26 @@ export default function AgendaPage() {
   const handleReschedule = (appt: Appointment) =>
     openModal('newAppointment', { patientId: appt.patientId });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => appointmentsApi.hardRemove(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+      showToast('Turno borrado');
+    },
+    onError: () => showToast('No se pudo borrar el turno', 'error'),
+  });
+  // Confirmación con diálogo propio (no el confirm nativo del navegador).
+  const [confirmDelete, setConfirmDelete] = useState<Appointment | null>(null);
+  const handleDelete = (appt: Appointment) => setConfirmDelete(appt);
+
   // "Cargar evolución de esta visita": documentar el turno desde la agenda.
-  const handleOpenFicha = (appt: Appointment) => setFichaTarget(appt);
+  const handleOpenFicha = (appt: Appointment) => {
+    if (!appt.patientId) {
+      showToast('Primero vinculá este turno a una ficha de paciente');
+      return;
+    }
+    setFichaTarget(appt);
+  };
 
   const todayLabel = selectedDate.toLocaleDateString('es-AR', {
     weekday: 'long',
@@ -143,7 +170,7 @@ export default function AgendaPage() {
 
   const shift = (delta: number) => {
     const next = new Date(selectedDate);
-    if (view === 'day') next.setDate(next.getDate() + delta);
+    if (view === 'day' || view === 'libreta') next.setDate(next.getDate() + delta);
     else if (view === 'week') next.setDate(next.getDate() + delta * 7);
     else next.setMonth(next.getMonth() + delta);
     setSelectedDate(next);
@@ -152,7 +179,10 @@ export default function AgendaPage() {
   // Stats are scoped to the visible day even in week/month views, so the
   // numbers always describe the date the toolbar shows.
   const dayList = useMemo(
-    () => (view === 'day' ? appts : appts.filter(a => sameDay(new Date(a.startsAt), selectedDate))),
+    () =>
+      view === 'day' || view === 'libreta'
+        ? appts
+        : appts.filter(a => sameDay(new Date(a.startsAt), selectedDate)),
     [appts, view, selectedDate],
   );
   const unresolved = useMemo(
@@ -168,14 +198,14 @@ export default function AgendaPage() {
 
   const viewSeg = (
     <div className="seg">
-      {(['day', 'week', 'month'] as const).map(v => (
+      {(['libreta', 'week', 'month'] as const).map(v => (
         <button
           key={v}
           type="button"
           className={`seg__btn ${view === v ? 'is-active' : ''}`}
           onClick={() => setView(v)}
         >
-          {{ day: 'Día', week: 'Semana', month: 'Mes' }[v]}
+          {{ libreta: 'Libreta diaria', week: 'Semana', month: 'Mes' }[v]}
         </button>
       ))}
     </div>
@@ -252,8 +282,9 @@ export default function AgendaPage() {
         )}
       </div>
 
-      {/* Stats — en mobile entran en una sola línea (labels abreviados,
-          repartidos a lo ancho, sin wrap) para no comerse el alto de la lista. */}
+      {/* Stats — ocultos en la vista Libreta (tiene su propio encabezado). En
+          mobile entran en una sola línea (labels abreviados, sin wrap). */}
+      {view !== 'libreta' && (
       <div
         style={{
           padding: isMobile ? '10px 14px' : '14px 20px',
@@ -290,6 +321,7 @@ export default function AgendaPage() {
           </div>
         ))}
       </div>
+      )}
 
       {/* Unresolved banner: shown only on day view (other views don't have
           a single "now" reference) */}
@@ -303,6 +335,23 @@ export default function AgendaPage() {
       )}
 
       {/* Views */}
+      {view === 'libreta' && (
+        <LibretaView
+          appts={dayList}
+          patientMap={patientMap}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          now={now}
+          isMobile={isMobile}
+          onOpenPatient={(id, trabajo) =>
+            navigate(`/patients/${id}${trabajo ? `?trabajo=${encodeURIComponent(trabajo)}` : ''}`)
+          }
+          onResolve={handleResolve}
+          onReschedule={handleReschedule}
+          onOpenFicha={handleOpenFicha}
+          onDelete={handleDelete}
+        />
+      )}
       {view === 'day' && (
         <DayView
           appts={dayList}
@@ -321,14 +370,14 @@ export default function AgendaPage() {
           appts={appts}
           patientMap={patientMap}
           selectedDate={selectedDate}
-          onOpenPatient={id => navigate(`/patients/${id}`)}
+          onPickDay={d => { setSelectedDate(d); setView('libreta'); }}
         />
       )}
       {view === 'month' && (
         <MonthView
           appts={appts}
           selectedDate={selectedDate}
-          onPickDay={d => { setSelectedDate(d); setView('day'); }}
+          onPickDay={d => { setSelectedDate(d); setView('libreta'); }}
         />
       )}
 
@@ -336,10 +385,23 @@ export default function AgendaPage() {
         <NewClinicalEntryModal
           open
           onClose={() => setFichaTarget(null)}
-          patientId={fichaTarget.patientId}
+          patientId={fichaTarget.patientId!}
           appointmentId={fichaTarget._id}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="¿Borrar este turno?"
+        message="No se puede deshacer. Si te equivocaste, después lo podés volver a crear."
+        confirmLabel="Borrar turno"
+        danger
+        onConfirm={() => {
+          if (confirmDelete) deleteMutation.mutate(confirmDelete._id);
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }
@@ -410,7 +472,7 @@ function UnresolvedBanner({
         {open && (
         <div style={{ maxHeight: 'min(46vh, 420px)', overflowY: 'auto' }}>
           {unresolved.map((appt, i) => {
-            const p = patientMap.get(appt.patientId);
+            const p = appt.patientId ? patientMap.get(appt.patientId) : undefined;
             return (
               <div
                 key={appt._id}
@@ -549,13 +611,13 @@ function DayView({
           </div>
         ) : (
           sortedAppts.map(appt => {
-            const p = patientMap.get(appt.patientId);
+            const p = appt.patientId ? patientMap.get(appt.patientId) : undefined;
             const unresolvedRow = needsResolution(appt, now);
             const fichaPending = isFichaPending(appt);
             return (
               <div
                 key={appt._id}
-                onClick={() => onOpenPatient(appt.patientId)}
+                onClick={() => appt.patientId && onOpenPatient(appt.patientId)}
                 style={{
                   padding: '12px 18px',
                   borderBottom: '1px solid var(--border-subtle)',
@@ -685,8 +747,8 @@ function DayView({
               <TimelineCard
                 key={appt._id}
                 appt={appt}
-                patient={patientMap.get(appt.patientId)}
-                onClick={() => onOpenPatient(appt.patientId)}
+                patient={appt.patientId ? patientMap.get(appt.patientId) : undefined}
+                onClick={() => appt.patientId && onOpenPatient(appt.patientId)}
               />
             ))}
           </div>
@@ -832,12 +894,12 @@ function WeekView({
   appts,
   patientMap,
   selectedDate,
-  onOpenPatient,
+  onPickDay,
 }: {
   appts: Appointment[];
   patientMap: Map<string, Patient>;
   selectedDate: Date;
-  onOpenPatient: (id: string) => void;
+  onPickDay: (d: Date) => void;
 }) {
   const monday = startOfWeek(selectedDate);
   const days = Array.from({ length: 6 }, (_, i) => {
@@ -865,11 +927,14 @@ function WeekView({
           return (
             <div
               key={i}
+              onClick={() => onPickDay(d)}
+              title="Abrir la libreta de este día"
               style={{
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 10,
                 overflow: 'hidden',
                 background: isToday ? 'var(--brand-primary-50)' : 'var(--bg-surface)',
+                cursor: 'pointer',
               }}
             >
               <div
@@ -920,7 +985,7 @@ function WeekView({
                   </div>
                 )}
                 {dayAppts.map(appt => {
-                  const p = patientMap.get(appt.patientId);
+                  const p = appt.patientId ? patientMap.get(appt.patientId) : undefined;
                   const bar = appt.status === 'COMPLETED'
                     ? '#16A34A'
                     : isTerminal(appt)
@@ -929,7 +994,7 @@ function WeekView({
                   return (
                     <div
                       key={appt._id}
-                      onClick={() => onOpenPatient(appt.patientId)}
+                      onClick={() => onPickDay(d)}
                       style={{
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border-subtle)',
@@ -951,7 +1016,7 @@ function WeekView({
                           textOverflow: 'ellipsis',
                         }}
                       >
-                        {p ? `${p.name} ${p.lastName}` : 'Paciente'}
+                        {p ? `${p.name} ${p.lastName}` : (appt.patientName ?? 'Paciente')}
                       </div>
                       <div
                         style={{

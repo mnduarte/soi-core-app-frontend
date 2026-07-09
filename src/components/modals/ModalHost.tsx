@@ -18,6 +18,7 @@ export function ModalHost() {
       <NewPatientModal
         open={modal?.kind === 'newPatient'}
         onClose={closeModal}
+        editPatientId={modal?.props?.patientId}
       />
       <RegisterPaymentModal
         open={modal?.kind === 'registerPayment'}

@@ -9,6 +9,7 @@ import { Avatar } from '../common/Avatar';
 import { Icon } from '../common/Icon';
 import { WhatsAppReminderModal } from './WhatsAppReminderModal';
 import { patientAge, fmtMoney } from '../../lib/format';
+import { toWhatsAppNumber } from '../../lib/phone';
 
 interface PatientHeaderProps {
   patient: Patient;
@@ -164,7 +165,7 @@ export function PatientHeader({ patient, collapsed = false }: PatientHeaderProps
               className="btn btn--whatsapp btn--sm"
               onClick={() => {
                 if (bal > 0) setReminding(true);
-                else if (patient.phone) window.open(`https://wa.me/${patient.phone.replace(/\D/g, '')}`, '_blank');
+                else if (patient.phone) window.open(`https://wa.me/${toWhatsAppNumber(patient.phone)}`, '_blank');
               }}
             >
               <Icon name="whatsapp" size={14} /> WhatsApp

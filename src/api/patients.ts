@@ -38,6 +38,10 @@ export const patientsApi = {
   remove: (id: string) =>
     apiClient.delete(`/patients/${id}`),
 
+  // Borrado físico + cascade (limpiar duplicados). Irreversible.
+  hardRemove: (id: string) =>
+    apiClient.delete(`/patients/${id}/hard`),
+
   restore: (id: string) =>
     apiClient.post<{ data: { ok: boolean } }>(`/patients/${id}/restore`).then(r => r.data.data),
 

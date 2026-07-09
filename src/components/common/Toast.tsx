@@ -14,13 +14,18 @@ export function ToastHost() {
 
   if (!toast) return null;
 
+  const isError = toast.type === 'error';
+
   return (
     <div className="toast-host">
       <div className="toast">
-        <div className="toast__icon">
-          <Icon name="check" size={13} />
+        <div
+          className="toast__icon"
+          style={{ background: isError ? 'var(--danger)' : 'var(--success)' }}
+        >
+          <Icon name={isError ? 'x' : 'check'} size={13} />
         </div>
-        {toast}
+        {toast.msg}
       </div>
     </div>
   );

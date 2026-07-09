@@ -7,7 +7,10 @@ export type FichaStatus = 'PENDING' | 'DONE';
 
 export interface Appointment {
   _id: string;
-  patientId: string;
+  // Opcional: en la libreta puede ser un turno con solo un nombre suelto
+  // (patientName) sin ficha vinculada todavía.
+  patientId?: string;
+  patientName?: string;
   professionalId?: string;
   startsAt: string;
   endsAt: string;
@@ -18,6 +21,17 @@ export interface Appointment {
   reminderSent: boolean;
 }
 
+export interface CreateAppointmentInput {
+  patientId?: string;
+  patientName?: string;
+  startsAt: string;
+  endsAt: string;
+  title?: string;
+  notes?: string;
+  // Confirma apilar sobreturno en un horario ya ocupado (saltea el chequeo).
+  allowOverlap?: boolean;
+}
+
 export const appointmentsApi = {
   findAll: (params: { from?: string; to?: string; patientId?: string }) =>
     apiClient.get<{ data: Appointment[] }>('/appointments', { params }).then(r => r.data.data),
@@ -25,7 +39,7 @@ export const appointmentsApi = {
   findById: (id: string) =>
     apiClient.get<{ data: Appointment }>(`/appointments/${id}`).then(r => r.data.data),
 
-  create: (dto: Pick<Appointment, 'patientId' | 'startsAt' | 'endsAt'> & Partial<Appointment>) =>
+  create: (dto: CreateAppointmentInput) =>
     apiClient.post<{ data: Appointment }>('/appointments', dto).then(r => r.data.data),
 
   update: (id: string, dto: Partial<Appointment>) =>
@@ -51,4 +65,8 @@ export const appointmentsApi = {
 
   remove: (id: string) =>
     apiClient.delete(`/appointments/${id}`),
+
+  // Borrado físico (turnos son datos de agenda: se borran de verdad).
+  hardRemove: (id: string) =>
+    apiClient.delete(`/appointments/${id}/hard`),
 };

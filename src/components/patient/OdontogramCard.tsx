@@ -21,6 +21,14 @@ const TEETH_UPPER_L = [21, 22, 23, 24, 25, 26, 27, 28];
 const TEETH_LOWER_R = [48, 47, 46, 45, 44, 43, 42, 41];
 const TEETH_LOWER_L = [31, 32, 33, 34, 35, 36, 37, 38];
 
+// Dentición temporaria (infantil). Solo 5 por cuadrante → los alineamos bajo los
+// dientes anteriores (relleno con null en las 3 posiciones posteriores) para que
+// queden en el medio, como en la ficha de papel (dentición mixta).
+const PED_UPPER_R = [null, null, null, 55, 54, 53, 52, 51];
+const PED_UPPER_L = [61, 62, 63, 64, 65, null, null, null];
+const PED_LOWER_R = [null, null, null, 85, 84, 83, 82, 81];
+const PED_LOWER_L = [71, 72, 73, 74, 75, null, null, null];
+
 // =============================================================================
 // Conditions catalog. Each entry tells the UI whether the user has to pick a
 // face (`surface`) or whether it covers the whole tooth (`tooth`). The same
@@ -75,18 +83,33 @@ const STATUS_CLASS: Record<ToothConditionStatus, string> = {
 };
 
 // =============================================================================
-// SVG paths — five trapezoid/center surfaces inside a 32x32 viewBox.
-// Same layout for every tooth: V at top, L at bottom, M at left, D at right,
-// O in the centre. This is the standard "schematic" representation used in
-// printed odontograms.
+// Circular tooth (fiel a la ficha de papel): un anillo dividido en 4 sectores
+// externos (V arriba, D derecha, L abajo, M izquierda) alrededor de un disco
+// central O (oclusal/incisal). viewBox 32x32, centro (16,16).
 // =============================================================================
-const SURFACE_PATHS: Record<Exclude<ToothSurface, 'all'>, string> = {
-  V: 'M 0 0 L 32 0 L 22 10 L 10 10 Z',
-  D: 'M 32 0 L 32 32 L 22 22 L 22 10 Z',
-  L: 'M 0 32 L 32 32 L 22 22 L 10 22 Z',
-  M: 'M 0 0 L 0 32 L 10 22 L 10 10 Z',
-  O: 'M 10 10 L 22 10 L 22 22 L 10 22 Z',
+const CIRC = { cx: 16, cy: 16, R: 14.5, rInner: 5.6 };
+const rad = (deg: number) => (deg * Math.PI) / 180;
+const polar = (r: number, deg: number): [number, number] => [
+  CIRC.cx + r * Math.cos(rad(deg)),
+  CIRC.cy + r * Math.sin(rad(deg)),
+];
+// Sector externo de 90° entre a1→a2 (coordenadas de pantalla, y hacia abajo).
+function sectorPath(a1: number, a2: number): string {
+  const f = (n: number) => n.toFixed(2);
+  const [ox1, oy1] = polar(CIRC.R, a1);
+  const [ox2, oy2] = polar(CIRC.R, a2);
+  const [ix2, iy2] = polar(CIRC.rInner, a2);
+  const [ix1, iy1] = polar(CIRC.rInner, a1);
+  return `M ${f(ix1)} ${f(iy1)} L ${f(ox1)} ${f(oy1)} A ${CIRC.R} ${CIRC.R} 0 0 1 ${f(ox2)} ${f(oy2)} L ${f(ix2)} ${f(iy2)} A ${CIRC.rInner} ${CIRC.rInner} 0 0 0 ${f(ix1)} ${f(iy1)} Z`;
+}
+// Esquinas en 45/135/225/315. V=arriba(225→315), D=der(315→405), L=abajo(45→135), M=izq(135→225).
+const SURFACE_PATHS: Record<'V' | 'D' | 'L' | 'M', string> = {
+  V: sectorPath(225, 315),
+  D: sectorPath(315, 405),
+  L: sectorPath(45, 135),
+  M: sectorPath(135, 225),
 };
+const OUTER_SURFACES: Array<'V' | 'D' | 'L' | 'M'> = ['V', 'D', 'L', 'M'];
 const SURFACES: Array<Exclude<ToothSurface, 'all'>> = ['V', 'D', 'L', 'M', 'O'];
 
 // =============================================================================
@@ -109,7 +132,15 @@ function buildMarks(teeth: ToothState[]): AllMarks {
 // =============================================================================
 // Card
 // =============================================================================
-export function OdontogramCard({ patientId }: { patientId: string }) {
+export function OdontogramCard({
+  patientId,
+  patientName,
+  onClose,
+}: {
+  patientId: string;
+  patientName?: string;
+  onClose?: () => void;
+}) {
   const qc = useQueryClient();
   // Default to REQUIRED (azul) — the common case is marking new diagnostic
   // findings; the dentist will switch to EXISTING (rojo) when recording what
@@ -182,19 +213,21 @@ export function OdontogramCard({ patientId }: { patientId: string }) {
         <div>
           <div className="card__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="tooth" size={14} style={{ color: 'var(--brand-primary)' }} />
-            Odontograma
+            Odontograma{patientName ? ` · ${patientName}` : ''}
           </div>
           <div className="card__sub">
             Click una cara para marcar (M/D/V/L/O) · doble-tap mismo botón = borrar
           </div>
         </div>
         <div className="row" style={{ gap: 6 }}>
-          <button className="btn btn--ghost btn--sm">
-            <Icon name="history" size={12} /> Versiones
-          </button>
-          <button className="btn btn--ghost btn--sm">
+          <button className="btn btn--ghost btn--sm" onClick={() => window.print()}>
             <Icon name="download" size={12} /> Imprimir
           </button>
+          {onClose && (
+            <button className="btn btn--secondary btn--sm" onClick={onClose}>
+              <Icon name="x" size={13} /> Cerrar
+            </button>
+          )}
         </div>
       </div>
 
@@ -269,10 +302,17 @@ export function OdontogramCard({ patientId }: { patientId: string }) {
         {/* ===== Grid ===== */}
         <div className="odo-layout">
           <div className="odo-grid">
+            {/* Permanentes superiores */}
             <ToothRow teeth={TEETH_UPPER_R} side="right" marks={marks} onClick={handleSurfaceClick} />
             <ToothRow teeth={TEETH_UPPER_L} side="left"  marks={marks} onClick={handleSurfaceClick} />
-            <ToothRow teeth={TEETH_LOWER_R} side="right" marks={marks} onClick={handleSurfaceClick} isLower />
-            <ToothRow teeth={TEETH_LOWER_L} side="left"  marks={marks} onClick={handleSurfaceClick} isLower />
+            {/* Temporarios (dentición mixta) — el medio, con la línea del eje */}
+            <ToothRow teeth={PED_UPPER_R} side="right" marks={marks} onClick={handleSurfaceClick} midline />
+            <ToothRow teeth={PED_UPPER_L} side="left"  marks={marks} onClick={handleSurfaceClick} midline />
+            <ToothRow teeth={PED_LOWER_R} side="right" marks={marks} onClick={handleSurfaceClick} />
+            <ToothRow teeth={PED_LOWER_L} side="left"  marks={marks} onClick={handleSurfaceClick} />
+            {/* Permanentes inferiores */}
+            <ToothRow teeth={TEETH_LOWER_R} side="right" marks={marks} onClick={handleSurfaceClick} />
+            <ToothRow teeth={TEETH_LOWER_L} side="left"  marks={marks} onClick={handleSurfaceClick} />
           </div>
 
           <ReferenceCard />
@@ -347,24 +387,28 @@ function ToothRow({
   side,
   marks,
   onClick,
-  isLower,
+  midline,
 }: {
-  teeth: number[];
+  teeth: (number | null)[];
   side: 'left' | 'right';
   marks: AllMarks;
   onClick: (toothNumber: number, surface: Exclude<ToothSurface, 'all'>) => void;
-  isLower?: boolean;
+  midline?: boolean;
 }) {
   return (
-    <div className={`odo-row odo-row--${side} ${isLower ? 'odo-row--lower' : 'odo-row--upper'}`}>
-      {teeth.map(n => (
-        <Tooth
-          key={n}
-          number={n}
-          marks={marks.get(n) ?? new Map()}
-          onSurfaceClick={s => onClick(n, s)}
-        />
-      ))}
+    <div className={`odo-row odo-row--${side} ${midline ? 'odo-row--midline' : ''}`}>
+      {teeth.map((n, i) =>
+        n == null ? (
+          <div key={`e${i}`} className="odo-tooth odo-tooth--empty" />
+        ) : (
+          <Tooth
+            key={n}
+            number={n}
+            marks={marks.get(n) ?? new Map()}
+            onSurfaceClick={s => onClick(n, s)}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -412,7 +456,8 @@ function Tooth({
     <div className="odo-tooth">
       <div className="odo-tooth__num">{number}</div>
       <svg viewBox="0 0 32 32" className="odo-tooth__svg">
-        {SURFACES.map(surface => {
+        {/* 4 sectores externos */}
+        {OUTER_SURFACES.map(surface => {
           const m = marks.get(surface);
           const def = m ? findCondition(m.condition) : undefined;
           const cls = m && def?.kind === 'surface'
@@ -427,6 +472,15 @@ function Tooth({
             />
           );
         })}
+        {/* Cara oclusal/incisal = disco central */}
+        {(() => {
+          const m = marks.get('O');
+          const def = m ? findCondition(m.condition) : undefined;
+          const cls = m && def?.kind === 'surface'
+            ? `odo-surface odo-surface--${STATUS_CLASS[m.status]}`
+            : 'odo-surface';
+          return <circle cx={CIRC.cx} cy={CIRC.cy} r={CIRC.rInner} className={cls} onClick={() => onSurfaceClick('O')} />;
+        })()}
         {decoration && decoDef && (
           <ToothDecoration
             code={decoration.condition}

@@ -15,6 +15,7 @@ import { Avatar } from '../components/common/Avatar';
 import { StatusBadge, FichaPendingBadge } from '../components/common/StatusBadge';
 import { ResolveMenu } from '../components/common/ResolveMenu';
 import { hhmm, isFichaPending, isTerminal } from '../lib/appointment';
+import { toWhatsAppNumber } from '../lib/phone';
 
 function startOfDayISO(d = new Date()): string {
   const x = new Date(d);
@@ -51,7 +52,7 @@ function buildReminderMessage(args: {
 }): string {
   const motivo = args.title ? `\nMotivo: ${args.title}` : '';
   return (
-    `Hola ${args.firstName} 👋 Te recordamos tu turno en ${args.clinic} ` +
+    `Hola ${args.firstName}, te recordamos tu turno en ${args.clinic} ` +
     `para ${args.whenLabel} a las ${args.time}.${motivo}\n¡Te esperamos!`
   );
 }
@@ -122,7 +123,7 @@ export default function DashboardPage() {
       .filter(a => !isTerminal(a) && new Date(a.startsAt).getTime() >= now)
       .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
   }, [appts, today]);
-  const nextPatient = nextAppt ? patientMap.get(nextAppt.patientId) : undefined;
+  const nextPatient = nextAppt?.patientId ? patientMap.get(nextAppt.patientId) : undefined;
 
   // Status mutation — refetches today's appointments + balance + patient cards.
   const resolveMutation = useMutation({
@@ -130,7 +131,7 @@ export default function DashboardPage() {
       appointmentsApi.updateStatus(id, status),
     onSuccess: updated => {
       qc.invalidateQueries({ queryKey: ['appointments'] });
-      const p = patientMap.get(updated.patientId);
+      const p = updated.patientId ? patientMap.get(updated.patientId) : undefined;
       const name = p ? `${p.name} ${p.lastName}` : 'paciente';
       showToast(toastForStatus(name, updated.status));
     },
@@ -159,7 +160,7 @@ export default function DashboardPage() {
       showToast('El paciente no tiene WhatsApp cargado.');
       return;
     }
-    const phone = patient.phone.replace(/\D/g, '');
+    const phone = toWhatsAppNumber(patient.phone);
     const msg = buildReminderMessage({
       firstName: patient.name.split(' ')[0] ?? patient.name,
       clinic: clinic?.name ?? 'tu consultorio',
@@ -246,7 +247,7 @@ export default function DashboardPage() {
                 <DashboardAppointmentRow
                   key={appt._id}
                   appt={appt}
-                  patient={patientMap.get(appt.patientId)}
+                  patient={appt.patientId ? patientMap.get(appt.patientId) : undefined}
                   onOpenPatient={id => navigate(`/patients/${id}`)}
                   onResolve={handleResolve}
                   onReschedule={() => openModal('newAppointment', { patientId: appt.patientId })}
@@ -309,7 +310,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 pendingReminders.slice(0, 5).map((appt, i) => {
-                  const patient = patientMap.get(appt.patientId);
+                  const patient = appt.patientId ? patientMap.get(appt.patientId) : undefined;
                   const last = i === Math.min(pendingReminders.length, 5) - 1;
                   const hasPhone = !!patient?.phone;
                   return (
@@ -450,7 +451,7 @@ function DashboardAppointmentRow({
   const fichaPending = isFichaPending(appt);
 
   return (
-    <div className="dash-appt-row" onClick={() => onOpenPatient(appt.patientId)}>
+    <div className="dash-appt-row" onClick={() => appt.patientId && onOpenPatient(appt.patientId)}>
       <div
         className="dash-appt-row__time mono"
         style={{
@@ -492,13 +493,13 @@ function DashboardAppointmentRow({
       </div>
       <div className="dash-appt-row__badges">
         <StatusBadge status={appt.status} />
-        {fichaPending && <FichaPendingBadge onClick={() => onOpenPatient(appt.patientId)} />}
+        {fichaPending && <FichaPendingBadge onClick={() => appt.patientId && onOpenPatient(appt.patientId)} />}
       </div>
       <div className="dash-appt-row__menu">
         <ResolveMenu
           appt={appt}
           onResolve={onResolve}
-          onOpenFicha={() => onOpenPatient(appt.patientId)}
+          onOpenFicha={() => appt.patientId && onOpenPatient(appt.patientId)}
           onReschedule={onReschedule}
         />
       </div>

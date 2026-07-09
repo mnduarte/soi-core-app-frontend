@@ -7,12 +7,14 @@ export interface ModalProps {
   defaultStart?: string;
 }
 
+export type ToastType = 'success' | 'error';
+
 interface UIStore {
   modal: { kind: ModalKind; props: ModalProps } | null;
-  toast: string | null;
+  toast: { msg: string; type: ToastType } | null;
   openModal: (kind: ModalKind, props?: ModalProps) => void;
   closeModal: () => void;
-  showToast: (msg: string) => void;
+  showToast: (msg: string, type?: ToastType) => void;
   clearToast: () => void;
 }
 
@@ -21,6 +23,6 @@ export const useUIStore = create<UIStore>(set => ({
   toast: null,
   openModal: (kind, props = {}) => set({ modal: { kind, props } }),
   closeModal: () => set({ modal: null }),
-  showToast: msg => set({ toast: msg }),
+  showToast: (msg, type = 'success') => set({ toast: { msg, type } }),
   clearToast: () => set({ toast: null }),
 }));

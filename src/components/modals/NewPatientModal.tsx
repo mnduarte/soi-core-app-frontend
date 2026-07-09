@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal, FormField } from '../common/Modal';
 import { SectionLabel } from '../common/Toggle';
 import { Icon } from '../common/Icon';
-import { patientsApi, type ScanFichaResult } from '../../api/patients';
+import { patientsApi, type Patient, type ScanFichaResult } from '../../api/patients';
+import { patientAge } from '../../lib/format';
+import { whatsAppPreview } from '../../lib/phone';
 import { useUIStore } from '../../store/ui.store';
 
 interface NewPatientModalProps {
   open: boolean;
   onClose: () => void;
+  // Si viene, el modal edita ese paciente en vez de crear uno nuevo.
+  editPatientId?: string;
 }
 
 const OBRA_SOCIAL_OPTIONS = ['Particular', 'OSDE', 'Swiss Medical', 'Galeno', 'IOMA', 'PAMI', 'Otra'];
@@ -92,13 +96,20 @@ function computeAge(iso: string): number | null {
   return a >= 0 && a < 150 ? a : null;
 }
 
-export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
+export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModalProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
-  const openModal = useUIStore(s => s.openModal);
   const navigate = useNavigate();
+  const editing = Boolean(editPatientId);
   const [data, setData] = useState<FormState>(EMPTY);
   const [error, setError] = useState('');
+
+  // En edición: traer el paciente y precargar el formulario.
+  const { data: editPatient } = useQuery({
+    queryKey: ['patient', editPatientId],
+    queryFn: () => patientsApi.findById(editPatientId!),
+    enabled: open && editing,
+  });
 
   // Photo-scan state.
   const fileRef = useRef<HTMLInputElement>(null);
@@ -107,18 +118,80 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
   const [scanDone, setScanDone] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<ScanFichaResult['existing']>(null);
+  const [dupReason, setDupReason] = useState<'name' | 'dni' | null>(null);
+  const [dupDismissed, setDupDismissed] = useState(false);
 
   // Reset on every open/close transition so the form is always blank when the
   // modal becomes visible again, even if the previous close came from a submit.
+  // En edición no lo blanqueamos: se precarga con el paciente (efecto de abajo).
   useEffect(() => {
-    setData(EMPTY);
+    if (!editing) setData(EMPTY);
     setError('');
     setScanError('');
     setScanDone(false);
     setPreviewUrl(null);
     setDuplicate(null);
+    setDupReason(null);
+    setDupDismissed(false);
     setScanning(false);
-  }, [open]);
+  }, [open, editing]);
+
+  // Aviso de duplicado al cargar a mano: por DNI (fuerte) o nombre+apellido.
+  // Es suave: se puede crear igual (el DNI no bloquea). No corre en edición.
+  useEffect(() => {
+    if (editing || dupDismissed) return;
+    const name = data.name.trim();
+    const last = data.lastName.trim();
+    const dni = data.dni.trim();
+    if (dni.length < 6 && (name.length < 2 || last.length < 2)) return;
+    const t = setTimeout(async () => {
+      try {
+        if (dni.length >= 6) {
+          const byDni = await patientsApi.findAll(dni);
+          const m = byDni.find(p => (p.dni ?? '').trim() === dni);
+          if (m) {
+            setDuplicate({ _id: m._id, name: m.name, lastName: m.lastName, deleted: false });
+            setDupReason('dni');
+            return;
+          }
+        }
+        if (name.length >= 2 && last.length >= 2) {
+          const byName = await patientsApi.findAll(`${name} ${last}`);
+          const m = byName.find(
+            p =>
+              p.name.trim().toLowerCase() === name.toLowerCase() &&
+              p.lastName.trim().toLowerCase() === last.toLowerCase(),
+          );
+          if (m) {
+            setDuplicate({ _id: m._id, name: m.name, lastName: m.lastName, deleted: false });
+            setDupReason('name');
+          }
+        }
+      } catch { /* ignore */ }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [data.name, data.lastName, data.dni, editing, dupDismissed]);
+
+  // Precarga del paciente a editar.
+  useEffect(() => {
+    if (open && editing && editPatient) {
+      const age = patientAge(editPatient);
+      setData({
+        name: editPatient.name,
+        lastName: editPatient.lastName,
+        age: age != null ? String(age) : '',
+        dni: editPatient.dni ?? '',
+        phone: editPatient.phone ?? '',
+        email: editPatient.email ?? '',
+        obraSocial: editPatient.obraSocial ?? '',
+        nAfiliado: editPatient.nAfiliado ?? '',
+        address: editPatient.address ?? '',
+        locality: editPatient.locality ?? '',
+        allergies: editPatient.medicalHistory?.allergies ?? [],
+        notes: editPatient.medicalHistory?.notes ?? '',
+      });
+    }
+  }, [open, editing, editPatient]);
 
   const onPhoto = async (file?: File) => {
     if (!file) return;
@@ -191,10 +264,11 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
   };
 
   const mutation = useMutation({
-    mutationFn: patientsApi.create,
+    mutationFn: (payload: Partial<Patient>) =>
+      editing ? patientsApi.update(editPatientId!, payload) : patientsApi.create(payload),
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(typeof msg === 'string' ? msg : 'No se pudo crear la ficha');
+      setError(typeof msg === 'string' ? msg : editing ? 'No se pudieron guardar los datos' : 'No se pudo crear la ficha');
     },
   });
 
@@ -221,13 +295,21 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
   });
 
   const submit = async (mode: 'close' | 'andSchedule') => {
-    const created = await mutation.mutateAsync(buildPayload());
+    const saved = await mutation.mutateAsync(buildPayload());
     qc.invalidateQueries({ queryKey: ['patients'] });
+    if (editing) {
+      qc.invalidateQueries({ queryKey: ['patient', editPatientId] });
+      showToast(`¡Listo! Datos de ${saved.name} actualizados`);
+      onClose();
+      return;
+    }
     if (mode === 'andSchedule') {
-      showToast(`Ficha creada — ${created.name} ${created.lastName}`);
-      openModal('newAppointment', { patientId: created._id });
+      showToast(`¡Listo! Ficha de ${saved.name} creada`);
+      onClose();
+      // A la Libreta diaria con el paciente ya seleccionado en el alta rápida.
+      navigate(`/agenda?patientId=${saved._id}&patientName=${encodeURIComponent(`${saved.name} ${saved.lastName}`)}`);
     } else {
-      showToast(`Ficha creada — ${created.name} ${created.lastName}`);
+      showToast(`¡Listo! Ficha de ${saved.name} creada`);
       onClose();
     }
   };
@@ -236,25 +318,32 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Nuevo paciente"
-      sub="Crear ficha. Solo lo esencial — el resto se completa después."
+      title={editing ? 'Editar paciente' : 'Nuevo paciente'}
+      sub={editing ? 'Actualizá los datos del paciente.' : 'Crear ficha. Solo lo esencial — el resto se completa después.'}
       width={680}
       footer={
         <>
           <button className="btn btn--ghost" onClick={onClose} disabled={mutation.isPending}>Cancelar</button>
-          <button
-            className="btn btn--secondary"
-            disabled={!isValid || mutation.isPending}
-            onClick={() => submit('andSchedule')}
-          >
-            Guardar y agendar turno
-          </button>
+          {!editing && (
+            <button
+              className="btn btn--secondary"
+              disabled={!isValid || mutation.isPending}
+              onClick={() => submit('andSchedule')}
+            >
+              Guardar y agendar turno
+            </button>
+          )}
           <button
             className="btn btn--primary"
             disabled={!isValid || mutation.isPending}
             onClick={() => submit('close')}
           >
-            <Icon name="check" /> {mutation.isPending ? 'Creando…' : 'Crear ficha'}
+            <Icon name="check" />{' '}
+            {mutation.isPending
+              ? 'Guardando…'
+              : editing
+              ? 'Guardar cambios'
+              : 'Crear ficha'}
           </button>
         </>
       }
@@ -265,7 +354,8 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
         </div>
       )}
 
-      {/* Scan from a paper record photo — front and center. */}
+      {/* Scan de la ficha por foto — solo al crear (en edición no aplica). */}
+      {!editing && (
       <div
         style={{
           border: '1px dashed var(--brand-primary-100)',
@@ -341,6 +431,7 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
           <div style={{ fontSize: 12, color: 'var(--danger)' }}>{scanError}</div>
         )}
       </div>
+      )}
 
       {/* Duplicate warning — found a likely existing patient. */}
       {duplicate && (
@@ -368,7 +459,7 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
                   <button type="button" className="btn btn--secondary btn--sm" onClick={restoreAndGo}>
                     <Icon name="undo" size={13} /> Recuperar paciente
                   </button>
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setDuplicate(null)}>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setDuplicate(null); setDupDismissed(true); }}>
                     Cargar como nuevo (duplicado)
                   </button>
                 </div>
@@ -376,13 +467,17 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
             ) : (
               <>
                 <div style={{ fontSize: 13, marginBottom: 8 }}>
-                  Ya existe un paciente parecido: <b>{duplicate.name} {duplicate.lastName}</b>. ¿Qué querés hacer?
+                  {dupReason === 'dni' ? (
+                    <>Ese <b>DNI</b> ya pertenece a <b>{duplicate.name} {duplicate.lastName}</b>. Podés cargarlo igual (si este es el correcto, después borrás el otro).</>
+                  ) : (
+                    <>Ya existe un paciente parecido: <b>{duplicate.name} {duplicate.lastName}</b>. ¿Qué querés hacer?</>
+                  )}
                 </div>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn--secondary btn--sm" onClick={goToExisting}>
                     Ir a su ficha <Icon name="arrowRight" size={13} />
                   </button>
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setDuplicate(null)}>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setDuplicate(null); setDupDismissed(true); }}>
                     Cargar igual (riesgo de duplicado)
                   </button>
                 </div>
@@ -425,10 +520,13 @@ export function NewPatientModal({ open, onClose }: NewPatientModalProps) {
             onChange={e => upd('age', e.target.value)}
           />
         </FormField>
-        <FormField label="Teléfono" hint="Para WhatsApp">
+        <FormField
+          label="Celular (WhatsApp)"
+          hint={data.phone.trim() ? `WhatsApp: ${whatsAppPreview(data.phone)}` : 'Con este número se manda el recordatorio'}
+        >
           <input
             className="input"
-            placeholder="+54 9 11 ..."
+            placeholder="11 4563 5988"
             value={data.phone}
             onChange={e => upd('phone', e.target.value)}
           />

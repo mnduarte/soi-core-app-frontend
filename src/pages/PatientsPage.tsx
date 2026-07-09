@@ -1,19 +1,42 @@
-import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { patientsApi, type Patient } from '../api/patients';
 import { useUIStore } from '../store/ui.store';
 import { PageHeader } from '../components/common/PageHeader';
 import { Icon } from '../components/common/Icon';
 import { Avatar } from '../components/common/Avatar';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 type View = 'list' | 'grid';
 
 export default function PatientsPage() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const qc = useQueryClient();
   const openModal = useUIStore(s => s.openModal);
+  const showToast = useUIStore(s => s.showToast);
   const isMobile = useIsMobile(720);
+
+  // En "Pacientes viejos" cada paciente abre la ficha CLÁSICA (perfil completo);
+  // en Pacientes normal abre la Ficha rápida (cuenta corriente).
+  const classic = pathname.startsWith('/pacientes-viejos');
+  const openPatient = (patientId: string) =>
+    navigate(classic ? `/ficha-clasica/${patientId}` : `/patients/${patientId}`);
+
+  const onEdit = (p: Patient) => openModal('newPatient', { patientId: p._id });
+
+  // Hard delete (con cascade). Confirmación fuerte porque es irreversible.
+  const [toDelete, setToDelete] = useState<Patient | null>(null);
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => patientsApi.hardRemove(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['patients'] });
+      showToast('Paciente eliminado');
+    },
+    onError: () => showToast('No se pudo eliminar', 'error'),
+  });
 
   const [view, setView] = useState<View>('list');
   const [search, setSearch] = useState('');
@@ -28,6 +51,18 @@ export default function PatientsPage() {
     queryKey: ['patients', debouncedSearch],
     queryFn: () => patientsApi.findAll(debouncedSearch || undefined),
   });
+
+  // DNI duplicados (mismo DNI en 2+ fichas) → banner de reconciliación.
+  const dupDniGroups = useMemo(() => {
+    const map = new Map<string, Patient[]>();
+    for (const p of patients) {
+      const dni = (p.dni ?? '').trim();
+      if (!dni) continue;
+      if (!map.has(dni)) map.set(dni, []);
+      map.get(dni)!.push(p);
+    }
+    return [...map.entries()].filter(([, list]) => list.length > 1);
+  }, [patients]);
 
   return (
     <div className="content fade-in">
@@ -101,6 +136,44 @@ export default function PatientsPage() {
         )}
       </div>
 
+      {/* DNI duplicados — banner suave de reconciliación */}
+      {dupDniGroups.length > 0 && (
+        <div
+          style={{
+            background: 'color-mix(in srgb, var(--warning) 9%, var(--bg-surface))',
+            border: '1px solid color-mix(in srgb, var(--warning) 35%, var(--border-subtle))',
+            borderRadius: 10,
+            padding: '10px 14px',
+            marginBottom: 12,
+            fontSize: 12.5,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+            <Icon name="alert" size={14} style={{ color: 'var(--warning)' }} />
+            {dupDniGroups.length} DNI duplicado{dupDniGroups.length !== 1 ? 's' : ''} — revisá cuál queda y corregí el otro
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {dupDniGroups.map(([dni, list]) => (
+              <div key={dni} style={{ color: 'var(--text-secondary)' }}>
+                <span className="mono" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>DNI {dni}</span>:{' '}
+                {list.map((p, i) => (
+                  <span key={p._id}>
+                    {i > 0 && ' · '}
+                    {p.name} {p.lastName}{' '}
+                    <button
+                      onClick={() => onEdit(p)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--brand-primary-600)', fontSize: 12 }}
+                    >
+                      <Icon name="edit" size={11} style={{ verticalAlign: -1 }} /> (editar)
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Body */}
       {isLoading ? (
         <div
@@ -131,15 +204,38 @@ export default function PatientsPage() {
           {debouncedSearch ? 'Sin resultados.' : 'Aún no hay pacientes cargados.'}
         </div>
       ) : isMobile || view === 'list' ? (
-        <ListView patients={patients} onOpen={id => navigate(`/patients/${id}`)} />
+        <ListView patients={patients} onOpen={openPatient} onEdit={onEdit} onDelete={setToDelete} />
       ) : (
-        <GridView patients={patients} onOpen={id => navigate(`/patients/${id}`)} />
+        <GridView patients={patients} onOpen={openPatient} />
       )}
+
+      <ConfirmDialog
+        open={!!toDelete}
+        title={`¿Eliminar a ${toDelete?.name ?? ''} ${toDelete?.lastName ?? ''}?`}
+        message="Se borran también sus turnos y todo lo cargado en su ficha (cuenta corriente, odontograma, evoluciones). No se puede deshacer."
+        confirmLabel="Eliminar paciente"
+        danger
+        onConfirm={() => {
+          if (toDelete) deleteMut.mutate(toDelete._id);
+          setToDelete(null);
+        }}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }
 
-function ListView({ patients, onOpen }: { patients: Patient[]; onOpen: (id: string) => void }) {
+function ListView({
+  patients,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  patients: Patient[];
+  onOpen: (id: string) => void;
+  onEdit: (p: Patient) => void;
+  onDelete: (p: Patient) => void;
+}) {
   return (
     <div
       style={{
@@ -155,12 +251,12 @@ function ListView({ patients, onOpen }: { patients: Patient[]; onOpen: (id: stri
             <th>DNI</th>
             <th>Teléfono</th>
             <th>Email</th>
-            <th style={{ width: 60 }}></th>
+            <th style={{ textAlign: 'right', width: 140 }}>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {patients.map(p => (
-            <tr key={p._id} onClick={() => onOpen(p._id)}>
+            <tr key={p._id} onClick={() => onOpen(p._id)} style={{ cursor: 'pointer' }}>
               <td>
                 <div className="row" style={{ gap: 10 }}>
                   <Avatar name={p.name} lastName={p.lastName} id={p._id} size="sm" />
@@ -175,8 +271,18 @@ function ListView({ patients, onOpen }: { patients: Patient[]; onOpen: (id: stri
               <td className="mono" style={{ color: 'var(--text-secondary)' }}>{p.dni ?? '—'}</td>
               <td style={{ color: 'var(--text-secondary)' }}>{p.phone ?? '—'}</td>
               <td style={{ color: 'var(--text-secondary)' }}>{p.email ?? '—'}</td>
-              <td style={{ textAlign: 'right' }}>
-                <Icon name="chevronRight" size={14} style={{ color: 'var(--text-tertiary)' }} />
+              <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'inline-flex', gap: 2 }}>
+                  <button className="btn btn--ghost btn--icon btn--sm" title="Ver ficha" onClick={e => { e.stopPropagation(); onOpen(p._id); }}>
+                    <Icon name="eye" size={15} />
+                  </button>
+                  <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={e => { e.stopPropagation(); onEdit(p); }}>
+                    <Icon name="edit" size={15} />
+                  </button>
+                  <button className="btn btn--ghost btn--icon btn--sm" title="Eliminar" onClick={e => { e.stopPropagation(); onDelete(p); }} style={{ color: 'var(--danger)' }}>
+                    <Icon name="trash" size={15} />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

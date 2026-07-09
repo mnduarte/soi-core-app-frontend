@@ -8,6 +8,8 @@ interface ResolveMenuProps {
   onResolve: (id: string, status: AppointmentStatus) => void;
   onOpenFicha?: (appt: Appointment) => void;
   onReschedule?: (appt: Appointment) => void;
+  onDelete?: (appt: Appointment) => void;
+  onRemind?: (appt: Appointment) => void;
   align?: 'left' | 'right';
 }
 
@@ -24,6 +26,8 @@ export function ResolveMenu({
   onResolve,
   onOpenFicha,
   onReschedule,
+  onDelete,
+  onRemind,
   align = 'right',
 }: ResolveMenuProps) {
   const [open, setOpen] = useState(false);
@@ -48,7 +52,6 @@ export function ResolveMenu({
     }
     actions.push({ key: 'NO_SHOW', icon: 'x', label: 'No asistió', danger: true });
     actions.push({ key: 'reschedule', icon: 'calendar', label: 'Reprogramar' });
-    actions.push({ key: 'CANCELLED', icon: 'trash', label: 'Cancelar turno', danger: true });
   } else if (appt.status === 'COMPLETED') {
     if (isFichaPending(appt)) {
       actions.push({ key: 'ficha', icon: 'clipboard', label: 'Completar ficha', accent: true });
@@ -59,11 +62,24 @@ export function ResolveMenu({
     actions.push({ key: 'reopen', icon: 'undo', label: 'Reactivar turno' });
   }
 
+  // Recordar por WhatsApp (solo si el turno tiene a quién avisar).
+  if (onRemind) {
+    actions.push({ key: 'remind', icon: 'whatsapp', label: 'Recordar por WhatsApp', accent: true });
+  }
+
+  // Borrar turno: disponible siempre. Es un borrado físico (no "cancelar", que
+  // dejaba el turno tachado ensuciando la lista) — si fue un error, se rehace.
+  if (onDelete) {
+    actions.push({ key: 'delete', icon: 'trash', label: 'Borrar turno', danger: true });
+  }
+
   const handle = (key: string, e: MouseEvent) => {
     e.stopPropagation();
     setOpen(false);
     if (key === 'ficha') return onOpenFicha?.(appt);
     if (key === 'reschedule') return onReschedule?.(appt);
+    if (key === 'remind') return onRemind?.(appt);
+    if (key === 'delete') return onDelete?.(appt);
     if (key === 'reopen') return onResolve(appt._id, 'CONFIRMED');
     onResolve(appt._id, key as AppointmentStatus);
   };
@@ -71,13 +87,19 @@ export function ResolveMenu({
   return (
     <div ref={ref} style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
       <button
-        className="btn btn--ghost btn--icon"
+        className="btn btn--icon"
+        title="Acciones"
         onClick={e => {
           e.stopPropagation();
           setOpen(o => !o);
         }}
+        style={{
+          border: '1px solid var(--border-default)',
+          background: 'var(--bg-surface)',
+          color: 'var(--text-secondary)',
+        }}
       >
-        <Icon name="more" />
+        <Icon name="more" size={20} />
       </button>
       {open && (
         <div

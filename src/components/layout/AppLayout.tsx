@@ -14,8 +14,11 @@ import { SubscriptionBanner } from './SubscriptionBanner';
 function getCrumbs(pathname: string): string[] {
   if (pathname === '/') return ['Dashboard'];
   if (pathname.startsWith('/agenda')) return ['Agenda'];
-  if (pathname.startsWith('/patients/')) return ['Pacientes', 'Ficha'];
+  if (pathname.startsWith('/patients/')) return ['Pacientes', 'Ficha rápida'];
   if (pathname.startsWith('/patients')) return ['Pacientes'];
+  if (pathname.startsWith('/ficha-rapida')) return ['Ficha rápida'];
+  if (pathname.startsWith('/ficha-clasica')) return ['Pacientes viejos', 'Ficha clásica'];
+  if (pathname.startsWith('/pacientes-viejos')) return ['Pacientes viejos'];
   if (pathname.startsWith('/gallery')) return ['Galería'];
   if (pathname.startsWith('/payments')) return ['Pagos'];
   return ['Dashboard'];

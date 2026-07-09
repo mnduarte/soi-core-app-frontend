@@ -706,6 +706,18 @@ table.tbl { width: 100%; border-collapse: collapse; }
   display: flex; align-items: center; justify-content: center;
 }
 
+/* Ficha rápida: acciones (editar/borrar) visibles al pasar el mouse por la fila. */
+.fr-row:hover { background: var(--bg-hover); }
+.fr-row:hover .fr-actions { opacity: 1 !important; }
+
+/* Diálogo de confirmación: fade del fondo + un pop sutil de la tarjeta (sin
+   traslado horizontal, para que aparezca centrada sin "saltar"). */
+@keyframes overlayFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialogPop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
 @media (max-width: 640px) {
   .modal-overlay { padding: 0 !important; align-items: flex-end !important; }
   .modal-card {
@@ -762,8 +774,9 @@ table.tbl { width: 100%; border-collapse: collapse; }
   min-width: 240px;
   padding: 6px 10px;
 }
-.odo-row--right { border-right: 1px solid var(--border-subtle); }
-.odo-row--upper { border-bottom: 1px dashed var(--border-subtle); }
+.odo-row--right { border-right: 1px solid #9AA5B5; }
+/* Eje oclusal (entre maxilar y mandíbula): línea del medio, más marcada. */
+.odo-row--midline { border-bottom: 1.5px dashed #9AA5B5; padding-bottom: 6px; margin-bottom: 6px; }
 
 .odo-tooth {
   display: flex;
@@ -810,8 +823,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
    there's no harsh outline around the colored area. */
 .odo-surface {
   fill: var(--bg-surface);
-  stroke: #CBD5E1;
-  stroke-width: 0.7;
+  stroke: #7E8AA0;
+  stroke-width: 1;
   cursor: pointer;
   transition: fill 0.12s, stroke 0.12s;
 }

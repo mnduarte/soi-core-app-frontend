@@ -18,6 +18,7 @@ const NAV: NavGroup[] = [
       { to: '/', label: 'Dashboard', icon: 'home', end: true, kbd: 'G' },
       { to: '/agenda', label: 'Agenda', icon: 'calendar', kbd: 'A' },
       { to: '/patients', label: 'Pacientes', icon: 'users', kbd: 'P' },
+      { to: '/ficha-rapida', label: 'Ficha rápida', icon: 'clipboard', kbd: 'F' },
     ],
   },
   {
@@ -25,6 +26,7 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/gallery', label: 'Galería', icon: 'image' },
       { to: '/payments', label: 'Pagos', icon: 'receipt' },
+      { to: '/pacientes-viejos', label: 'Pacientes viejos', icon: 'history' },
     ],
   },
   {

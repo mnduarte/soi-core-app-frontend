@@ -9,6 +9,7 @@ import { patientsApi } from '../../api/patients';
 import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { fmtMoney } from '../../lib/format';
+import { toWhatsAppNumber } from '../../lib/phone';
 
 interface RegisterPaymentModalProps {
   open: boolean;
@@ -50,7 +51,7 @@ function buildReceiptMessage(args: {
       ? `Tenés un saldo a favor de ${fmtMoney(Math.abs(args.newBalance))}.`
       : 'Tu cuenta queda en cero.';
   return (
-    `Hola ${args.firstName} 👋 Confirmamos tu pago de ${fmtMoney(args.amount)} ` +
+    `Hola ${args.firstName}, confirmamos tu pago de ${fmtMoney(args.amount)} ` +
     `(${method}) en ${args.clinicName}. Concepto: ${args.description}. ` +
     `${balanceLine} ¡Gracias!`
   );
@@ -113,7 +114,7 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
       // actually has a phone we can reach. Same "open wa.me, let the
       // dentist hit Send" pattern as the rest of the app.
       if (sendReceipt && patient?.phone) {
-        const phone = patient.phone.replace(/\D/g, '');
+        const phone = toWhatsAppNumber(patient.phone);
         const msg = buildReceiptMessage({
           firstName: patient.name.split(' ')[0] ?? patient.name,
           clinicName: clinic?.name ?? 'tu consultorio',

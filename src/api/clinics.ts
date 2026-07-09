@@ -6,6 +6,8 @@ export interface ClinicSettings {
   allowOverlappingAppointments?: boolean;
   workingHours?: { day: number; start: string; end: string }[];
   reminderTemplates?: string[];
+  quickAmounts?: number[];
+  quickTreatments?: string[];
   logoUrl?: string;
 }
 

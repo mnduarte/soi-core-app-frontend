@@ -1,6 +1,23 @@
 import { apiClient } from './client';
+import { toWebP } from '../lib/image';
 
-export type PhotoType = 'INTRAORAL' | 'EXTRAORAL' | 'RADIOGRAFIA';
+// Categoría de la foto: string libre, personalizable por consultorio.
+export type PhotoType = string;
+
+// Defaults cuando el consultorio no configuró categorías propias.
+export const DEFAULT_PHOTO_CATEGORIES = ['Intraoral', 'Extraoral', 'Radiografía'];
+
+// Referencia a una foto recién subida (para vincularla luego a un movimiento
+// que todavía no existe cuando se abre el modal desde el formulario).
+export interface UploadedPhotoRef {
+  sessionId: string;
+  photoId: string;
+  url: string;
+  type?: string;
+  // Título/descripción que puso el usuario en el modal (viven en la sesión).
+  title?: string;
+  description?: string;
+}
 
 export interface GalleryPhoto {
   _id: string;
@@ -9,6 +26,8 @@ export interface GalleryPhoto {
   thumbnailUrl?: string;
   type: PhotoType;
   caption?: string;
+  description?: string;
+  transactionId?: string;
   toothNumber?: number;
   uploadedAt: string;
   uploadedBy?: string;
@@ -73,7 +92,7 @@ export const galleryApi = {
     patientId: string,
     sessionId: string,
     photoId: string,
-    dto: { type?: PhotoType; caption?: string },
+    dto: { type?: PhotoType; caption?: string; description?: string; transactionId?: string },
   ) =>
     apiClient
       .patch<{ data: GallerySession }>(
@@ -89,8 +108,10 @@ export const galleryApi = {
       publicId: string;
       url: string;
       thumbnailUrl?: string;
-      type: PhotoType;
+      type?: PhotoType;
       caption?: string;
+      description?: string;
+      transactionId?: string;
     },
   ) =>
     apiClient
@@ -120,8 +141,11 @@ export const galleryApi = {
     params: CloudinaryUploadParams,
     onProgress?: (pct: number) => void,
   ): Promise<CloudinaryUploadResult> => {
+    // Convertimos a WebP (con reescala) antes de subir: mejor calidad/peso y
+    // menos storage. Cae al original si el navegador no puede (HEIC, etc.).
+    const toSend = await toWebP(file);
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', toSend);
     formData.append('api_key', params.apiKey);
     formData.append('timestamp', String(params.timestamp));
     formData.append('folder', params.folder);
@@ -157,8 +181,14 @@ export function thumbUrl(publicId: string, cloudName: string, size = 400): strin
   return `https://res.cloudinary.com/${cloudName}/image/upload/c_fill,w_${size},h_${size},q_auto,f_auto/${publicId}`;
 }
 
-export const PHOTO_TYPE_LABEL: Record<PhotoType, string> = {
+// Etiqueta legible de una categoría. Con categorías como string libre, la
+// etiqueta es el valor mismo; mapeamos los valores legacy (enum viejo) a un
+// nombre lindo por compatibilidad.
+const LEGACY_LABELS: Record<string, string> = {
   INTRAORAL: 'Intraoral',
   EXTRAORAL: 'Extraoral',
   RADIOGRAFIA: 'Radiografía',
 };
+export function photoTypeLabel(t: string): string {
+  return LEGACY_LABELS[t] ?? t;
+}

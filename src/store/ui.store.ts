@@ -5,6 +5,12 @@ export type ModalKind = 'newAppointment' | 'newPatient' | 'registerPayment' | 'u
 export interface ModalProps {
   patientId?: string;
   defaultStart?: string;
+  // Para subir fotos vinculadas a un movimiento (cuenta corriente).
+  transactionId?: string;
+  // Callback cuando el modal de fotos terminó de subir (para vincular después).
+  onUploaded?: (
+    refs: { sessionId: string; photoId: string; url: string; type?: string; title?: string; description?: string }[],
+  ) => void;
 }
 
 export type ToastType = 'success' | 'error';

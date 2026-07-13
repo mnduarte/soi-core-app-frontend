@@ -211,12 +211,6 @@ export default function AgendaPage() {
     </div>
   );
 
-  const newApptBtn = (
-    <button className="btn btn--primary btn--sm" onClick={() => openModal('newAppointment')}>
-      <Icon name="plus" size={12} /> Nuevo turno
-    </button>
-  );
-
   return (
     <div className="content" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Toolbar */}
@@ -231,22 +225,72 @@ export default function AgendaPage() {
           flexWrap: 'wrap',
         }}
       >
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              fontSize: 11,
-              color: 'var(--text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              fontWeight: 600,
+              width: 40,
+              height: 40,
+              borderRadius: 11,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'color-mix(in srgb, var(--brand-primary) 13%, transparent)',
+              color: 'var(--brand-primary)',
             }}
           >
-            Agenda
+            <Icon name="calendar" size={20} />
           </div>
-          <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, margin: '2px 0 0', textTransform: 'capitalize' }}>
-            {todayLabel}
-          </h1>
+          <div>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--text-tertiary)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                fontWeight: 600,
+              }}
+            >
+              Agenda
+            </div>
+            <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, margin: '2px 0 0', textTransform: 'capitalize' }}>
+              {todayLabel}
+            </h1>
+          </div>
         </div>
+
+      </div>
+
+      {/* Barra persistente en TODAS las vistas: contador + fecha, y al lado la
+          navegación (‹ Hoy ›) y el selector de vista (Libreta/Semana/Mes), que
+          así queda fijo al cambiar de vista. */}
+      <div
+        style={{
+          padding: isMobile ? '10px 16px' : '12px 20px',
+          borderBottom: '1px solid var(--border-subtle)',
+          background: 'var(--bg-surface)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: isMobile ? 8 : 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14 }}>
+          <Icon name="calendar" size={15} style={{ color: 'var(--text-tertiary)' }} />
+          {view === 'week' ? 'Turnos de la semana' : view === 'month' ? 'Turnos del mes' : 'Turnos del día'} · {appts.length}
+        </div>
+
+        {/* Saltar a cualquier día; en semana/mes reposiciona el período. */}
+        <input
+          type="date"
+          className="input"
+          value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`}
+          onChange={e => {
+            const v = e.target.value;
+            if (v) setSelectedDate(new Date(`${v}T00:00:00`));
+          }}
+          style={{ height: 34, width: 158 }}
+        />
 
         <div className="row" style={{ gap: 4 }}>
           <button className="btn btn--ghost btn--icon" onClick={() => shift(-1)}>
@@ -260,26 +304,7 @@ export default function AgendaPage() {
           </button>
         </div>
 
-        {/* "Filtros" se quitó: no estaba conectado a nada todavía.
-            En mobile, el segmento Día/Semana/Mes y "Nuevo turno" comparten una
-            fila completa, con el botón pegado a la derecha. En desktop queda
-            como antes: segmento a la izquierda y "Nuevo turno" al extremo. */}
-        {isMobile ? (
-          <div
-            className="row"
-            style={{ flex: '1 1 100%', gap: 8, justifyContent: 'space-between' }}
-          >
-            {viewSeg}
-            {newApptBtn}
-          </div>
-        ) : (
-          <>
-            {viewSeg}
-            <div style={{ marginLeft: 'auto' }} className="row">
-              {newApptBtn}
-            </div>
-          </>
-        )}
+        {viewSeg}
       </div>
 
       {/* Stats — ocultos en la vista Libreta (tiene su propio encabezado). En
@@ -340,7 +365,6 @@ export default function AgendaPage() {
           appts={dayList}
           patientMap={patientMap}
           selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
           now={now}
           isMobile={isMobile}
           onOpenPatient={(id, trabajo) =>

@@ -29,6 +29,8 @@ export function ModalHost() {
         open={modal?.kind === 'uploadPhotos'}
         onClose={closeModal}
         defaultPatientId={modal?.props?.patientId}
+        transactionId={modal?.props?.transactionId}
+        onUploaded={modal?.props?.onUploaded}
       />
     </>
   );

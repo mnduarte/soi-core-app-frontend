@@ -1,20 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Icon, type IconName } from '../common/Icon';
+import { Icon } from '../common/Icon';
 import {
   galleryApi,
-  PHOTO_TYPE_LABEL,
   type GallerySession,
   type GalleryPhoto,
   type PhotoType,
 } from '../../api/gallery';
+import { usePhotoCategories } from '../../hooks/usePhotoCategories';
 import { useUIStore } from '../../store/ui.store';
-import { TimelineView } from './TimelineView';
 import { GridView } from './GridView';
-import { CompareView } from './CompareView';
+import { CustomCategoriesModal } from '../common/CustomCategoriesModal';
 
-type View = 'timeline' | 'grid' | 'compare';
-type TypeFilter = 'Todos' | PhotoType;
+// Valor especial de filtro: fotos sin vincular a un movimiento.
+const UNLINKED = '__unlinked__';
+type TypeFilter = 'Todos' | typeof UNLINKED | PhotoType;
 
 interface GalleryContainerProps {
   patientId: string;
@@ -23,23 +23,18 @@ interface GalleryContainerProps {
   embedded?: boolean;
 }
 
-const VIEWS: { key: View; label: string; icon: IconName }[] = [
-  { key: 'timeline', label: 'Timeline', icon: 'history' },
-  { key: 'grid', label: 'Grid', icon: 'grid' },
-  { key: 'compare', label: 'Comparar antes/después', icon: 'layers' },
-];
-
-const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
-  { key: 'Todos', label: 'Todos' },
-  { key: 'INTRAORAL', label: PHOTO_TYPE_LABEL.INTRAORAL },
-  { key: 'EXTRAORAL', label: PHOTO_TYPE_LABEL.EXTRAORAL },
-  { key: 'RADIOGRAFIA', label: PHOTO_TYPE_LABEL.RADIOGRAFIA },
-];
-
 export function GalleryContainer({ patientId, embedded = false }: GalleryContainerProps) {
   const openModal = useUIStore(s => s.openModal);
-  const [view, setView] = useState<View>('timeline');
+  const categories = usePhotoCategories();
   const [filter, setFilter] = useState<TypeFilter>('Todos');
+  const [catsOpen, setCatsOpen] = useState(false);
+
+  // Chips de filtro = "Todos" + categorías del consultorio + "Sin movimiento".
+  const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
+    { key: 'Todos', label: 'Todos' },
+    ...categories.map(c => ({ key: c, label: c })),
+    { key: UNLINKED, label: 'Sin movimiento' },
+  ];
 
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ['gallery-sessions', patientId],
@@ -60,6 +55,7 @@ export function GalleryContainer({ patientId, embedded = false }: GalleryContain
 
   const filteredPhotos = useMemo(() => {
     if (filter === 'Todos') return allPhotos;
+    if (filter === UNLINKED) return allPhotos.filter(({ photo }) => !photo.transactionId);
     return allPhotos.filter(({ photo }) => photo.type === filter);
   }, [allPhotos, filter]);
 
@@ -98,40 +94,7 @@ export function GalleryContainer({ patientId, embedded = false }: GalleryContain
             flexWrap: 'wrap',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              background: 'var(--bg-muted)',
-              borderRadius: 8,
-              padding: 3,
-            }}
-          >
-            {VIEWS.map(v => (
-              <button
-                key={v.key}
-                onClick={() => setView(v.key)}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  borderRadius: 6,
-                  color: view === v.key ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  background: view === v.key ? 'var(--bg-surface)' : 'transparent',
-                  boxShadow: view === v.key ? 'var(--shadow-xs)' : 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  border: 'none',
-                }}
-              >
-                <Icon name={v.icon} size={12} />
-                {v.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {TYPE_FILTERS.map(t => (
               <button
                 key={t.key}
@@ -158,7 +121,16 @@ export function GalleryContainer({ patientId, embedded = false }: GalleryContain
             ))}
           </div>
 
-          <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => setCatsOpen(true)}
+            title="Personalizar categorías"
+            style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }}
+          >
+            <Icon name="settings" size={13} /> Categorías
+          </button>
+
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             {totalPhotos} {totalPhotos === 1 ? 'foto' : 'fotos'} · {sessions.length}{' '}
             {sessions.length === 1 ? 'sesión' : 'sesiones'}
           </div>
@@ -169,6 +141,8 @@ export function GalleryContainer({ patientId, embedded = false }: GalleryContain
           )}
         </div>
       </div>
+
+      <CustomCategoriesModal open={catsOpen} initial={categories} onClose={() => setCatsOpen(false)} />
 
       {isLoading && (
         <div
@@ -205,19 +179,7 @@ export function GalleryContainer({ patientId, embedded = false }: GalleryContain
       )}
 
       {!isLoading && sessions.length > 0 && (
-        <>
-          {view === 'timeline' && (
-            <TimelineView
-              sessions={sessions}
-              filter={filter}
-              patientId={patientId}
-            />
-          )}
-          {view === 'grid' && (
-            <GridView photos={filteredPhotos} patientId={patientId} />
-          )}
-          {view === 'compare' && <CompareView sessions={sessions} />}
-        </>
+        <GridView photos={filteredPhotos} patientId={patientId} />
       )}
     </div>
   );

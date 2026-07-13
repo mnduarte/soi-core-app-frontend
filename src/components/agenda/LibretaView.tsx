@@ -16,6 +16,7 @@ import { Avatar } from '../common/Avatar';
 import { StatusBadge, FichaPendingBadge } from '../common/StatusBadge';
 import { ResolveMenu } from '../common/ResolveMenu';
 import { CustomTreatmentsModal } from '../common/CustomTreatmentsModal';
+import { CustomSlotsModal } from '../common/CustomSlotsModal';
 import { AppointmentReminderModal } from './AppointmentReminderModal';
 import { hhmm, isFichaPending, needsResolution } from '../../lib/appointment';
 import { QUICK_CHIPS } from '../../lib/quickWork';
@@ -52,7 +53,6 @@ interface LibretaViewProps {
   appts: Appointment[];
   patientMap: Map<string, Patient>;
   selectedDate: Date;
-  onSelectDate: (d: Date) => void;
   now: Date;
   isMobile: boolean;
   onOpenPatient: (id: string, trabajo?: string) => void;
@@ -66,7 +66,6 @@ export function LibretaView({
   appts,
   patientMap,
   selectedDate,
-  onSelectDate,
   now,
   isMobile,
   onOpenPatient,
@@ -107,6 +106,8 @@ export function LibretaView({
   // Trabajos rápidos del consultorio (mismos que Ficha rápida). Default = lista corta.
   const { data: settings } = useQuery({ queryKey: ['clinic-settings'], queryFn: clinicsApi.getSettings });
   const treatments = settings?.quickTreatments?.length ? settings.quickTreatments : QUICK_CHIPS;
+  const slots = settings?.slotTimes?.length ? settings.slotTimes : TIMES;
+  const [customSlotsOpen, setCustomSlotsOpen] = useState(false);
 
   // Precarga el paciente si venimos de "Guardar y agendar turno" (?patientId=…).
   const [searchParams, setSearchParams] = useSearchParams();
@@ -238,29 +239,6 @@ export function LibretaView({
       >
         {/* ---------- Columna principal ---------- */}
         <div className="card" style={{ overflow: 'visible' }}>
-          <div
-            className="card__header"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div className="card__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon name="calendar" size={15} style={{ color: 'var(--text-tertiary)' }} />
-                Turnos del día · {appts.length}
-              </div>
-              {/* Selector de fecha: saltar a cualquier día desde la libreta. */}
-              <input
-                type="date"
-                className="input"
-                value={toYMD(selectedDate)}
-                onChange={e => {
-                  const v = e.target.value;
-                  if (v) onSelectDate(new Date(`${v}T00:00:00`));
-                }}
-                style={{ height: 34, width: 158 }}
-              />
-            </div>
-          </div>
-
           {/* Alta rápida */}
           <div
             ref={quickRef}
@@ -325,7 +303,7 @@ export function LibretaView({
                       Slots del día
                     </div>
                     <div className="slot-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-                      {TIMES.map(t => {
+                      {slots.map(t => {
                         const taken = takenSet.has(t);
                         const sel = t === time;
                         return (
@@ -365,6 +343,13 @@ export function LibretaView({
                       <span style={{ width: 6, height: 6, borderRadius: 6, background: 'var(--warning)', display: 'inline-block' }} />
                       ya tiene turno (se apila como sobreturno)
                     </div>
+                    <button
+                      type="button"
+                      onMouseDown={e => { e.preventDefault(); setSlotOpen(false); setCustomSlotsOpen(true); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginTop: 10, padding: 8, borderRadius: 7, border: '1px dashed var(--border-default)', background: 'transparent', color: 'var(--brand-primary-600)', cursor: 'pointer', fontSize: 12.5, fontWeight: 500, justifyContent: 'center' }}
+                    >
+                      <Icon name="settings" size={13} /> Personalizar horarios
+                    </button>
                   </div>
                 )}
               </div>
@@ -557,13 +542,11 @@ export function LibretaView({
                   return (
                     <div
                       key={a._id}
-                      onClick={() => a.patientId && onOpenPatient(a.patientId, a.title)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 12,
                         padding: '12px 16px',
-                        cursor: a.patientId ? 'pointer' : 'default',
                         background: unresolved ? 'color-mix(in srgb, var(--warning) 6%, transparent)' : 'transparent',
                         borderTop: idx > 0 ? '1px dashed var(--border-subtle)' : 'none',
                       }}
@@ -617,6 +600,16 @@ export function LibretaView({
                           <Icon name="whatsapp" size={18} />
                         </button>
                       )}
+                      {a.patientId && (
+                        <button
+                          className="btn btn--icon"
+                          title="Abrir ficha clínica"
+                          onClick={e => { e.stopPropagation(); onOpenPatient(a.patientId!); }}
+                          style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--brand-primary-600)' }}
+                        >
+                          <Icon name="clipboard" size={17} />
+                        </button>
+                      )}
                       <ResolveMenu
                         appt={a}
                         onResolve={onResolve}
@@ -657,6 +650,7 @@ export function LibretaView({
       </div>
 
       <CustomTreatmentsModal open={customTreatOpen} initial={treatments} onClose={() => setCustomTreatOpen(false)} />
+      <CustomSlotsModal open={customSlotsOpen} initial={slots} onClose={() => setCustomSlotsOpen(false)} />
 
       {remindTarget && (
         <AppointmentReminderModal

@@ -1,43 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, FormField } from '../common/Modal';
 import { Icon } from '../common/Icon';
 import { useUIStore } from '../../store/ui.store';
-import {
-  galleryApi,
-  PHOTO_TYPE_LABEL,
-  type GallerySession,
-  type PhotoType,
-} from '../../api/gallery';
+import { galleryApi, photoTypeLabel } from '../../api/gallery';
+import { usePhotoCategories } from '../../hooks/usePhotoCategories';
+import { CustomCategoriesModal } from '../common/CustomCategoriesModal';
 
 interface UploadPhotosModalProps {
   open: boolean;
   onClose: () => void;
   defaultPatientId?: string;
+  // Si viene, las fotos quedan vinculadas a ese movimiento (cuenta corriente).
+  transactionId?: string;
+  // Se llama con las fotos subidas (para vincularlas luego desde el formulario).
+  onUploaded?: (
+    refs: { sessionId: string; photoId: string; url: string; type?: string; title?: string; description?: string }[],
+  ) => void;
 }
 
 // One pending upload slot — we keep the File around (for the actual upload),
-// the object URL (for the preview), the per-file type override, and the
-// async status so the row can flip from "waiting" to "uploading 67%" to
-// "done" / "failed" without losing position.
+// the object URL (for the preview), and the async status so the row can flip
+// from "waiting" to "uploading 67%" to "done" / "failed" without losing spot.
 interface PendingPhoto {
   id: string;
   file: File;
   previewUrl: string;
-  type: PhotoType;
   size: string;
   status: 'pending' | 'uploading' | 'done' | 'error';
   progress: number;
   error?: string;
-}
-
-const PHOTO_TYPES: PhotoType[] = ['INTRAORAL', 'EXTRAORAL', 'RADIOGRAFIA'];
-
-function inferTypeFromName(name: string): PhotoType {
-  const upper = name.toUpperCase();
-  if (upper.startsWith('RX') || upper.startsWith('RAD')) return 'RADIOGRAFIA';
-  if (upper.includes('EXT') || upper.includes('PERFIL')) return 'EXTRAORAL';
-  return 'INTRAORAL';
 }
 
 function formatSize(bytes: number): string {
@@ -49,13 +41,19 @@ export function UploadPhotosModal({
   open,
   onClose,
   defaultPatientId,
+  transactionId,
+  onUploaded,
 }: UploadPhotosModalProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
+  const categories = usePhotoCategories();
   const patientId = defaultPatientId;
 
-  const [sessionId, setSessionId] = useState<string>('__new');
-  const [newSessionTitle, setNewSessionTitle] = useState('');
+  const [title, setTitle] = useState('');
+  const [notes, setNotes] = useState('');
+  // Una categoría para toda la subida (personalizable, como trabajos/montos).
+  const [category, setCategory] = useState('');
+  const [catsOpen, setCatsOpen] = useState(false);
   const [files, setFiles] = useState<PendingPhoto[]>([]);
   const [drag, setDrag] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -63,13 +61,10 @@ export function UploadPhotosModal({
   const pcInputRef = useRef<HTMLInputElement>(null);
   const camInputRef = useRef<HTMLInputElement>(null);
 
-  // Existing sessions for this patient — feeds the "use existing session"
-  // picker. Disabled if patientId is missing (modal opened without context).
-  const { data: sessions = [] } = useQuery({
-    queryKey: ['gallery-sessions', patientId],
-    queryFn: () => galleryApi.listSessions(patientId!),
-    enabled: open && !!patientId,
-  });
+  // Categoría por defecto = la primera configurada (cuando abre o cambian).
+  useEffect(() => {
+    if (open && !category && categories.length) setCategory(categories[0]);
+  }, [open, categories, category]);
 
   useEffect(() => {
     if (!open) {
@@ -78,8 +73,9 @@ export function UploadPhotosModal({
       // revoke while the user is still looking at the thumbs.
       files.forEach(f => URL.revokeObjectURL(f.previewUrl));
       setFiles([]);
-      setSessionId('__new');
-      setNewSessionTitle('');
+      setTitle('');
+      setNotes('');
+      setCategory('');
       setUploading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,7 +87,6 @@ export function UploadPhotosModal({
       id: `${Date.now()}-${idx}-${file.name}`,
       file,
       previewUrl: URL.createObjectURL(file),
-      type: inferTypeFromName(file.name),
       size: formatSize(file.size),
       status: 'pending',
       progress: 0,
@@ -110,26 +105,19 @@ export function UploadPhotosModal({
     });
   };
 
-  const applyTypeToAll = (type: PhotoType) =>
-    setFiles(prev => prev.map(f => ({ ...f, type })));
-
-  const isUsingNewSession = sessionId === '__new';
-  const isValid =
-    !!patientId &&
-    files.length > 0 &&
-    (isUsingNewSession ? newSessionTitle.trim().length > 0 : true);
+  // Título y descripción son opcionales: solo hace falta el paciente y ≥1 foto.
+  const isValid = !!patientId && files.length > 0;
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
       if (!patientId) throw new Error('Sin paciente');
-      // 1) Make sure we have a session to attach the photos to.
-      let targetSessionId = sessionId;
-      if (isUsingNewSession) {
-        const created = await galleryApi.createSession(patientId, {
-          title: newSessionTitle.trim(),
-        });
-        targetSessionId = created._id;
-      }
+      // 1) Cada subida crea una sesión (contenedor interno). Si no ponen título,
+      // se auto-titula con la categoría o "Fotos".
+      const created = await galleryApi.createSession(patientId, {
+        title: title.trim() || (transactionId ? 'Foto de movimiento' : category || 'Fotos'),
+        notes: notes.trim() || undefined,
+      });
+      const targetSessionId = created._id;
 
       // 2) Pull signed upload params once — Cloudinary allows reuse within
       // the timestamp window so we don't need a fresh signature per file.
@@ -138,6 +126,7 @@ export function UploadPhotosModal({
       // 3) Upload each file directly to Cloudinary, then attach to session.
       // Sequential keeps the progress display sane and avoids hammering
       // free-tier quotas. For 30 photos we're looking at maybe a minute.
+      const uploaded: { sessionId: string; photoId: string; url: string; type?: string; title?: string; description?: string }[] = [];
       for (const f of files) {
         if (f.status === 'done') continue;
         updateFile(f.id, { status: 'uploading', progress: 0 });
@@ -147,11 +136,22 @@ export function UploadPhotosModal({
             params,
             pct => updateFile(f.id, { progress: pct }),
           );
-          await galleryApi.addPhoto(patientId, targetSessionId, {
+          const updated = await galleryApi.addPhoto(patientId, targetSessionId, {
             publicId: result.public_id,
             url: result.secure_url,
-            type: f.type,
+            type: category || undefined,
+            transactionId,
           });
+          const newPhoto = updated.photos.find(p => p.publicId === result.public_id);
+          if (newPhoto)
+            uploaded.push({
+              sessionId: targetSessionId,
+              photoId: newPhoto._id,
+              url: result.secure_url,
+              type: category || undefined,
+              title: title.trim() || undefined,
+              description: notes.trim() || undefined,
+            });
           updateFile(f.id, { status: 'done', progress: 100 });
         } catch (err) {
           updateFile(f.id, {
@@ -160,17 +160,22 @@ export function UploadPhotosModal({
           });
         }
       }
+      return uploaded;
     },
-    onSuccess: () => {
+    onSuccess: (uploaded) => {
       qc.invalidateQueries({ queryKey: ['gallery-sessions', patientId] });
       const success = files.filter(f => f.status !== 'error').length;
       const failed = files.length - success;
       showToast(
         failed === 0
-          ? `${success} foto${success === 1 ? '' : 's'} subida${success === 1 ? '' : 's'}`
+          ? `¡Listo! ${success} foto${success === 1 ? '' : 's'} subida${success === 1 ? '' : 's'} ✓`
           : `${success} subidas · ${failed} con error`,
+        failed === 0 ? 'success' : 'error',
       );
-      if (failed === 0) onClose();
+      if (failed === 0) {
+        onUploaded?.(uploaded);
+        onClose();
+      }
     },
     onSettled: () => setUploading(false),
   });
@@ -196,7 +201,7 @@ export function UploadPhotosModal({
       open={open}
       onClose={uploading ? () => {} : onClose}
       title="Subir fotos"
-      sub="Arrastrá fotos o eligilas. Después podés asignar tipo y sesión."
+      sub="Elegí la categoría y agregá las fotos. Título y descripción son opcionales."
       width={680}
       footer={
         <>
@@ -220,34 +225,60 @@ export function UploadPhotosModal({
         </>
       }
     >
-      <div className="form-row form-row--2">
-        <FormField label="Sesión">
-          <select
-            className="input"
-            value={sessionId}
-            onChange={e => setSessionId(e.target.value)}
-            disabled={uploading}
-            style={{ height: 38 }}
-          >
-            <option value="__new">+ Crear sesión nueva</option>
-            {sessions.map((s: GallerySession) => (
-              <option key={s._id} value={s._id}>
-                {s.title} · {s.photos.length} fotos
-              </option>
-            ))}
-          </select>
-        </FormField>
-        {isUsingNewSession && (
-          <FormField label="Título de la sesión">
-            <input
-              className="input"
-              value={newSessionTitle}
-              onChange={e => setNewSessionTitle(e.target.value)}
-              placeholder="Ej: Inicio tratamiento"
+      <FormField label="Categoría">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {categories.map(c => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
               disabled={uploading}
-            />
-          </FormField>
-        )}
+              style={{
+                fontSize: 12.5,
+                padding: '5px 12px',
+                borderRadius: 999,
+                border: '1px solid',
+                borderColor: category === c ? 'var(--brand-primary)' : 'var(--border-default)',
+                background: category === c ? 'var(--brand-primary-50)' : 'var(--bg-surface)',
+                color: category === c ? 'var(--brand-primary-600)' : 'var(--text-secondary)',
+                fontWeight: category === c ? 600 : 400,
+                cursor: uploading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {photoTypeLabel(c)}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setCatsOpen(true)}
+            disabled={uploading}
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            <Icon name="settings" size={13} /> Personalizar
+          </button>
+        </div>
+      </FormField>
+
+      <div className="form-row form-row--2">
+        <FormField label="Título (opcional)">
+          <input
+            className="input"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Ej: Inicio tratamiento"
+            disabled={uploading}
+          />
+        </FormField>
+        <FormField label="Descripción (opcional)">
+          <input
+            className="input"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Ej: se ve fractura en 26"
+            disabled={uploading}
+          />
+        </FormField>
       </div>
 
       <input
@@ -274,7 +305,6 @@ export function UploadPhotosModal({
       />
 
       <div
-        onClick={() => !uploading && pcInputRef.current?.click()}
         onDragOver={e => {
           e.preventDefault();
           if (!uploading) setDrag(true);
@@ -289,20 +319,19 @@ export function UploadPhotosModal({
           border: `2px dashed ${drag ? 'var(--brand-primary)' : 'var(--border-default)'}`,
           background: drag ? 'var(--brand-primary-50)' : 'var(--bg-muted)',
           borderRadius: 12,
-          padding: 24,
+          padding: 14,
           textAlign: 'center',
           marginBottom: 16,
           transition: 'all 0.15s',
-          cursor: uploading ? 'not-allowed' : 'pointer',
           opacity: uploading ? 0.5 : 1,
         }}
       >
         <div
           style={{
-            width: 44,
-            height: 44,
-            margin: '0 auto 8px',
-            borderRadius: 12,
+            width: 40,
+            height: 40,
+            margin: '0 auto 10px',
+            borderRadius: 11,
             background: 'var(--bg-surface)',
             display: 'flex',
             alignItems: 'center',
@@ -311,35 +340,40 @@ export function UploadPhotosModal({
             boxShadow: 'var(--shadow-xs)',
           }}
         >
-          <Icon name="upload" size={20} />
+          <Icon name="upload" size={18} />
         </div>
-        <div style={{ fontSize: 13.5, fontWeight: 500 }}>
-          Arrastrá tus fotos acá o clickeá para elegir
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-          JPG, PNG, HEIC · hasta 50 MB c/u
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button
-            className="btn btn--secondary btn--sm"
-            onClick={e => {
-              e.stopPropagation();
-              pcInputRef.current?.click();
-            }}
-            disabled={uploading}
-          >
-            <Icon name="image" size={12} /> Elegir archivos
-          </button>
-          <button
-            className="btn btn--secondary btn--sm"
+            className="btn btn--primary"
             onClick={e => {
               e.stopPropagation();
               camInputRef.current?.click();
             }}
             disabled={uploading}
+            style={{ flexDirection: 'column', height: 'auto', padding: '10px 20px', gap: 1, minWidth: 150 }}
           >
-            <Icon name="camera" size={12} /> Sacar foto (cámara)
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 14 }}>
+              <Icon name="camera" size={17} /> Sacar una foto
+            </span>
+            <span style={{ fontSize: 11, opacity: 0.85, fontWeight: 400 }}>con la cámara</span>
           </button>
+          <button
+            className="btn btn--secondary"
+            onClick={e => {
+              e.stopPropagation();
+              pcInputRef.current?.click();
+            }}
+            disabled={uploading}
+            style={{ flexDirection: 'column', height: 'auto', padding: '10px 20px', gap: 1, minWidth: 150 }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 14 }}>
+              <Icon name="image" size={17} /> Elegir foto
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>de la galería o archivos</span>
+          </button>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 10 }}>
+          JPG, PNG, HEIC · hasta 50 MB c/u
         </div>
       </div>
 
@@ -355,7 +389,7 @@ export function UploadPhotosModal({
               margin: '8px 0 10px',
             }}
           >
-            {files.length} foto{files.length === 1 ? '' : 's'} para subir · asigná tipo a cada una
+            {files.length} foto{files.length === 1 ? '' : 's'} para subir · categoría: <b>{photoTypeLabel(category)}</b>
           </div>
           <div
             style={{
@@ -369,48 +403,14 @@ export function UploadPhotosModal({
                 key={f.id}
                 photo={f}
                 disabled={uploading}
-                onChangeType={t => updateFile(f.id, { type: t })}
                 onRemove={() => removeFile(f.id)}
               />
             ))}
           </div>
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: 10,
-              fontSize: 11.5,
-              color: 'var(--text-tertiary)',
-              flexWrap: 'wrap',
-              gap: 8,
-            }}
-          >
-            <span>Tip: si todas son del mismo tipo, aplicá a todas con un click.</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {PHOTO_TYPES.map(t => (
-                <button
-                  key={t}
-                  onClick={() => applyTypeToAll(t)}
-                  disabled={uploading}
-                  style={{
-                    padding: '2px 8px',
-                    borderRadius: 5,
-                    fontSize: 11,
-                    border: '1px solid var(--border-default)',
-                    background: 'var(--bg-surface)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Todas → {PHOTO_TYPE_LABEL[t]}
-                </button>
-              ))}
-            </div>
-          </div>
         </>
       )}
+
+      <CustomCategoriesModal open={catsOpen} initial={categories} onClose={() => setCatsOpen(false)} />
     </Modal>
   );
 }
@@ -418,12 +418,10 @@ export function UploadPhotosModal({
 function PhotoUploadCard({
   photo,
   disabled,
-  onChangeType,
   onRemove,
 }: {
   photo: PendingPhoto;
   disabled: boolean;
-  onChangeType: (type: PhotoType) => void;
   onRemove: () => void;
 }) {
   return (
@@ -534,37 +532,7 @@ function PhotoUploadCard({
         >
           {photo.file.name}
         </div>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          <select
-            value={photo.type}
-            onChange={e => onChangeType(e.target.value as PhotoType)}
-            disabled={disabled}
-            style={{
-              fontSize: 10.5,
-              padding: '2px 4px',
-              borderRadius: 4,
-              border: '1px solid var(--border-default)',
-              background:
-                photo.type === 'RADIOGRAFIA' ? '#0F1218' : 'var(--brand-primary-50)',
-              color:
-                photo.type === 'RADIOGRAFIA' ? 'white' : 'var(--brand-primary-600)',
-              fontWeight: 500,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {PHOTO_TYPES.map(t => (
-              <option key={t} value={t}>
-                {PHOTO_TYPE_LABEL[t]}
-              </option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
           <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{photo.size}</span>
         </div>
       </div>

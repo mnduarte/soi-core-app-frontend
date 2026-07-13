@@ -45,6 +45,8 @@ export function GridView({ photos, patientId }: GridViewProps) {
           photo={photo}
           patientId={patientId}
           sessionId={session._id}
+          sessionTitle={session.title}
+          sessionNotes={session.notes}
           label={`${new Date(session.createdAt).toLocaleDateString('es-AR')} · ${session.title}`}
         />
       ))}

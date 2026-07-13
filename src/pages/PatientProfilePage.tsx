@@ -8,6 +8,7 @@ import { AddChargeModal } from '../components/patient/AddChargeModal';
 import { WhatsAppReminderModal } from '../components/patient/WhatsAppReminderModal';
 import { transactionsApi } from '../api/transactions';
 import { patientAge, fmtMoney } from '../lib/format';
+import { splitName } from '../lib/name';
 import { useUIStore } from '../store/ui.store';
 import { Icon } from '../components/common/Icon';
 import { TabBar } from '../components/common/TabBar';
@@ -510,8 +511,7 @@ function DatosTab({ patient }: { patient: Patient }) {
   const showToast = useUIStore(s => s.showToast);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(() => ({
-    name: patient.name,
-    lastName: patient.lastName,
+    fullName: `${patient.name} ${patient.lastName ?? ''}`.trim(),
     age: patientAge(patient) != null ? String(patientAge(patient)) : '',
     dni: patient.dni ?? '',
     phone: patient.phone ?? '',
@@ -526,8 +526,7 @@ function DatosTab({ patient }: { patient: Patient }) {
   const mutation = useMutation({
     mutationFn: () =>
       patientsApi.update(patient._id, {
-        name: form.name.trim(),
-        lastName: form.lastName.trim(),
+        ...splitName(form.fullName),
         age: form.age.trim() ? Number(form.age) : undefined,
         dni: form.dni.trim() || undefined,
         phone: form.phone.trim() || undefined,
@@ -562,11 +561,8 @@ function DatosTab({ patient }: { patient: Patient }) {
             <div className="card__title">Editar datos del paciente</div>
           </div>
           <div className="card__body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            <EditField label="Nombre">
-              <input className="input" value={form.name} onChange={e => set('name', e.target.value)} />
-            </EditField>
-            <EditField label="Apellido">
-              <input className="input" value={form.lastName} onChange={e => set('lastName', e.target.value)} />
+            <EditField label="Nombre y apellido">
+              <input className="input" value={form.fullName} onChange={e => set('fullName', e.target.value)} />
             </EditField>
             <EditField label="Edad" hint="años">
               <input
@@ -624,7 +620,7 @@ function DatosTab({ patient }: { patient: Patient }) {
             <button
               className="btn btn--primary"
               onClick={() => mutation.mutate()}
-              disabled={mutation.isPending || !form.name.trim() || !form.lastName.trim()}
+              disabled={mutation.isPending || form.fullName.trim().length < 2}
             >
               <Icon name="check" size={14} /> {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
             </button>

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { patientsApi, type Patient } from '../api/patients';
 import { useUIStore } from '../store/ui.store';
-import { PageHeader } from '../components/common/PageHeader';
+import { SectionHeader } from '../components/common/SectionHeader';
 import { Icon } from '../components/common/Icon';
 import { Avatar } from '../components/common/Avatar';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
@@ -65,22 +65,15 @@ export default function PatientsPage() {
   }, [patients]);
 
   return (
-    <div className="content fade-in">
-      <PageHeader
+    <div className="content fade-in" style={{ padding: 0 }}>
+      <SectionHeader
         title="Pacientes"
         sub={`${patients.length} fichas ${debouncedSearch ? 'encontradas' : 'activas'}`}
-        actions={
-          <>
-            <button className="btn btn--secondary">
-              <Icon name="download" /> Exportar
-            </button>
-            <button className="btn btn--primary" onClick={() => openModal('newPatient')}>
-              <Icon name="plus" /> Nuevo paciente
-            </button>
-          </>
-        }
+        icon="users"
+        accent="#0D9488"
       />
 
+      <div style={{ padding: isMobile ? '18px 16px' : '28px 32px' }}>
       {/* Toolbar */}
       <div
         style={{
@@ -95,7 +88,7 @@ export default function PatientsPage() {
           padding: '12px 16px',
         }}
       >
-        <div className="search" style={{ flex: 1, maxWidth: 400, background: 'var(--bg-muted)' }}>
+        <div className="search" style={{ flex: 1, maxWidth: 400, minWidth: 180, background: 'var(--bg-muted)' }}>
           <Icon name="search" size={14} style={{ color: 'var(--text-tertiary)' }} />
           <input
             placeholder="Buscar por nombre, DNI, teléfono…"
@@ -104,36 +97,41 @@ export default function PatientsPage() {
           />
         </div>
 
-        {!isMobile && (
-          <div style={{ display: 'flex', background: 'var(--bg-muted)', borderRadius: 8, padding: 3 }}>
-            <button
-              onClick={() => setView('list')}
-              style={{
-                padding: 5,
-                borderRadius: 5,
-                background: view === 'list' ? 'var(--bg-surface)' : 'transparent',
-                color: view === 'list' ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                cursor: 'pointer',
-                display: 'flex',
-              }}
-            >
-              <Icon name="list" size={14} />
-            </button>
-            <button
-              onClick={() => setView('grid')}
-              style={{
-                padding: 5,
-                borderRadius: 5,
-                background: view === 'grid' ? 'var(--bg-surface)' : 'transparent',
-                color: view === 'grid' ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                cursor: 'pointer',
-                display: 'flex',
-              }}
-            >
-              <Icon name="grid" size={14} />
-            </button>
-          </div>
-        )}
+        <div className="row" style={{ gap: 8, marginLeft: 'auto' }}>
+          {!isMobile && (
+            <div style={{ display: 'flex', background: 'var(--bg-muted)', borderRadius: 8, padding: 3 }}>
+              <button
+                onClick={() => setView('list')}
+                style={{
+                  padding: 5,
+                  borderRadius: 5,
+                  background: view === 'list' ? 'var(--bg-surface)' : 'transparent',
+                  color: view === 'list' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                }}
+              >
+                <Icon name="list" size={14} />
+              </button>
+              <button
+                onClick={() => setView('grid')}
+                style={{
+                  padding: 5,
+                  borderRadius: 5,
+                  background: view === 'grid' ? 'var(--bg-surface)' : 'transparent',
+                  color: view === 'grid' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                }}
+              >
+                <Icon name="grid" size={14} />
+              </button>
+            </div>
+          )}
+          <button className="btn btn--primary" onClick={() => openModal('newPatient')}>
+            <Icon name="plus" /> <span>Nuevo paciente</span>
+          </button>
+        </div>
       </div>
 
       {/* DNI duplicados — banner suave de reconciliación */}
@@ -208,6 +206,7 @@ export default function PatientsPage() {
       ) : (
         <GridView patients={patients} onOpen={openPatient} />
       )}
+      </div>
 
       <ConfirmDialog
         open={!!toDelete}
@@ -256,7 +255,7 @@ function ListView({
         </thead>
         <tbody>
           {patients.map(p => (
-            <tr key={p._id} onClick={() => onOpen(p._id)} style={{ cursor: 'pointer' }}>
+            <tr key={p._id}>
               <td>
                 <div className="row" style={{ gap: 10 }}>
                   <Avatar name={p.name} lastName={p.lastName} id={p._id} size="sm" />
@@ -273,8 +272,8 @@ function ListView({
               <td style={{ color: 'var(--text-secondary)' }}>{p.email ?? '—'}</td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                 <div style={{ display: 'inline-flex', gap: 2 }}>
-                  <button className="btn btn--ghost btn--icon btn--sm" title="Ver ficha" onClick={e => { e.stopPropagation(); onOpen(p._id); }}>
-                    <Icon name="eye" size={15} />
+                  <button className="btn btn--ghost btn--icon btn--sm" title="Ficha clínica" onClick={e => { e.stopPropagation(); onOpen(p._id); }} style={{ color: 'var(--brand-primary-600)' }}>
+                    <Icon name="clipboard" size={15} />
                   </button>
                   <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={e => { e.stopPropagation(); onEdit(p); }}>
                     <Icon name="edit" size={15} />

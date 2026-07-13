@@ -8,6 +8,8 @@ export interface ClinicSettings {
   reminderTemplates?: string[];
   quickAmounts?: number[];
   quickTreatments?: string[];
+  slotTimes?: string[];
+  photoCategories?: string[];
   logoUrl?: string;
 }
 

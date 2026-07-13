@@ -7,6 +7,7 @@ import { Icon } from '../common/Icon';
 import { patientsApi, type Patient, type ScanFichaResult } from '../../api/patients';
 import { patientAge } from '../../lib/format';
 import { whatsAppPreview } from '../../lib/phone';
+import { splitName } from '../../lib/name';
 import { useUIStore } from '../../store/ui.store';
 
 interface NewPatientModalProps {
@@ -20,8 +21,7 @@ const OBRA_SOCIAL_OPTIONS = ['Particular', 'OSDE', 'Swiss Medical', 'Galeno', 'I
 const ALLERGY_OPTIONS = ['Penicilina', 'Látex', 'Anestésicos', 'Aspirina', 'Otros antibióticos'];
 
 interface FormState {
-  name: string;
-  lastName: string;
+  fullName: string;
   age: string;
   dni: string;
   phone: string;
@@ -35,8 +35,7 @@ interface FormState {
 }
 
 const EMPTY: FormState = {
-  name: '',
-  lastName: '',
+  fullName: '',
   age: '',
   dni: '',
   phone: '',
@@ -140,8 +139,7 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
   // Es suave: se puede crear igual (el DNI no bloquea). No corre en edición.
   useEffect(() => {
     if (editing || dupDismissed) return;
-    const name = data.name.trim();
-    const last = data.lastName.trim();
+    const { name, lastName: last } = splitName(data.fullName);
     const dni = data.dni.trim();
     if (dni.length < 6 && (name.length < 2 || last.length < 2)) return;
     const t = setTimeout(async () => {
@@ -170,15 +168,14 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
       } catch { /* ignore */ }
     }, 500);
     return () => clearTimeout(t);
-  }, [data.name, data.lastName, data.dni, editing, dupDismissed]);
+  }, [data.fullName, data.dni, editing, dupDismissed]);
 
   // Precarga del paciente a editar.
   useEffect(() => {
     if (open && editing && editPatient) {
       const age = patientAge(editPatient);
       setData({
-        name: editPatient.name,
-        lastName: editPatient.lastName,
+        fullName: `${editPatient.name} ${editPatient.lastName ?? ''}`.trim(),
         age: age != null ? String(age) : '',
         dni: editPatient.dni ?? '',
         phone: editPatient.phone ?? '',
@@ -210,8 +207,7 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
       const scannedAge = ex.age ?? (ex.birthDate ? computeAge(ex.birthDate)?.toString() : undefined);
       setData(d => ({
         ...d,
-        name: ex.name ?? d.name,
-        lastName: ex.lastName ?? d.lastName,
+        fullName: [ex.name, ex.lastName].filter(Boolean).join(' ') || d.fullName,
         age: scannedAge ?? d.age,
         dni: ex.dni ?? d.dni,
         phone: ex.phone ?? d.phone,
@@ -272,11 +268,10 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
     },
   });
 
-  const isValid = data.name.trim() && data.lastName.trim();
+  const isValid = data.fullName.trim().length >= 2;
 
   const buildPayload = () => ({
-    name: data.name.trim(),
-    lastName: data.lastName.trim(),
+    ...splitName(data.fullName),
     phone: data.phone.trim() || undefined,
     email: data.email.trim() || undefined,
     locality: data.locality.trim() || undefined,
@@ -488,22 +483,14 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
       )}
 
       <SectionLabel>Datos personales</SectionLabel>
-      <div className="form-row form-row--2">
-        <FormField label="Nombre">
+      <div className="form-row">
+        <FormField label="Nombre y apellido">
           <input
             className="input"
             autoFocus
-            placeholder="Lucía"
-            value={data.name}
-            onChange={e => upd('name', e.target.value)}
-          />
-        </FormField>
-        <FormField label="Apellido">
-          <input
-            className="input"
-            placeholder="Fernández"
-            value={data.lastName}
-            onChange={e => upd('lastName', e.target.value)}
+            placeholder="Lucía Fernández"
+            value={data.fullName}
+            onChange={e => upd('fullName', e.target.value)}
           />
         </FormField>
       </div>

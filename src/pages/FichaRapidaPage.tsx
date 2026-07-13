@@ -10,7 +10,10 @@ import { Icon } from '../components/common/Icon';
 import { Avatar } from '../components/common/Avatar';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { OdontogramCard } from '../components/patient/OdontogramCard';
+import { GalleryContainer } from '../components/gallery/GalleryContainer';
 import { CustomTreatmentsModal } from '../components/common/CustomTreatmentsModal';
+import { SectionHeader } from '../components/common/SectionHeader';
+import { galleryApi, photoTypeLabel, type GalleryPhoto, type UploadedPhotoRef } from '../api/gallery';
 import { fmtMoney, patientAge } from '../lib/format';
 import { toWhatsAppNumber } from '../lib/phone';
 import { QUICK_CHIPS } from '../lib/quickWork';
@@ -85,6 +88,27 @@ export default function FichaRapidaPage() {
     enabled: Boolean(id),
   });
 
+  // Fotos de la galería del paciente → agrupadas por movimiento vinculado,
+  // para mostrar "foto vinculada" en cada fila de la cuenta corriente.
+  const { data: gallerySessions = [] } = useQuery({
+    queryKey: ['gallery-sessions', id],
+    queryFn: () => galleryApi.listSessions(id!),
+    enabled: Boolean(id),
+  });
+  const photosByTx = useMemo(() => {
+    // Cada foto lleva el título/descripción de su sesión (ahí viven, no en la foto).
+    const m = new Map<string, { photo: GalleryPhoto; title: string; description?: string }[]>();
+    for (const s of gallerySessions) {
+      for (const p of s.photos) {
+        if (!p.transactionId) continue;
+        const list = m.get(p.transactionId) ?? [];
+        list.push({ photo: p, title: s.title, description: s.notes });
+        m.set(p.transactionId, list);
+      }
+    }
+    return m;
+  }, [gallerySessions]);
+
   // Cuenta corriente: cargos/pagos vigentes, orden cronológico + saldo running.
   const rows = useMemo(() => {
     const list = txs
@@ -137,6 +161,7 @@ export default function FichaRapidaPage() {
     setDate(todayYMD());
     setKind('PAYMENT');
     setMethod('CASH');
+    setAttachedPhotos([]);
   };
 
   // Al llegar desde la Agenda (?trabajo=…) se podía precargar la prestación y
@@ -166,13 +191,34 @@ export default function FichaRapidaPage() {
     qc.invalidateQueries({ queryKey: ['balance', id] });
   };
 
+  // El modal de subida devuelve las fotos ya subidas → las mostramos en el form
+  // y las vinculamos al movimiento recién al Agregar.
+  const handleUploaded = (refs: UploadedPhotoRef[]) => setAttachedPhotos(prev => [...prev, ...refs]);
+  const removeAttached = async (ref: UploadedPhotoRef) => {
+    setAttachedPhotos(prev => prev.filter(p => p.photoId !== ref.photoId));
+    try {
+      await galleryApi.removePhoto(patient!._id, ref.sessionId, ref.photoId);
+      qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
+    } catch { /* si falla, la foto queda en la galería sin vincular */ }
+  };
+  // Vincula las fotos adjuntas al movimiento (txId) y limpia el estado.
+  const linkAttached = async (txId: string) => {
+    if (!patient || attachedPhotos.length === 0) return;
+    for (const ref of attachedPhotos) {
+      await galleryApi.updatePhoto(patient._id, ref.sessionId, ref.photoId, { transactionId: txId });
+    }
+    setAttachedPhotos([]);
+    qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
+  };
+
   const submit = async () => {
-    if (!patient) return;
+    if (!patient || submitting) return;
     const amt = Number(amount);
     if (!amt || amt <= 0) {
       showToast('Ingresá un monto', 'error');
       return;
     }
+    setSubmitting(true);
     // El PATCH de edición NO lleva patientId (el backend no lo acepta).
     const base = {
       type: kind,
@@ -182,16 +228,22 @@ export default function FichaRapidaPage() {
       date: new Date(`${date}T12:00:00`).toISOString(),
     };
     const firstName = patient.name.split(' ')[0];
+    const nPhotos = attachedPhotos.length;
     try {
       if (editingId) {
         await updateMut.mutateAsync({ id: editingId, dto: base });
-        showToast('¡Guardado! Movimiento actualizado');
+        await linkAttached(editingId);
+        showToast('¡Guardado! Movimiento actualizado', 'success');
       } else {
-        await addMut.mutateAsync({ patientId: patient._id, ...base });
+        const saved = await addMut.mutateAsync({ patientId: patient._id, ...base });
+        await linkAttached(saved._id);
         showToast(
-          kind === 'PAYMENT'
-            ? `¡Listo! Pago de ${fmtMoney(amt)} — ${firstName}`
-            : `¡Listo! Cargo de ${fmtMoney(amt)} — ${firstName}`,
+          nPhotos > 0
+            ? `¡Listo! Movimiento y ${nPhotos} foto${nPhotos === 1 ? '' : 's'} — ${firstName}`
+            : kind === 'PAYMENT'
+              ? `¡Listo! Pago de ${fmtMoney(amt)} — ${firstName}`
+              : `¡Listo! Cargo de ${fmtMoney(amt)} — ${firstName}`,
+          'success',
         );
       }
       invalidate();
@@ -199,6 +251,8 @@ export default function FichaRapidaPage() {
     } catch (err) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       showToast(typeof msg === 'string' ? msg : 'No se pudo guardar', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -214,18 +268,26 @@ export default function FichaRapidaPage() {
 
   const [toDelete, setToDelete] = useState<Transaction | null>(null);
   const [odoOpen, setOdoOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [zoomPhoto, setZoomPhoto] = useState<
+    { url: string; category?: string; title?: string; description?: string } | null
+  >(null);
+  // Fotos ya subidas (vía modal) que se van a vincular al movimiento al Agregar.
+  const [attachedPhotos, setAttachedPhotos] = useState<UploadedPhotoRef[]>([]);
+  // Cubre TODO el guardado (movimiento + subida de fotos), que puede tardar:
+  // deshabilita el botón y muestra spinner para evitar doble click.
+  const [submitting, setSubmitting] = useState(false);
 
   // ============================ RENDER ============================
   return (
-    <div className="content" style={{ padding: isMobile ? 16 : 28, overflow: 'auto', height: '100%' }}>
-      <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.015em', margin: 0 }}>Ficha rápida</h1>
-          <div style={{ color: 'var(--text-tertiary)', fontSize: 13.5, marginTop: 4 }}>
-            Registrá tratamientos y pagos en segundos — como el cuaderno, pero sincronizado
-          </div>
-        </div>
-
+    <div className="content" style={{ padding: 0, overflow: 'auto', height: '100%' }}>
+      <SectionHeader
+        icon="clipboard"
+        accent="#7C3AED"
+        title="Ficha clínica"
+        sub="Registrá tratamientos y pagos en segundos — como el cuaderno, pero sincronizado"
+      />
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 16 : 28 }}>
         <div className="card" style={{ overflow: 'visible' }}>
           <div className="card__header">
             <div>
@@ -284,9 +346,14 @@ export default function FichaRapidaPage() {
                     {patient.locality && <span style={{ color: 'var(--text-tertiary)' }}>· {patient.locality}</span>}
                   </div>
 
-                  <button className="btn btn--secondary btn--sm" onClick={() => setOdoOpen(true)} style={{ marginLeft: 'auto' }}>
-                    <Icon name="tooth" size={14} /> Odontograma
-                  </button>
+                  <div className="row" style={{ gap: 8, marginLeft: 'auto' }}>
+                    <button className="btn btn--secondary btn--sm" onClick={() => setGalleryOpen(true)}>
+                      <Icon name="image" size={14} /> Galería
+                    </button>
+                    <button className="btn btn--secondary btn--sm" onClick={() => setOdoOpen(true)}>
+                      <Icon name="tooth" size={14} /> Odontograma
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div ref={searchRef} style={{ position: 'relative', maxWidth: 460 }}>
@@ -521,17 +588,64 @@ export default function FichaRapidaPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn--primary" onClick={submit} disabled={addMut.isPending || updateMut.isPending} style={{ height: 40 }}>
-                    <Icon name={editingId ? 'check' : 'plus'} size={14} /> {editingId ? 'Guardar' : 'Agregar'}
+                  <button className="btn btn--primary" onClick={submit} disabled={submitting} style={{ height: 40, minWidth: 116 }}>
+                    {submitting ? (
+                      <>
+                        <span
+                          style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }}
+                        />
+                        Guardando…
+                      </>
+                    ) : (
+                      <>
+                        <Icon name={editingId ? 'check' : 'plus'} size={14} /> {editingId ? 'Guardar' : 'Agregar'}
+                      </>
+                    )}
                   </button>
                   {editingId && (
-                    <button className="btn btn--secondary" onClick={resetForm} style={{ height: 40 }}>
+                    <button className="btn btn--secondary" onClick={resetForm} disabled={submitting} style={{ height: 40 }}>
                       Cancelar
                     </button>
                   )}
                 </div>
+
+                {/* Subir foto: abre el modal; al terminar la muestra acá para
+                    vincularla al movimiento recién al Agregar (con opción a quitar). */}
+                <div style={{ flex: '1 1 100%', marginTop: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => openModal('uploadPhotos', { patientId: patient._id, onUploaded: handleUploaded })}
+                    style={{ border: '1px dashed var(--border-default)' }}
+                  >
+                    <Icon name="image" size={14} /> Subir foto
+                  </button>
+                  {attachedPhotos.map(ref => (
+                    <div key={ref.photoId} style={{ position: 'relative' }}>
+                      <img
+                        src={ref.url}
+                        onClick={() => setZoomPhoto({ url: ref.url, category: ref.type, title: ref.title, description: ref.description })}
+                        style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-subtle)', cursor: 'zoom-in', display: 'block' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeAttached(ref)}
+                        title="Quitar foto"
+                        style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 999, background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, lineHeight: 1 }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {attachedPhotos.length > 0 && (
+                    <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                      se {attachedPhotos.length === 1 ? 'vincula' : 'vinculan'} al {editingId ? 'guardar' : 'crear el movimiento'}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
+
           </div>
 
           {/* CUENTA CORRIENTE */}
@@ -555,7 +669,9 @@ export default function FichaRapidaPage() {
                       </td>
                     </tr>
                   )}
-                  {rows.map(({ t }) => (
+                  {rows.map(({ t }) => {
+                    const txPhotos = photosByTx.get(t._id) ?? [];
+                    return (
                     <tr
                       key={t._id}
                       className="fr-row"
@@ -567,6 +683,19 @@ export default function FichaRapidaPage() {
                           {t.type === 'PAYMENT' ? 'Pago' : 'Cargo'}
                         </span>
                         {txLabel(t)}
+                        {txPhotos.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                            {txPhotos.map(({ photo: ph, title, description }) => (
+                              <img
+                                key={ph._id}
+                                src={ph.thumbnailUrl || ph.url}
+                                onClick={() => setZoomPhoto({ url: ph.url, category: ph.type, title, description })}
+                                title={`${photoTypeLabel(ph.type)} — foto vinculada`}
+                                style={{ width: 38, height: 38, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border-subtle)', cursor: 'zoom-in', display: 'block' }}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td style={{ ...cell, textAlign: 'right' }} className="mono">
                         {t.type === 'CHARGE' ? fmtMoney(t.amount) : '—'}
@@ -576,6 +705,19 @@ export default function FichaRapidaPage() {
                       </td>
                       <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <span style={{ display: 'inline-flex', gap: 2 }}>
+                          <button
+                            className="btn btn--ghost btn--icon btn--sm"
+                            title={txPhotos.length ? 'Ver / agregar fotos' : 'Adjuntar foto'}
+                            onClick={() => openModal('uploadPhotos', { patientId: id, transactionId: t._id })}
+                            style={{ position: 'relative', color: txPhotos.length ? 'var(--brand-primary-600)' : undefined }}
+                          >
+                            <Icon name="image" size={15} />
+                            {txPhotos.length > 0 && (
+                              <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 999, background: 'var(--brand-primary)', color: 'white', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {txPhotos.length}
+                              </span>
+                            )}
+                          </button>
                           <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEdit(t)}>
                             <Icon name="edit" size={15} />
                           </button>
@@ -585,7 +727,8 @@ export default function FichaRapidaPage() {
                         </span>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
 
@@ -638,6 +781,73 @@ export default function FichaRapidaPage() {
               onClose={() => setOdoOpen(false)}
             />
           </div>
+        </div>
+      )}
+
+      {/* Modal de galería del paciente (reusa el contenedor de la sección Galería) */}
+      {galleryOpen && patient && (
+        <div
+          onClick={() => setGalleryOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.42)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: isMobile ? 8 : 24, overflowY: 'auto', animation: 'overlayFade 0.12s ease-out' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 1100, margin: 'auto', background: 'var(--bg-surface)', borderRadius: 14, boxShadow: 'var(--shadow-lg)', animation: 'dialogPop 0.16s cubic-bezier(0.16,1,0.3,1)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600 }}>
+                <Icon name="image" size={17} style={{ color: '#7C3AED' }} />
+                Galería · {patient.name} {patient.lastName}
+              </div>
+              <button className="btn btn--secondary btn--sm" onClick={() => setGalleryOpen(false)}>
+                <Icon name="x" size={13} /> Cerrar
+              </button>
+            </div>
+            <div style={{ padding: isMobile ? 12 : 18 }}>
+              <GalleryContainer patientId={patient._id} embedded />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox de zoom para las fotos vinculadas / preview, con su info */}
+      {zoomPhoto && (
+        <div
+          onClick={() => setZoomPhoto(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, zIndex: 1200, padding: isMobile ? 16 : 32, cursor: 'zoom-out', animation: 'overlayFade 0.12s ease-out' }}
+        >
+          <button
+            onClick={() => setZoomPhoto(null)}
+            title="Cerrar"
+            style={{ position: 'absolute', top: 18, right: 18, width: 40, height: 40, borderRadius: 999, background: 'rgba(255,255,255,0.16)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(8px)' }}
+          >
+            <Icon name="x" size={20} />
+          </button>
+          <img
+            src={zoomPhoto.url}
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '100%', maxHeight: zoomPhoto.category || zoomPhoto.title || zoomPhoto.description ? '72vh' : '86vh', borderRadius: 10, boxShadow: 'var(--shadow-lg)', cursor: 'default' }}
+          />
+          {(zoomPhoto.category || zoomPhoto.title || zoomPhoto.description) && (
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '12px 16px', maxWidth: 520, width: '100%', boxShadow: 'var(--shadow-lg)', cursor: 'default' }}
+            >
+              {zoomPhoto.category && (
+                <span
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'var(--brand-primary-50)', color: 'var(--brand-primary-600)', fontSize: 12, fontWeight: 600, marginBottom: zoomPhoto.title || zoomPhoto.description ? 8 : 0 }}
+                >
+                  <Icon name="image" size={12} /> {photoTypeLabel(zoomPhoto.category)}
+                </span>
+              )}
+              {zoomPhoto.title && (
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{zoomPhoto.title}</div>
+              )}
+              {zoomPhoto.description && (
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3 }}>{zoomPhoto.description}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

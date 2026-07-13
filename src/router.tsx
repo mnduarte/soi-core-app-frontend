@@ -21,7 +21,10 @@ const router = createBrowserRouter([
     loader: requireAuth,
     lazy: () => import('./components/layout/AppLayout').then(m => ({ Component: m.default })),
     children: [
-      { index: true, lazy: () => import('./pages/DashboardPage').then(m => ({ Component: m.default })) },
+      // La Agenda es la página por defecto (Dashboard descartado por ahora,
+      // sigue accesible en /dashboard).
+      { index: true, loader: () => redirect('/agenda') },
+      { path: 'dashboard', lazy: () => import('./pages/DashboardPage').then(m => ({ Component: m.default })) },
       { path: 'agenda', lazy: () => import('./pages/AgendaPage').then(m => ({ Component: m.default })) },
       { path: 'patients', lazy: () => import('./pages/PatientsPage').then(m => ({ Component: m.default })) },
       // La ficha completa (perfil con odontograma) queda oculta por ahora:

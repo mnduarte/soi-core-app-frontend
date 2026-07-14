@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
+import { MobileMenuButton } from './MobileMenuButton';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 interface SectionHeaderProps {
@@ -29,6 +30,7 @@ export function SectionHeader({ icon, title, sub, accent, actions }: SectionHead
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+        <MobileMenuButton />
         <div
           style={{
             width: 40,

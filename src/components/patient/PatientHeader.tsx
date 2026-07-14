@@ -7,6 +7,7 @@ import { transactionsApi } from '../../api/transactions';
 import { useUIStore } from '../../store/ui.store';
 import { Avatar } from '../common/Avatar';
 import { Icon } from '../common/Icon';
+import { MobileMenuButton } from '../common/MobileMenuButton';
 import { WhatsAppReminderModal } from './WhatsAppReminderModal';
 import { patientAge, fmtMoney } from '../../lib/format';
 import { toWhatsAppNumber } from '../../lib/phone';
@@ -77,6 +78,7 @@ export function PatientHeader({ patient, collapsed = false }: PatientHeaderProps
       }}
     >
       <div className="row" style={{ gap: 8, marginBottom: collapsed ? 8 : 12, fontSize: 12.5, color: 'var(--text-tertiary)' }}>
+        <MobileMenuButton />
         <button
           type="button"
           onClick={() => navigate('/patients')}

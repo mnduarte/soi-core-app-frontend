@@ -96,13 +96,13 @@ export default function FichaRapidaPage() {
     enabled: Boolean(id),
   });
   const photosByTx = useMemo(() => {
-    // Cada foto lleva el título/descripción de su sesión (ahí viven, no en la foto).
-    const m = new Map<string, { photo: GalleryPhoto; title: string; description?: string }[]>();
+    // Cada foto lleva su sessionId + el título/descripción de la sesión (ahí viven).
+    const m = new Map<string, { photo: GalleryPhoto; sessionId: string; title: string; description?: string }[]>();
     for (const s of gallerySessions) {
       for (const p of s.photos) {
         if (!p.transactionId) continue;
         const list = m.get(p.transactionId) ?? [];
-        list.push({ photo: p, title: s.title, description: s.notes });
+        list.push({ photo: p, sessionId: s._id, title: s.title, description: s.notes });
         m.set(p.transactionId, list);
       }
     }
@@ -211,6 +211,35 @@ export default function FichaRapidaPage() {
     qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
   };
 
+  // Borrar movimiento: borra el mov y, con sus fotos vinculadas, según la
+  // elección: borrarlas también o solo desvincularlas (quedan en la galería).
+  const confirmDeleteMovement = async () => {
+    if (!patient || !toDelete) return;
+    const tx = toDelete;
+    const photos = photosByTx.get(tx._id) ?? [];
+    const alsoDelete = alsoDeletePhotos;
+    setToDelete(null);
+    setAlsoDeletePhotos(false);
+    try {
+      await delMut.mutateAsync(tx._id);
+      for (const item of photos) {
+        if (alsoDelete) await galleryApi.removePhoto(patient._id, item.sessionId, item.photo._id);
+        else await galleryApi.updatePhoto(patient._id, item.sessionId, item.photo._id, { transactionId: '' });
+      }
+      if (photos.length) qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
+      invalidate();
+      showToast(
+        photos.length && alsoDelete
+          ? `Movimiento y ${photos.length} foto${photos.length === 1 ? '' : 's'} borrados`
+          : photos.length
+            ? `Movimiento borrado · ${photos.length} foto${photos.length === 1 ? '' : 's'} quedaron en la galería`
+            : 'Movimiento borrado',
+      );
+    } catch {
+      showToast('No se pudo borrar', 'error');
+    }
+  };
+
   const submit = async () => {
     if (!patient || submitting) return;
     const amt = Number(amount);
@@ -267,6 +296,7 @@ export default function FichaRapidaPage() {
   };
 
   const [toDelete, setToDelete] = useState<Transaction | null>(null);
+  const [alsoDeletePhotos, setAlsoDeletePhotos] = useState(false);
   const [odoOpen, setOdoOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [zoomPhoto, setZoomPhoto] = useState<
@@ -721,7 +751,7 @@ export default function FichaRapidaPage() {
                           <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEdit(t)}>
                             <Icon name="edit" size={15} />
                           </button>
-                          <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => setToDelete(t)} style={{ color: 'var(--danger)' }}>
+                          <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => { setAlsoDeletePhotos(false); setToDelete(t); }} style={{ color: 'var(--danger)' }}>
                             <Icon name="trash" size={15} />
                           </button>
                         </span>
@@ -747,20 +777,40 @@ export default function FichaRapidaPage() {
         </div>
       </div>
 
-      <ConfirmDialog
-        open={!!toDelete}
-        title="¿Borrar este movimiento?"
-        message="No se puede deshacer. Se recalcula el saldo de la cuenta."
-        confirmLabel="Borrar"
-        danger
-        onConfirm={() => {
-          if (toDelete) {
-            delMut.mutate(toDelete._id, { onSuccess: () => { invalidate(); showToast('Movimiento borrado'); } });
-          }
-          setToDelete(null);
-        }}
-        onCancel={() => setToDelete(null)}
-      />
+      {(() => {
+        const delPhotos = toDelete ? (photosByTx.get(toDelete._id) ?? []) : [];
+        const n = delPhotos.length;
+        return (
+          <ConfirmDialog
+            open={!!toDelete}
+            title="¿Borrar este movimiento?"
+            message="No se puede deshacer. Se recalcula el saldo de la cuenta."
+            confirmLabel="Borrar"
+            danger
+            extra={
+              n > 0 ? (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: 'var(--text-secondary)', cursor: 'pointer', lineHeight: 1.4 }}>
+                  <input
+                    type="checkbox"
+                    checked={alsoDeletePhotos}
+                    onChange={e => setAlsoDeletePhotos(e.target.checked)}
+                    style={{ marginTop: 2, flexShrink: 0 }}
+                  />
+                  <span>
+                    Borrar también {n === 1 ? 'la foto' : `las ${n} fotos`} vinculada{n === 1 ? '' : 's'}.
+                    <br />
+                    <span style={{ color: 'var(--text-tertiary)' }}>
+                      Si no, {n === 1 ? 'queda' : 'quedan'} en la galería como “Sin movimiento”.
+                    </span>
+                  </span>
+                </label>
+              ) : undefined
+            }
+            onConfirm={confirmDeleteMovement}
+            onCancel={() => { setToDelete(null); setAlsoDeletePhotos(false); }}
+          />
+        );
+      })()}
 
       <CustomAmountsModal open={customOpen} initial={quickAmounts} onClose={() => setCustomOpen(false)} />
       <CustomTreatmentsModal open={customTreatOpen} initial={treatments} onClose={() => setCustomTreatOpen(false)} />

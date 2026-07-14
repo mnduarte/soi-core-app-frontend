@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
+import { MobileMenuButton } from './MobileMenuButton';
 
 interface PageHeaderProps {
   title: string;
@@ -14,6 +15,7 @@ export function PageHeader({ title, sub, actions, icon, accent }: PageHeaderProp
   return (
     <div className="page-header">
       <div className="row" style={{ gap: 12 }}>
+        <MobileMenuButton />
         {icon && (
           <div
             style={{

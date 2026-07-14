@@ -9,6 +9,7 @@ import {
 import { patientsApi, type Patient } from '../api/patients';
 import { useUIStore } from '../store/ui.store';
 import { Icon } from '../components/common/Icon';
+import { MobileMenuButton } from '../components/common/MobileMenuButton';
 import { Avatar } from '../components/common/Avatar';
 import { StatusBadge, FichaPendingBadge } from '../components/common/StatusBadge';
 import { ResolveMenu } from '../components/common/ResolveMenu';
@@ -226,6 +227,7 @@ export default function AgendaPage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <MobileMenuButton />
           <div
             style={{
               width: 40,

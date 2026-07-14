@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { patientsApi } from '../api/patients';
+import { MobileMenuButton } from '../components/common/MobileMenuButton';
 import { Icon } from '../components/common/Icon';
 import { Avatar } from '../components/common/Avatar';
 import { GalleryContainer } from '../components/gallery/GalleryContainer';
@@ -55,9 +56,12 @@ export default function GalleryPage() {
   return (
     <div className="content fade-in">
       <div className="page-header">
-        <div>
-          <h1 className="page-title">Galería</h1>
-          <div className="page-sub">Elegí un paciente para ver sus fotos</div>
+        <div className="row" style={{ gap: 12 }}>
+          <MobileMenuButton />
+          <div>
+            <h1 className="page-title">Galería</h1>
+            <div className="page-sub">Elegí un paciente para ver sus fotos</div>
+          </div>
         </div>
       </div>
 

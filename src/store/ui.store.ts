@@ -18,6 +18,10 @@ export type ToastType = 'success' | 'error';
 interface UIStore {
   modal: { kind: ModalKind; props: ModalProps } | null;
   toast: { msg: string; type: ToastType } | null;
+  // Drawer del sidebar en mobile. Vive en el store para que el botón de menú
+  // pueda ir en el header de cada página (y no en una tira aparte).
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
   openModal: (kind: ModalKind, props?: ModalProps) => void;
   closeModal: () => void;
   showToast: (msg: string, type?: ToastType) => void;
@@ -27,6 +31,8 @@ interface UIStore {
 export const useUIStore = create<UIStore>(set => ({
   modal: null,
   toast: null,
+  sidebarOpen: false,
+  setSidebarOpen: open => set({ sidebarOpen: open }),
   openModal: (kind, props = {}) => set({ modal: { kind, props } }),
   closeModal: () => set({ modal: null }),
   showToast: (msg, type = 'success') => set({ toast: { msg, type } }),

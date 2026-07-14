@@ -267,9 +267,6 @@ a { color: inherit; text-decoration: none; }
   background: var(--bg-app);
 }
 
-/* Barra superior mínima — solo visible en mobile (ver media query abajo). */
-.mobile-topbar { display: none; }
-
 .search {
   display: flex;
   align-items: center;
@@ -562,16 +559,6 @@ table.tbl { width: 100%; border-collapse: collapse; }
     backdrop-filter: blur(2px);
     z-index: 90;
     animation: fadeIn 0.2s ease-out;
-  }
-  .mobile-topbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 52px;
-    padding: 0 14px;
-    border-bottom: 1px solid var(--border-subtle);
-    background: var(--bg-surface);
-    flex-shrink: 0;
   }
   .topbar__menu {
     display: inline-flex;

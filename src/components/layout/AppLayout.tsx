@@ -1,18 +1,17 @@
-import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Icon } from '../common/Icon';
 import { ModalHost } from '../modals/ModalHost';
 import { ToastHost } from '../common/Toast';
-import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
+import { useUIStore } from '../../store/ui.store';
 import { useIdleLogout } from '../../hooks/useIdleLogout';
 import { useSessionGuard } from '../../hooks/useSessionGuard';
 import { SubscriptionBanner } from './SubscriptionBanner';
 
 export default function AppLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const openModal = useUIStore(s => s.openModal);
+  const sidebarOpen = useUIStore(s => s.sidebarOpen);
+  const setSidebarOpen = useUIStore(s => s.setSidebarOpen);
   const isImpersonating = useAuthStore(s => s.isImpersonating);
   const user = useAuthStore(s => s.user);
   const clinic = useAuthStore(s => s.clinic);
@@ -89,18 +88,8 @@ export default function AppLayout() {
         {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="main">
-          {/* Barra mínima solo-mobile: acceso al menú (sidebar drawer) + acción
-              rápida. En desktop el sidebar está siempre visible y cada página ya
-              tiene su propio encabezado, así que no hace falta ninguna tira. */}
-          <div className="mobile-topbar">
-            <button className="topbar__menu" onClick={() => setSidebarOpen(true)} title="Menú">
-              <Icon name="menu" size={18} />
-            </button>
-            <div style={{ flex: 1 }} />
-            <button className="btn btn--primary btn--sm" onClick={() => openModal('newAppointment')}>
-              <Icon name="plus" size={13} /> <span>Nuevo turno</span>
-            </button>
-          </div>
+          {/* El botón de menú (mobile) vive dentro del header de cada página
+              (MobileMenuButton), alineado con el ícono + título. */}
           <Outlet />
         </div>
       </div>

@@ -11,6 +11,7 @@ import { usePhotoCategories } from '../../hooks/usePhotoCategories';
 import { useUIStore } from '../../store/ui.store';
 import { GridView } from './GridView';
 import { CustomCategoriesModal } from '../common/CustomCategoriesModal';
+import { MobileMenuButton } from '../common/MobileMenuButton';
 
 // Valor especial de filtro: fotos sin vincular a un movimiento.
 const UNLINKED = '__unlinked__';
@@ -67,10 +68,13 @@ export function GalleryContainer({ patientId, embedded = false }: GalleryContain
     <div className={embedded ? '' : 'content fade-in'}>
       {!embedded && (
         <div className="page-header">
-          <div>
-            <h1 className="page-title">Galería</h1>
-            <div className="page-sub">
-              Fotos de evolución por paciente · subidas desde celular o computadora
+          <div className="row" style={{ gap: 12 }}>
+            <MobileMenuButton />
+            <div>
+              <h1 className="page-title">Galería</h1>
+              <div className="page-sub">
+                Fotos de evolución por paciente · subidas desde celular o computadora
+              </div>
             </div>
           </div>
           <div className="row" style={{ gap: 8 }}>

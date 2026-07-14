@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 
 interface ConfirmDialogProps {
@@ -9,6 +9,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   danger?: boolean;
   icon?: IconName;
+  // Contenido extra entre el mensaje y los botones (ej. un checkbox).
+  extra?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -23,6 +25,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancelar',
   danger = false,
   icon,
+  extra,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -91,6 +94,7 @@ export function ConfirmDialog({
               {message}
             </div>
           )}
+          {extra && <div style={{ paddingLeft: 45, marginTop: 10 }}>{extra}</div>}
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '14px 18px 16px' }}>
           <button className="btn btn--secondary btn--sm" onClick={onCancel}>

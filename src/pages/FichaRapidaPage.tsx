@@ -315,7 +315,7 @@ export default function FichaRapidaPage() {
         icon="clipboard"
         accent="#7C3AED"
         title="Ficha clínica"
-        sub="Registrá tratamientos y pagos en segundos — como el cuaderno, pero sincronizado"
+        sub="Registrá tratamientos y pagos."
       />
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 16 : 28 }}>
         <div className="card" style={{ overflow: 'visible' }}>

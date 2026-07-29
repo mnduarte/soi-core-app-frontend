@@ -113,11 +113,10 @@ export default function AgendaPage() {
       to: range.to.toISOString(),
     }),
     // La agenda la editan varias personas a la vez (recepción + profesional en
-    // distintos dispositivos). Cada navegador tiene su propia cache, así que
-    // refrescamos cada 15s para que un turno cargado en un equipo aparezca en el
-    // otro sin recargar. Solo mientras la pestaña está visible (default de RQ),
-    // para no gastar requests en tablets dormidas.
-    refetchInterval: 15_000,
+    // distintos dispositivos). El refresh cross-device lo maneja el heartbeat
+    // central (useClinicChanges en AppLayout): cuando cambia `appointments` en
+    // otro equipo, invalida esta query. Antes esto pollaba cada 15s por su
+    // cuenta; ahora una sola request general decide qué refrescar.
   });
 
   const { data: patients = [] } = useQuery({

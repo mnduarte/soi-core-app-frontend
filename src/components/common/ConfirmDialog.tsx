@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 
 interface ConfirmDialogProps {
@@ -34,9 +34,21 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [textInput, setTextInput] = useState('');
 
+  // Anti doble-submit: onConfirm se dispara UNA sola vez por apertura del
+  // diálogo. Sin esto, un doble-click rápido (o Enter x2) llama onConfirm dos
+  // veces antes de que el padre desmonte el modal → se crea/borra dos veces.
+  // Se resetea cada vez que el diálogo se vuelve a abrir.
+  const firedRef = useRef(false);
+  const handleConfirm = useCallback(() => {
+    if (firedRef.current) return;
+    firedRef.current = true;
+    onConfirm();
+  }, [onConfirm]);
+
   useEffect(() => {
     if (open) {
       setTextInput('');
+      firedRef.current = false;
     }
   }, [open]);
 
@@ -44,21 +56,21 @@ export function ConfirmDialog({
     if (!open || !requireTextConfirmation) return;
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter' && textInput === requireTextConfirmation) onConfirm();
+      if (e.key === 'Enter' && textInput === requireTextConfirmation) handleConfirm();
     };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [open, onConfirm, onCancel, textInput, requireTextConfirmation]);
+  }, [open, handleConfirm, onCancel, textInput, requireTextConfirmation]);
 
   useEffect(() => {
     if (!open || requireTextConfirmation) return;
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter') onConfirm();
+      if (e.key === 'Enter') handleConfirm();
     };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [open, onConfirm, onCancel, requireTextConfirmation]);
+  }, [open, handleConfirm, onCancel, requireTextConfirmation]);
 
   if (!open) return null;
 
@@ -144,7 +156,7 @@ export function ConfirmDialog({
           </button>
           <button
             className="btn btn--sm"
-            onClick={onConfirm}
+            onClick={handleConfirm}
             disabled={requireTextConfirmation ? textInput !== requireTextConfirmation : false}
             style={{
               background: accent,

@@ -199,6 +199,11 @@ export function LibretaView({
   };
 
   const [confirmCreatePatient, setConfirmCreatePatient] = useState<string | null>(null);
+  // Anti doble-submit: bloquea que dos llamadas casi simultáneas a anotar()
+  // (doble-click en "Anotar"/"Sobreturno" antes de que el botón se deshabilite)
+  // creen dos turnos. La guarda de arriba está en el ConfirmDialog; esta cubre
+  // el path directo (paciente ya vinculado, sin diálogo de por medio).
+  const submittingRef = useRef(false);
 
   const anotar = async (patientIdOverride?: string) => {
     const name = patientName.trim();
@@ -215,35 +220,41 @@ export function LibretaView({
       return;
     }
 
-    const [h, m] = time.split(':').map(Number);
-    const start = new Date(selectedDate);
-    start.setHours(h, m, 0, 0);
-    const end = new Date(start.getTime() + duration * 60_000);
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      const [h, m] = time.split(':').map(Number);
+      const start = new Date(selectedDate);
+      start.setHours(h, m, 0, 0);
+      const end = new Date(start.getTime() + duration * 60_000);
 
-    // El sobreturno se detecta solo (aviso suave inline) y se apila sin diálogo.
-    await createMut.mutateAsync({
-      patientId: finalPatientId ?? undefined,
-      patientName: name,
-      startsAt: start.toISOString(),
-      endsAt: end.toISOString(),
-      title: trabajo.trim() || undefined,
-      allowOverlap: isSobreturno,
-    });
-    qc.invalidateQueries({ queryKey: ['appointments'] });
+      // El sobreturno se detecta solo (aviso suave inline) y se apila sin diálogo.
+      await createMut.mutateAsync({
+        patientId: finalPatientId ?? undefined,
+        patientName: name,
+        startsAt: start.toISOString(),
+        endsAt: end.toISOString(),
+        title: trabajo.trim() || undefined,
+        allowOverlap: isSobreturno,
+      });
+      qc.invalidateQueries({ queryKey: ['appointments'] });
 
-    const firstName = ((finalPatientId && patientMap.get(finalPatientId)?.name) || name).split(' ')[0];
-    showToast(
-      isSobreturno
-        ? `¡Listo! Sobreturno de ${firstName} anotado`
-        : `¡Listo! Turno de ${firstName} anotado`,
-    );
+      const firstName = ((finalPatientId && patientMap.get(finalPatientId)?.name) || name).split(' ')[0];
+      showToast(
+        isSobreturno
+          ? `¡Listo! Sobreturno de ${firstName} anotado`
+          : `¡Listo! Turno de ${firstName} anotado`,
+      );
 
-    // Solo limpiar los campos: sin saltar de horario ni robar el foco, para que
-    // el usuario navegue libre por la lista.
-    setPatientId(null);
-    setPatientName('');
-    setTrabajo('');
-    setSearchOpen(false);
+      // Solo limpiar los campos: sin saltar de horario ni robar el foco, para que
+      // el usuario navegue libre por la lista.
+      setPatientId(null);
+      setPatientName('');
+      setTrabajo('');
+      setSearchOpen(false);
+    } finally {
+      submittingRef.current = false;
+    }
   };
 
   const addChip = (c: string) => setTrabajo(t => (t.trim() ? `${t.trim()} ${c}` : c));
@@ -764,6 +775,7 @@ export function LibretaView({
           message={`¿Desea crear paciente "${confirmCreatePatient}" y agendar el turno?`}
           confirmLabel="Crear y anotar"
           onConfirm={() => {
+            if (quickCreateMut.isPending) return;
             quickCreateMut.mutate(confirmCreatePatient);
             setConfirmCreatePatient(null);
           }}

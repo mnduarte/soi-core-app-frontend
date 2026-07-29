@@ -50,9 +50,10 @@ export default function PatientsPage() {
   const { data: patients = [], isLoading } = useQuery({
     queryKey: ['patients', debouncedSearch],
     queryFn: () => patientsApi.findAll(debouncedSearch || undefined),
-    // Un paciente cargado en otro dispositivo aparece acá sin recargar (y baja el
-    // riesgo de cargar un duplicado). Solo mientras la pestaña está visible.
-    refetchInterval: 15_000,
+    // Un paciente cargado en otro dispositivo aparece acá sin recargar (y baja
+    // el riesgo de cargar un duplicado). El refresh lo dispara el heartbeat
+    // central (useClinicChanges en AppLayout) al detectar cambios en `patients`,
+    // en vez de pollear esta lista cada 15s por su cuenta.
   });
 
   // DNI duplicados (mismo DNI en 2+ fichas) → banner de reconciliación.

@@ -7,6 +7,7 @@ import { useAuthStore } from '../../store/auth.store';
 import { useUIStore } from '../../store/ui.store';
 import { useIdleLogout } from '../../hooks/useIdleLogout';
 import { useSessionGuard } from '../../hooks/useSessionGuard';
+import { useClinicChanges } from '../../hooks/useClinicChanges';
 import { SubscriptionBanner } from './SubscriptionBanner';
 
 export default function AppLayout() {
@@ -18,6 +19,9 @@ export default function AppLayout() {
   const clearAuth = useAuthStore(s => s.clearAuth);
   useIdleLogout();
   useSessionGuard();
+  // Heartbeat de sync cross-device: refresca agenda/pacientes/ficha cuando algo
+  // cambia en otro dispositivo, sin pollear cada lista por separado.
+  useClinicChanges();
 
   const handleExitImpersonation = () => {
     clearAuth();

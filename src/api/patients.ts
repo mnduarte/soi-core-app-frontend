@@ -51,6 +51,10 @@ export const patientsApi = {
     apiClient
       .post<{ data: ScanFichaResult }>('/patients/scan', { image, mediaType })
       .then(r => r.data.data),
+
+  // Crear paciente rápido desde agenda: solo nombre (se splitea automáticamente).
+  quickCreate: (fullName: string) =>
+    apiClient.post<{ data: Patient }>('/patients/quick-create', { fullName }).then(r => r.data.data),
 };
 
 export interface ScanFichaResult {

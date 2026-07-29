@@ -24,6 +24,8 @@ export interface TreatmentItem {
   price: number;
   status: TreatmentItemStatus;
   estimatedDate?: string;
+  // Fecha en que se marcó hecho (la sella el backend). Solo presente si COMPLETED.
+  completedAt?: string;
   notes?: string;
 }
 

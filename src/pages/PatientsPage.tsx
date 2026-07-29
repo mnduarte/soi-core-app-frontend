@@ -50,6 +50,9 @@ export default function PatientsPage() {
   const { data: patients = [], isLoading } = useQuery({
     queryKey: ['patients', debouncedSearch],
     queryFn: () => patientsApi.findAll(debouncedSearch || undefined),
+    // Un paciente cargado en otro dispositivo aparece acá sin recargar (y baja el
+    // riesgo de cargar un duplicado). Solo mientras la pestaña está visible.
+    refetchInterval: 15_000,
   });
 
   // DNI duplicados (mismo DNI en 2+ fichas) → banner de reconciliación.
@@ -214,6 +217,7 @@ export default function PatientsPage() {
         message="Se borran también sus turnos y todo lo cargado en su ficha (cuenta corriente, odontograma, evoluciones). No se puede deshacer."
         confirmLabel="Eliminar paciente"
         danger
+        requireTextConfirmation="eliminar"
         onConfirm={() => {
           if (toDelete) deleteMut.mutate(toDelete._id);
           setToDelete(null);

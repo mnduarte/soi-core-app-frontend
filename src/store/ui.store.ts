@@ -7,6 +7,8 @@ export interface ModalProps {
   defaultStart?: string;
   // Para subir fotos vinculadas a un movimiento (cuenta corriente).
   transactionId?: string;
+  // Para subir fotos vinculadas a un trabajo (item del plan de tratamiento).
+  treatmentItemId?: string;
   // Callback cuando el modal de fotos terminó de subir (para vincular después).
   onUploaded?: (
     refs: { sessionId: string; photoId: string; url: string; type?: string; title?: string; description?: string }[],

@@ -13,8 +13,11 @@ import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { Icon } from '../common/Icon';
 import { Avatar } from '../common/Avatar';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { StatusBadge, FichaPendingBadge } from '../common/StatusBadge';
 import { ResolveMenu } from '../common/ResolveMenu';
+import { PatientPicker } from '../common/PatientPicker';
+import { NewPatientModal } from '../modals/NewPatientModal';
 import { CustomTreatmentsModal } from '../common/CustomTreatmentsModal';
 import { CustomSlotsModal } from '../common/CustomSlotsModal';
 import { AppointmentReminderModal } from './AppointmentReminderModal';
@@ -60,6 +63,7 @@ interface LibretaViewProps {
   onReschedule: (appt: Appointment) => void;
   onOpenFicha: (appt: Appointment) => void;
   onDelete: (appt: Appointment) => void;
+  onEditPatient: (patientId: string) => void;
 }
 
 export function LibretaView({
@@ -73,6 +77,7 @@ export function LibretaView({
   onReschedule,
   onOpenFicha,
   onDelete,
+  onEditPatient,
 }: LibretaViewProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
@@ -109,6 +114,19 @@ export function LibretaView({
   const slots = settings?.slotTimes?.length ? settings.slotTimes : TIMES;
   const [customSlotsOpen, setCustomSlotsOpen] = useState(false);
 
+  // Crear paciente rápido desde búsqueda inline
+  const quickCreateMut = useMutation({
+    mutationFn: (fullName: string) => patientsApi.quickCreate(fullName),
+    onSuccess: (newPatient, fullName) => {
+      pickPatient(newPatient);
+      setSearchOpen(false);
+      showToast(`${newPatient.name || fullName} creado ✓`);
+      // Si se creó con Enter (desde onKeyDown), auto-agregar el turno
+      setTimeout(() => anotar(), 50);
+    },
+    onError: () => showToast('No se pudo crear el paciente', 'error'),
+  });
+
   // Precarga el paciente si venimos de "Guardar y agendar turno" (?patientId=…).
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -126,9 +144,25 @@ export function LibretaView({
   // Recordatorio de turno por WhatsApp.
   const clinicName = useAuthStore(s => s.clinic?.name) ?? 'tu consultorio';
   const [remindTarget, setRemindTarget] = useState<Appointment | null>(null);
+  const [linkPatientTarget, setLinkPatientTarget] = useState<Appointment | null>(null);
+  // Paciente elegido en el modal de vincular (antes de confirmar con "Vincular").
+  const [linkSelected, setLinkSelected] = useState<string | null>(null);
+  // Turno para el que se está creando un paciente nuevo (se vincula al crearlo).
+  const [createLinkTarget, setCreateLinkTarget] = useState<Appointment | null>(null);
   const remindMut = useMutation({
     mutationFn: (apptId: string) => appointmentsApi.markReminderSent(apptId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['appointments'] }),
+  });
+  const linkMut = useMutation({
+    mutationFn: ({ apptId, patientId }: { apptId: string; patientId: string }) =>
+      appointmentsApi.update(apptId, { patientId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+      setLinkPatientTarget(null);
+      setLinkSelected(null);
+      showToast('Paciente vinculado ✓');
+    },
+    onError: () => showToast('No se pudo vincular el paciente', 'error'),
   });
   const dateLabel = selectedDate.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -164,13 +198,23 @@ export function LibretaView({
     setSearchOpen(false);
   };
 
-  const anotar = async () => {
+  const [confirmCreatePatient, setConfirmCreatePatient] = useState<string | null>(null);
+
+  const anotar = async (patientIdOverride?: string) => {
     const name = patientName.trim();
     if (!name) {
       showToast('Escribí un paciente');
       nameRef.current?.focus();
       return;
     }
+
+    const finalPatientId = patientIdOverride || patientId;
+    // Si no hay paciente vinculado y no es un override (creación rápida), pedir confirm
+    if (!finalPatientId && !patientIdOverride) {
+      setConfirmCreatePatient(name);
+      return;
+    }
+
     const [h, m] = time.split(':').map(Number);
     const start = new Date(selectedDate);
     start.setHours(h, m, 0, 0);
@@ -178,7 +222,7 @@ export function LibretaView({
 
     // El sobreturno se detecta solo (aviso suave inline) y se apila sin diálogo.
     await createMut.mutateAsync({
-      patientId: patientId ?? undefined,
+      patientId: finalPatientId ?? undefined,
       patientName: name,
       startsAt: start.toISOString(),
       endsAt: end.toISOString(),
@@ -187,7 +231,7 @@ export function LibretaView({
     });
     qc.invalidateQueries({ queryKey: ['appointments'] });
 
-    const firstName = ((patientId && patientMap.get(patientId)?.name) || name).split(' ')[0];
+    const firstName = ((finalPatientId && patientMap.get(finalPatientId)?.name) || name).split(' ')[0];
     showToast(
       isSobreturno
         ? `¡Listo! Sobreturno de ${firstName} anotado`
@@ -374,7 +418,14 @@ export function LibretaView({
                   onFocus={() => setSearchOpen(true)}
                   onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
                   onKeyDown={e => {
-                    if (e.key === 'Enter') anotar();
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (patientName.trim() && !patientId && searchResults.length === 0) {
+                        quickCreateMut.mutate(patientName.trim());
+                      } else if (patientId) {
+                        anotar();
+                      }
+                    }
                     if (e.key === 'Escape') setSearchOpen(false);
                   }}
                   style={{ width: '100%', paddingLeft: 32 }}
@@ -403,7 +454,30 @@ export function LibretaView({
                       overflowY: 'auto',
                     }}
                   >
-                    {searchResults.length === 0 && (
+                    {searchResults.length === 0 && patientName.trim() && (
+                      <div
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          quickCreateMut.mutate(patientName.trim());
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          cursor: quickCreateMut.isPending ? 'wait' : 'pointer',
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: 'var(--brand-primary-600)',
+                          background: 'var(--brand-primary-50)',
+                          opacity: quickCreateMut.isPending ? 0.6 : 1,
+                        }}
+                      >
+                        <Icon name="plus" size={14} />
+                        {quickCreateMut.isPending ? 'Creando...' : `Crear: ${patientName.trim()}`}
+                      </div>
+                    )}
+                    {searchResults.length === 0 && !patientName.trim() && (
                       <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-tertiary)' }}>
                         Sin coincidencias.
                       </div>
@@ -509,7 +583,7 @@ export function LibretaView({
 
               <button
                 className="btn btn--primary"
-                onClick={anotar}
+                onClick={() => anotar()}
                 disabled={createMut.isPending}
                 style={{
                   flexShrink: 0,
@@ -565,21 +639,22 @@ export function LibretaView({
                             <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>{a.title}</span>
                           )}
                           {!a.patientId && (
-                            <span
-                              style={{
-                                fontSize: 10,
-                                color: 'var(--text-tertiary)',
-                                border: '1px solid var(--border-subtle)',
-                                borderRadius: 5,
-                                padding: '0 5px',
-                              }}
+                            <button
+                              className="btn btn--secondary"
+                              onClick={e => { e.stopPropagation(); setLinkSelected(null); setLinkPatientTarget(a); }}
+                              style={{ height: 24, padding: '0 9px', fontSize: 11, borderRadius: 999 }}
                             >
-                              sin ficha
-                            </span>
+                              Vincular paciente
+                            </button>
                           )}
                         </div>
                         <div className="row" style={{ gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                           <StatusBadge status={a.status} />
+                          {!a.patientId && (
+                            <span className="badge badge--warning" title="Turno cargado en la agenda sin ficha de paciente vinculada">
+                              <Icon name="clipboard" size={10} /> Sin ficha
+                            </span>
+                          )}
                           {isFichaPending(a) && a.patientId && (
                             <FichaPendingBadge onClick={() => onOpenFicha(a)} />
                           )}
@@ -590,34 +665,46 @@ export function LibretaView({
                           )}
                         </div>
                       </div>
-                      {canRemind && (
-                        <button
-                          className="btn btn--icon"
-                          title={a.reminderSent ? 'Reenviar recordatorio por WhatsApp' : 'Recordar por WhatsApp'}
-                          onClick={e => { e.stopPropagation(); setRemindTarget(a); }}
-                          style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: '#25D366' }}
-                        >
-                          <Icon name="whatsapp" size={18} />
-                        </button>
-                      )}
-                      {a.patientId && (
-                        <button
-                          className="btn btn--icon"
-                          title="Abrir ficha clínica"
-                          onClick={e => { e.stopPropagation(); onOpenPatient(a.patientId!); }}
-                          style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--brand-primary-600)' }}
-                        >
-                          <Icon name="clipboard" size={17} />
-                        </button>
-                      )}
-                      <ResolveMenu
-                        appt={a}
-                        onResolve={onResolve}
-                        onOpenFicha={onOpenFicha}
-                        onReschedule={onReschedule}
-                        onDelete={onDelete}
-                        onRemind={canRemind ? () => setRemindTarget(a) : undefined}
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {canRemind && (
+                          <button
+                            className="btn btn--icon"
+                            title={a.reminderSent ? 'Reenviar recordatorio por WhatsApp' : 'Recordar por WhatsApp'}
+                            onClick={e => { e.stopPropagation(); setRemindTarget(a); }}
+                            style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: '#25D366' }}
+                          >
+                            <Icon name="whatsapp" size={18} />
+                          </button>
+                        )}
+                        {a.patientId && (
+                          <>
+                            <button
+                              className="btn btn--icon"
+                              title="Editar paciente"
+                              onClick={e => { e.stopPropagation(); onEditPatient?.(a.patientId!); }}
+                              style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}
+                            >
+                              <Icon name="edit" size={17} />
+                            </button>
+                            <button
+                              className="btn btn--icon"
+                              title="Abrir ficha clínica"
+                              onClick={e => { e.stopPropagation(); onOpenPatient(a.patientId!); }}
+                              style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--brand-primary-600)' }}
+                            >
+                              <Icon name="clipboard" size={17} />
+                            </button>
+                          </>
+                        )}
+                        <ResolveMenu
+                          appt={a}
+                          onResolve={onResolve}
+                          onOpenFicha={onOpenFicha}
+                          onReschedule={onReschedule}
+                          onDelete={onDelete}
+                          onRemind={canRemind ? () => setRemindTarget(a) : undefined}
+                        />
+                      </div>
                     </div>
                   );
                 })}
@@ -668,6 +755,114 @@ export function LibretaView({
           }}
         />
       )}
+
+      {/* Confirm crear paciente si no existe y presiona Anotar */}
+      {confirmCreatePatient && (
+        <ConfirmDialog
+          open={true}
+          title="Este paciente no existe"
+          message={`¿Desea crear paciente "${confirmCreatePatient}" y agendar el turno?`}
+          confirmLabel="Crear y anotar"
+          onConfirm={() => {
+            quickCreateMut.mutate(confirmCreatePatient);
+            setConfirmCreatePatient(null);
+          }}
+          onCancel={() => setConfirmCreatePatient(null)}
+        />
+      )}
+
+      {/* Modal para vincular paciente a turno sin ficha */}
+      {linkPatientTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 1100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setLinkPatientTarget(null)}
+        >
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 440,
+              width: '100%',
+              boxShadow: 'var(--shadow-xl)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Vincular paciente</h3>
+              <button
+                onClick={() => setLinkPatientTarget(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-secondary)' }}>
+              Elegí el paciente para <strong>{linkPatientTarget.patientName || 'este turno'}</strong>, o creá uno nuevo.
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <PatientPicker value={linkSelected} onChange={setLinkSelected} />
+            </div>
+            <button
+              className="btn btn--ghost"
+              onClick={() => {
+                setCreateLinkTarget(linkPatientTarget);
+                setLinkPatientTarget(null);
+              }}
+              style={{ width: '100%', marginBottom: 16, justifyContent: 'center' }}
+            >
+              + Crear paciente nuevo
+            </button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                className="btn btn--secondary"
+                onClick={() => setLinkPatientTarget(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn--primary"
+                disabled={!linkSelected || linkMut.isPending}
+                onClick={() => {
+                  if (linkSelected) {
+                    linkMut.mutate({ apptId: linkPatientTarget._id, patientId: linkSelected });
+                  }
+                }}
+              >
+                {linkMut.isPending ? 'Vinculando…' : 'Vincular'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alta de paciente nuevo que se vincula al turno sin ficha */}
+      <NewPatientModal
+        open={!!createLinkTarget}
+        initialName={createLinkTarget?.patientName}
+        onClose={() => setCreateLinkTarget(null)}
+        onCreated={patient => {
+          if (createLinkTarget) {
+            linkMut.mutate({ apptId: createLinkTarget._id, patientId: patient._id });
+          }
+          setCreateLinkTarget(null);
+        }}
+      />
     </div>
   );
 }

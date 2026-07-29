@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../../api/patients';
 import { useUIStore } from '../../store/ui.store';
 import { patientAge } from '../../lib/format';
@@ -29,6 +29,18 @@ export function PatientPicker({ value, onChange, placeholder = 'Buscar paciente‚
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const openModal = useUIStore(s => s.openModal);
+  const showToast = useUIStore(s => s.showToast);
+
+  const quickCreateMut = useMutation({
+    mutationFn: (fullName: string) => patientsApi.quickCreate(fullName),
+    onSuccess: (newPatient) => {
+      onChange(newPatient._id);
+      setOpen(false);
+      setQuery('');
+      showToast(`${newPatient.name} ${newPatient.lastName} creado ‚úì`);
+    },
+    onError: () => showToast('No se pudo crear el paciente', 'error'),
+  });
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -118,7 +130,30 @@ export function PatientPicker({ value, onChange, placeholder = 'Buscar paciente‚
             />
           </div>
           <div style={{ overflow: 'auto' }}>
-            {matches.length === 0 && (
+            {matches.length === 0 && query.trim() && (
+              // Si hay query pero no hay resultados, mostrar opci√≥n "Crear"
+              <div
+                onClick={() => {
+                  quickCreateMut.mutate(query.trim());
+                }}
+                style={{
+                  padding: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  cursor: quickCreateMut.isPending ? 'wait' : 'pointer',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: 'var(--brand-primary-600)',
+                  background: 'var(--brand-primary-50)',
+                  opacity: quickCreateMut.isPending ? 0.6 : 1,
+                }}
+              >
+                {!quickCreateMut.isPending && <Icon name="plus" size={14} />}
+                {quickCreateMut.isPending ? 'Creando...' : `Crear: ${query.trim()}`}
+              </div>
+            )}
+            {matches.length === 0 && !query.trim() && (
               <div style={{ padding: 16, fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
                 Sin resultados.
               </div>

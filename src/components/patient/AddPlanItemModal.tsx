@@ -3,10 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, FormField } from '../common/Modal';
 import { Icon } from '../common/Icon';
 import { DatePicker } from '../common/DatePicker';
-import {
-  treatmentPlansApi,
-  type TreatmentItemStatus,
-} from '../../api/treatment-plans';
+import { worksApi, type WorkStatus } from '../../api/works';
 import { useUIStore } from '../../store/ui.store';
 
 interface AddPlanItemModalProps {
@@ -20,7 +17,7 @@ const COMMON_PRESTACIONES = [
   'Ortodoncia — ajuste', 'Blanqueamiento', 'Corona', 'Implante',
 ];
 
-const STATUSES: { key: TreatmentItemStatus; label: string }[] = [
+const STATUSES: { key: WorkStatus; label: string }[] = [
   { key: 'PROPOSED',    label: 'Propuesto' },
   { key: 'SCHEDULED',   label: 'Programado' },
   { key: 'IN_PROGRESS', label: 'En curso' },
@@ -35,7 +32,7 @@ export function AddPlanItemModal({ open, onClose, patientId }: AddPlanItemModalP
   const [diente, setDiente] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<TreatmentItemStatus>('PROPOSED');
+  const [status, setStatus] = useState<WorkStatus>('PROPOSED');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -52,14 +49,15 @@ export function AddPlanItemModal({ open, onClose, patientId }: AddPlanItemModalP
 
   const mutation = useMutation({
     mutationFn: () =>
-      treatmentPlansApi.addItem(patientId, {
+      worksApi.create({
+        patientId,
         description: description.trim(),
         toothNumber: diente.trim() || undefined,
         status,
         estimatedDate: estimatedDate || undefined,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['treatment-plans', patientId] });
+      qc.invalidateQueries({ queryKey: ['works', patientId] });
       showToast(`Agregado al plan — ${description}`);
       onClose();
     },

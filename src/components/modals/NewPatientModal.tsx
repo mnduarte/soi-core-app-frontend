@@ -15,6 +15,13 @@ interface NewPatientModalProps {
   onClose: () => void;
   // Si viene, el modal edita ese paciente en vez de crear uno nuevo.
   editPatientId?: string;
+  // Si viene, tras crear se llama con el paciente recién creado (para vincularlo
+  // a algo, ej. un turno sin ficha) en vez de la navegación por defecto.
+  onCreated?: (patient: Patient) => void;
+  // Precarga el campo "Nombre y apellido" al abrir en modo alta (ej. el nombre
+  // suelto del turno de la agenda que se está por vincular). En alta desde cero
+  // no se pasa y el campo queda vacío.
+  initialName?: string;
 }
 
 const OBRA_SOCIAL_OPTIONS = ['Particular', 'OSDE', 'Swiss Medical', 'Galeno', 'IOMA', 'PAMI', 'Otra'];
@@ -95,11 +102,14 @@ function computeAge(iso: string): number | null {
   return a >= 0 && a < 150 ? a : null;
 }
 
-export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModalProps) {
+export function NewPatientModal({ open, onClose, editPatientId, onCreated, initialName }: NewPatientModalProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
   const navigate = useNavigate();
   const editing = Boolean(editPatientId);
+  // Alta desde un turno de la agenda: el turno ya existe, así que no ofrecemos
+  // "agendar turno" y el botón crea + vincula.
+  const linking = Boolean(onCreated);
   const [data, setData] = useState<FormState>(EMPTY);
   const [error, setError] = useState('');
 
@@ -124,7 +134,9 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
   // modal becomes visible again, even if the previous close came from a submit.
   // En edición no lo blanqueamos: se precarga con el paciente (efecto de abajo).
   useEffect(() => {
-    if (!editing) setData(EMPTY);
+    // En alta precargamos el nombre si vino (ej. turno suelto de la agenda);
+    // si no, queda vacío como en un alta desde cero.
+    if (!editing) setData(initialName ? { ...EMPTY, fullName: initialName } : EMPTY);
     setError('');
     setScanError('');
     setScanDone(false);
@@ -133,7 +145,7 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
     setDupReason(null);
     setDupDismissed(false);
     setScanning(false);
-  }, [open, editing]);
+  }, [open, editing, initialName]);
 
   // Aviso de duplicado al cargar a mano: por DNI (fuerte) o nombre+apellido.
   // Es suave: se puede crear igual (el DNI no bloquea). No corre en edición.
@@ -298,6 +310,14 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
       onClose();
       return;
     }
+    // Alta desde un flujo que necesita el paciente creado (ej. vincularlo a un
+    // turno sin ficha): delega en el callback y no navega.
+    if (onCreated) {
+      showToast(`¡Listo! Ficha de ${saved.name} creada`);
+      onCreated(saved);
+      onClose();
+      return;
+    }
     if (mode === 'andSchedule') {
       showToast(`¡Listo! Ficha de ${saved.name} creada`);
       onClose();
@@ -315,11 +335,11 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
       onClose={onClose}
       title={editing ? 'Editar paciente' : 'Nuevo paciente'}
       sub={editing ? 'Actualizá los datos del paciente.' : 'Crear ficha. Solo lo esencial — el resto se completa después.'}
-      width={680}
+      width={620}
       footer={
         <>
           <button className="btn btn--ghost" onClick={onClose} disabled={mutation.isPending}>Cancelar</button>
-          {!editing && (
+          {!editing && !linking && (
             <button
               className="btn btn--secondary"
               disabled={!isValid || mutation.isPending}
@@ -338,6 +358,8 @@ export function NewPatientModal({ open, onClose, editPatientId }: NewPatientModa
               ? 'Guardando…'
               : editing
               ? 'Guardar cambios'
+              : linking
+              ? 'Crear y vincular'
               : 'Crear ficha'}
           </button>
         </>

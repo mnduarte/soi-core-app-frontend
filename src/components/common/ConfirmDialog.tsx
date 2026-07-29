@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 
 interface ConfirmDialogProps {
@@ -11,6 +11,8 @@ interface ConfirmDialogProps {
   icon?: IconName;
   // Contenido extra entre el mensaje y los botones (ej. un checkbox).
   extra?: ReactNode;
+  // Para operaciones destructivas: requiere que el usuario escriba este texto exacto.
+  requireTextConfirmation?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -26,18 +28,37 @@ export function ConfirmDialog({
   danger = false,
   icon,
   extra,
+  requireTextConfirmation,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const [textInput, setTextInput] = useState('');
+
   useEffect(() => {
-    if (!open) return;
+    if (open) {
+      setTextInput('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !requireTextConfirmation) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Enter' && textInput === requireTextConfirmation) onConfirm();
+    };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [open, onConfirm, onCancel, textInput, requireTextConfirmation]);
+
+  useEffect(() => {
+    if (!open || requireTextConfirmation) return;
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
       if (e.key === 'Enter') onConfirm();
     };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [open, onConfirm, onCancel]);
+  }, [open, onConfirm, onCancel, requireTextConfirmation]);
 
   if (!open) return null;
 
@@ -94,6 +115,27 @@ export function ConfirmDialog({
               {message}
             </div>
           )}
+          {requireTextConfirmation && (
+            <div style={{ paddingLeft: 45, marginTop: 12 }}>
+              <input
+                autoFocus
+                type="text"
+                value={textInput}
+                onChange={e => setTextInput(e.target.value)}
+                placeholder={`Escribe "${requireTextConfirmation}" para confirmar`}
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  fontSize: 12.5,
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 6,
+                  background: 'var(--bg-default)',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          )}
           {extra && <div style={{ paddingLeft: 45, marginTop: 10 }}>{extra}</div>}
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '14px 18px 16px' }}>
@@ -103,7 +145,14 @@ export function ConfirmDialog({
           <button
             className="btn btn--sm"
             onClick={onConfirm}
-            style={{ background: accent, borderColor: accent, color: '#fff' }}
+            disabled={requireTextConfirmation ? textInput !== requireTextConfirmation : false}
+            style={{
+              background: accent,
+              borderColor: accent,
+              color: '#fff',
+              opacity: requireTextConfirmation && textInput !== requireTextConfirmation ? 0.5 : 1,
+              cursor: requireTextConfirmation && textInput !== requireTextConfirmation ? 'not-allowed' : 'pointer',
+            }}
           >
             {confirmLabel}
           </button>

@@ -13,6 +13,8 @@ interface UploadPhotosModalProps {
   defaultPatientId?: string;
   // Si viene, las fotos quedan vinculadas a ese movimiento (cuenta corriente).
   transactionId?: string;
+  // Si viene, las fotos quedan vinculadas a ese trabajo (item del plan).
+  treatmentItemId?: string;
   // Se llama con las fotos subidas (para vincularlas luego desde el formulario).
   onUploaded?: (
     refs: { sessionId: string; photoId: string; url: string; type?: string; title?: string; description?: string }[],
@@ -42,6 +44,7 @@ export function UploadPhotosModal({
   onClose,
   defaultPatientId,
   transactionId,
+  treatmentItemId,
   onUploaded,
 }: UploadPhotosModalProps) {
   const qc = useQueryClient();
@@ -114,7 +117,13 @@ export function UploadPhotosModal({
       // 1) Cada subida crea una sesión (contenedor interno). Si no ponen título,
       // se auto-titula con la categoría o "Fotos".
       const created = await galleryApi.createSession(patientId, {
-        title: title.trim() || (transactionId ? 'Foto de movimiento' : category || 'Fotos'),
+        title:
+          title.trim() ||
+          (treatmentItemId
+            ? 'Foto del trabajo'
+            : transactionId
+              ? 'Foto de movimiento'
+              : category || 'Fotos'),
         notes: notes.trim() || undefined,
       });
       const targetSessionId = created._id;
@@ -141,6 +150,7 @@ export function UploadPhotosModal({
             url: result.secure_url,
             type: category || undefined,
             transactionId,
+            treatmentItemId,
           });
           const newPhoto = updated.photos.find(p => p.publicId === result.public_id);
           if (newPhoto)

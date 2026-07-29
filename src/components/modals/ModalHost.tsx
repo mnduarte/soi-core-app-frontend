@@ -30,6 +30,7 @@ export function ModalHost() {
         onClose={closeModal}
         defaultPatientId={modal?.props?.patientId}
         transactionId={modal?.props?.transactionId}
+        treatmentItemId={modal?.props?.treatmentItemId}
         onUploaded={modal?.props?.onUploaded}
       />
     </>

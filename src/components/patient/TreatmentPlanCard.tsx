@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  treatmentPlansApi,
-  type TreatmentItem,
-  type TreatmentItemStatus,
-} from '../../api/treatment-plans';
+import { worksApi, type Work, type WorkStatus, type CreateWorkInput } from '../../api/works';
 import { Icon, type IconName } from '../common/Icon';
 import { useUIStore } from '../../store/ui.store';
 import { AddPlanItemModal } from './AddPlanItemModal';
@@ -16,7 +12,7 @@ interface TreatmentPlanCardProps {
 // Status taxonomy mirrors the backend enum. The badge variant + dot color align
 // with how the prototype's PLAN_BADGE coded them, so the UI feels familiar to
 // the dentist who worked off the printed ficha.
-const STATUS_LABEL: Record<TreatmentItemStatus, string> = {
+const STATUS_LABEL: Record<WorkStatus, string> = {
   PROPOSED: 'Propuesto',
   SCHEDULED: 'Programado',
   IN_PROGRESS: 'En curso',
@@ -24,7 +20,7 @@ const STATUS_LABEL: Record<TreatmentItemStatus, string> = {
   RECURRENT: 'Recurrente',
   CANCELLED: 'Cancelado',
 };
-const STATUS_VARIANT: Record<TreatmentItemStatus, string> = {
+const STATUS_VARIANT: Record<WorkStatus, string> = {
   PROPOSED: 'warning',
   SCHEDULED: 'brand',
   IN_PROGRESS: 'info',
@@ -32,7 +28,7 @@ const STATUS_VARIANT: Record<TreatmentItemStatus, string> = {
   RECURRENT: 'brand',
   CANCELLED: 'danger',
 };
-const STATUS_DOT: Record<TreatmentItemStatus, string> = {
+const STATUS_DOT: Record<WorkStatus, string> = {
   PROPOSED: 'var(--warning)',
   SCHEDULED: 'var(--brand-primary)',
   IN_PROGRESS: 'var(--info)',
@@ -41,13 +37,7 @@ const STATUS_DOT: Record<TreatmentItemStatus, string> = {
   CANCELLED: 'var(--danger)',
 };
 
-const TERMINAL_STATUSES: TreatmentItemStatus[] = ['COMPLETED', 'CANCELLED'];
-
-// Each item we display in the flat list carries the planId it belongs to,
-// because mutations (update/delete) need both ids to reach the right document.
-interface FlatItem extends TreatmentItem {
-  planId: string;
-}
+const TERMINAL_STATUSES: WorkStatus[] = ['COMPLETED', 'CANCELLED'];
 
 export function TreatmentPlanCard({ patientId }: TreatmentPlanCardProps) {
   const qc = useQueryClient();
@@ -55,18 +45,15 @@ export function TreatmentPlanCard({ patientId }: TreatmentPlanCardProps) {
   const showToast = useUIStore(s => s.showToast);
   const [adding, setAdding] = useState(false);
 
-  const { data: plans = [] } = useQuery({
-    queryKey: ['treatment-plans', patientId],
-    queryFn: () => treatmentPlansApi.findAll(patientId),
+  // Trabajos = colección plana (todos los estados; el sort baja los terminales).
+  const { data: items = [] } = useQuery({
+    queryKey: ['works', patientId],
+    queryFn: () => worksApi.findAll(patientId),
   });
-
-  const items: FlatItem[] = plans.flatMap(p =>
-    p.items.map(it => ({ ...it, planId: p._id })),
-  );
   // Sort: open items first (PROPOSED → SCHEDULED → IN_PROGRESS → RECURRENT),
   // terminal at the bottom; within a bucket, items with estimatedDate sort by
   // that date. This way "qué hay que hacer" is always at the top.
-  const ORDER: Record<TreatmentItemStatus, number> = {
+  const ORDER: Record<WorkStatus, number> = {
     PROPOSED: 0, SCHEDULED: 1, IN_PROGRESS: 2, RECURRENT: 3,
     COMPLETED: 4, CANCELLED: 5,
   };
@@ -82,38 +69,33 @@ export function TreatmentPlanCard({ patientId }: TreatmentPlanCardProps) {
   const pending = items.filter(i => !TERMINAL_STATUSES.includes(i.status)).length;
 
   const updateItemMutation = useMutation({
-    mutationFn: ({ planId, itemId, dto }: { planId: string; itemId: string; dto: Partial<TreatmentItem> }) =>
-      treatmentPlansApi.updateItem(patientId, planId, itemId, dto),
-    // Completar un ítem genera el cargo en la cuenta corriente del backend, así
-    // que refrescamos saldo y movimientos además del plan.
+    mutationFn: ({ workId, dto }: { workId: string; dto: Partial<CreateWorkInput> }) =>
+      worksApi.update(workId, dto),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['treatment-plans', patientId] });
-      qc.invalidateQueries({ queryKey: ['balance'] });
-      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['works', patientId] });
     },
   });
 
   const removeItemMutation = useMutation({
-    mutationFn: ({ planId, itemId }: { planId: string; itemId: string }) =>
-      treatmentPlansApi.removeItem(patientId, planId, itemId),
+    mutationFn: (workId: string) => worksApi.remove(workId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['treatment-plans', patientId] });
+      qc.invalidateQueries({ queryKey: ['works', patientId] });
       showToast('Item eliminado del plan');
     },
   });
 
-  const handleChangeStatus = (item: FlatItem, status: TreatmentItemStatus) => {
-    updateItemMutation.mutate({ planId: item.planId, itemId: item._id, dto: { status } });
+  const handleChangeStatus = (item: Work, status: WorkStatus) => {
+    updateItemMutation.mutate({ workId: item._id, dto: { status } });
   };
-  const handleSchedule = (item: FlatItem) => {
+  const handleSchedule = (item: Work) => {
     // The user can flip the item to SCHEDULED after creating the turno; we
     // pre-fill the patient so the modal opens already pointing at them.
     openModal('newAppointment', { patientId });
     void item;
   };
-  const handleRemove = (item: FlatItem) => {
+  const handleRemove = (item: Work) => {
     if (!confirm(`Eliminar "${item.description}" del plan?`)) return;
-    removeItemMutation.mutate({ planId: item.planId, itemId: item._id });
+    removeItemMutation.mutate(item._id);
   };
 
   return (
@@ -168,9 +150,9 @@ function PlanItemRow({
   onSchedule,
   onRemove,
 }: {
-  item: FlatItem;
+  item: Work;
   showDivider: boolean;
-  onChangeStatus: (s: TreatmentItemStatus) => void;
+  onChangeStatus: (s: WorkStatus) => void;
   onSchedule: () => void;
   onRemove: () => void;
 }) {
@@ -230,8 +212,8 @@ function PlanRowMenu({
   onSchedule,
   onRemove,
 }: {
-  item: FlatItem;
-  onChangeStatus: (s: TreatmentItemStatus) => void;
+  item: Work;
+  onChangeStatus: (s: WorkStatus) => void;
   onSchedule: () => void;
   onRemove: () => void;
 }) {
@@ -250,7 +232,7 @@ function PlanRowMenu({
   // All six statuses, with the current one marked. We surface them flat instead
   // of nesting in a submenu — the popover is short enough to fit them all and
   // it cuts one click per status change.
-  const statuses: TreatmentItemStatus[] = [
+  const statuses: WorkStatus[] = [
     'PROPOSED', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'RECURRENT', 'CANCELLED',
   ];
 

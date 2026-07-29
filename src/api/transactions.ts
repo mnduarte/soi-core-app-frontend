@@ -31,6 +31,15 @@ export const transactionsApi = {
   findAll: (patientId?: string) =>
     apiClient.get<{ data: Transaction[] }>('/transactions', { params: { patientId } }).then(r => r.data.data),
 
+  // Búsqueda server-side (modal de Pagos): rango de fechas + texto + tipo.
+  search: (
+    patientId: string,
+    opts: { from?: string; to?: string; q?: string; type?: TransactionType; limit?: number },
+  ) =>
+    apiClient
+      .get<{ data: Transaction[] }>('/transactions', { params: { patientId, ...opts } })
+      .then(r => r.data.data),
+
   getBalance: (patientId: string) =>
     apiClient.get<{ data: { balance: number } }>(`/transactions/balance/${patientId}`).then(r => r.data.data),
 

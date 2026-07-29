@@ -73,6 +73,7 @@ export function ResolveMenu({
     actions.push({ key: 'delete', icon: 'trash', label: 'Borrar turno', danger: true });
   }
 
+
   const handle = (key: string, e: MouseEvent) => {
     e.stopPropagation();
     setOpen(false);

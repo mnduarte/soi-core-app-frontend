@@ -112,6 +112,12 @@ export default function AgendaPage() {
       from: range.from.toISOString(),
       to: range.to.toISOString(),
     }),
+    // La agenda la editan varias personas a la vez (recepción + profesional en
+    // distintos dispositivos). Cada navegador tiene su propia cache, así que
+    // refrescamos cada 15s para que un turno cargado en un equipo aparezca en el
+    // otro sin recargar. Solo mientras la pestaña está visible (default de RQ),
+    // para no gastar requests en tablets dormidas.
+    refetchInterval: 15_000,
   });
 
   const { data: patients = [] } = useQuery({
@@ -161,6 +167,10 @@ export default function AgendaPage() {
       return;
     }
     setFichaTarget(appt);
+  };
+
+  const handleEditPatient = (patientId: string) => {
+    openModal('newPatient', { patientId });
   };
 
   const todayLabel = selectedDate.toLocaleDateString('es-AR', {
@@ -370,12 +380,13 @@ export default function AgendaPage() {
           now={now}
           isMobile={isMobile}
           onOpenPatient={(id, trabajo) =>
-            navigate(`/patients/${id}${trabajo ? `?trabajo=${encodeURIComponent(trabajo)}` : ''}`)
+            navigate(`/ficha-rapida/${id}${trabajo ? `?trabajo=${encodeURIComponent(trabajo)}` : ''}`)
           }
           onResolve={handleResolve}
           onReschedule={handleReschedule}
           onOpenFicha={handleOpenFicha}
           onDelete={handleDelete}
+          onEditPatient={handleEditPatient}
         />
       )}
       {view === 'day' && (
@@ -384,10 +395,11 @@ export default function AgendaPage() {
           patientMap={patientMap}
           now={now}
           openModal={openModal}
-          onOpenPatient={id => navigate(`/patients/${id}`)}
+          onOpenPatient={id => navigate(`/ficha-rapida/${id}`)}
           onResolve={handleResolve}
           onReschedule={handleReschedule}
           onOpenFicha={handleOpenFicha}
+          onDelete={handleDelete}
           isMobile={isMobile}
         />
       )}
@@ -577,6 +589,7 @@ function DayView({
   onResolve,
   onReschedule,
   onOpenFicha,
+  onDelete,
   isMobile,
 }: {
   appts: Appointment[];
@@ -587,6 +600,7 @@ function DayView({
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
   onOpenFicha: (appt: Appointment) => void;
+  onDelete?: (appt: Appointment) => void;
   isMobile: boolean;
 }) {
   const [hoveredSlot, setHoveredSlot] = useState<number | null>(null);
@@ -687,6 +701,7 @@ function DayView({
                   onResolve={onResolve}
                   onOpenFicha={onOpenFicha}
                   onReschedule={onReschedule}
+                  onDelete={onDelete}
                 />
               </div>
             );

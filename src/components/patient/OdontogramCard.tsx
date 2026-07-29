@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '../common/Icon';
 import {
@@ -605,80 +605,64 @@ function ReferenceCard() {
     </div>
   );
 
+  // Etiqueta de sección y grilla compactas: labels en 1 línea, gaps chicos y
+  // fuente 10.5px para que la leyenda mida ~lo mismo que los dientes y no estire
+  // el modal. Va dentro de un <details> plegable (abierto por defecto → aparece).
+  const sectionLabel: CSSProperties = {
+    fontSize: 10,
+    color: 'var(--text-tertiary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    fontWeight: 600,
+    marginTop: 10,
+    marginBottom: 5,
+  };
+  const legendGrid: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '1px 10px',
+    fontSize: 10.5,
+    lineHeight: 1.35,
+    color: 'var(--text-secondary)',
+  };
+
   return (
-    <div
-      style={{
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 10,
-        padding: 14,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--text-tertiary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          marginBottom: 8,
-          fontWeight: 600,
-        }}
-      >
+    <details className="odo-legend" open>
+      <summary className="odo-legend__summary">
+        <Icon name="chevronDown" size={12} className="odo-legend__chev" />
         Referencias
-      </div>
-      <div className="row" style={{ gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
-        <Row swatch="existing" label="Existente (ya hecho)" />
-        <Row swatch="required" label="Requerida (a hacer · entra al plan)" />
-      </div>
+      </summary>
+      <div style={{ padding: '0 14px 14px' }}>
+        <div className="row" style={{ gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+          <Row swatch="existing" label="Existente (ya hecho)" />
+          <Row swatch="required" label="Requerida (a hacer · entra al plan)" />
+        </div>
 
-      <div
-        style={{
-          fontSize: 10.5,
-          color: 'var(--text-tertiary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          fontWeight: 600,
-          marginTop: 8,
-          marginBottom: 6,
-        }}
-      >
-        Caras
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', fontSize: 11, color: 'var(--text-secondary)' }}>
-        <div><b className="mono">V</b> Vestibular / bucal</div>
-        <div><b className="mono">P</b> Palatino (superiores)</div>
-        <div><b className="mono">L</b> Lingual (inferiores)</div>
-        <div><b className="mono">M</b> Mesial</div>
-        <div><b className="mono">D</b> Distal</div>
-        <div><b className="mono">O</b> Oclusal / incisal</div>
-      </div>
+        <div style={sectionLabel}>Caras</div>
+        <div style={legendGrid}>
+          <div><b className="mono">V</b> Vestibular / bucal</div>
+          <div><b className="mono">P</b> Palatino (sup.)</div>
+          <div><b className="mono">L</b> Lingual (inf.)</div>
+          <div><b className="mono">M</b> Mesial</div>
+          <div><b className="mono">D</b> Distal</div>
+          <div><b className="mono">O</b> Oclusal / incisal</div>
+        </div>
 
-      <div
-        style={{
-          fontSize: 10.5,
-          color: 'var(--text-tertiary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          fontWeight: 600,
-          marginTop: 12,
-          marginBottom: 6,
-        }}
-      >
-        Códigos
+        <div style={sectionLabel}>Códigos</div>
+        <div style={legendGrid}>
+          {CONDITIONS.map(c => (
+            <div key={c.code}>
+              <span
+                className="mono"
+                style={{ fontWeight: 600, color: 'var(--text-primary)', marginRight: 6 }}
+              >
+                {c.short}
+              </span>
+              {c.label}
+            </div>
+          ))}
+        </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 12px', fontSize: 11, color: 'var(--text-secondary)' }}>
-        {CONDITIONS.map(c => (
-          <div key={c.code}>
-            <span
-              className="mono"
-              style={{ fontWeight: 600, color: 'var(--text-primary)', marginRight: 6 }}
-            >
-              {c.short}
-            </span>
-            {c.label}
-          </div>
-        ))}
-      </div>
-    </div>
+    </details>
   );
 }

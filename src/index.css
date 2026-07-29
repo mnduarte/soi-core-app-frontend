@@ -759,16 +759,48 @@ table.tbl { width: 100%; border-collapse: collapse; }
   display: grid;
   grid-template-columns: 1fr 240px;
   gap: 14px;
+  /* Cada columna se alinea arriba: ni los dientes ni la leyenda se estiran para
+     igualar la altura de la otra (era lo que inflaba el modal). */
+  align-items: start;
 }
 @media (max-width: 1100px) {
   .odo-layout { grid-template-columns: 1fr; }
 }
+
+/* Leyenda de referencias: tarjeta plegable (<details>). Compacta para medir ~lo
+   mismo que los dientes; se puede colapsar en un click para recuperar espacio. */
+.odo-legend {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.odo-legend__summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+.odo-legend__summary::-webkit-details-marker { display: none; }
+.odo-legend__chev { transition: transform 0.15s ease; flex-shrink: 0; }
+.odo-legend:not([open]) .odo-legend__chev { transform: rotate(-90deg); }
 
 .odo-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 0;
   row-gap: 0;
+  /* La tarjeta de Referencias (columna de al lado en .odo-layout) es más alta
+     que los dientes y estira esta grilla; sin align-content el default (stretch)
+     reparte ese sobrante estirando las filas de dientes → vacíos enormes. Con
+     `start` las filas se empaquetan arriba y quedan juntas de verdad. */
+  align-content: start;
   padding: 12px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -778,13 +810,16 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .odo-row {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 4px;
+  gap:4px;
   min-width: 240px;
-  padding: 6px 10px;
+  /* Padding vertical (un respiro entre filas, sin volver al vacío original):
+     no achica los redondos ni toca el espacio entre columnas (gap horiz. intacto). */
+  padding: 10px;
 }
 .odo-row--right { border-right: 1px solid #9AA5B5; }
-/* Eje oclusal (entre maxilar y mandíbula): línea del medio, más marcada. */
-.odo-row--midline { border-bottom: 1.5px dashed #9AA5B5; padding-bottom: 6px; margin-bottom: 6px; }
+/* Eje oclusal (entre maxilar y mandíbula): línea del medio, más marcada.
+   Espaciado comprimido (6→1.5px). */
+.odo-row--midline { border-bottom: 1.5px dashed #9AA5B5; padding-bottom: 12px; margin-bottom: 10px; }
 
 .odo-tooth {
   display: flex;
@@ -859,8 +894,14 @@ table.tbl { width: 100%; border-collapse: collapse; }
   font-size: 9px;
   font-weight: 700;
   line-height: 1.15;
-  margin-top: 2px;
-  min-height: 22px;
+  margin-top: 1px;
+  /* Altura FIJA = 2 líneas (~21px), el peor caso real (MAX_LABELS=4, ej. "CI Am
+     Ac OS" parte en 2). Reservarla igual en TODOS los dientes hace que el
+     renglón sea rígido: agregar/quitar códigos no empuja la fila de abajo. Los
+     labels de 1 línea quedan arriba (align-content: flex-start) y el sobrante es
+     idéntico en todos. overflow hidden por si algún caso raro (con "+N") se pasa. */
+  height: 21px;
+  overflow: hidden;
   letter-spacing: -0.02em;
   display: flex;
   gap: 1px 4px;

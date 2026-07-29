@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../api/patients';
 import { transactionsApi, type Transaction, type PaymentMethod } from '../api/transactions';
 import { worksApi, type Work, type WorkStatus, type CreateWorkInput } from '../api/works';
@@ -342,6 +342,8 @@ export default function FichaRapidaPage() {
     queryFn: () =>
       transactionsApi.search(id!, { ...pagoFilter, type: 'PAYMENT', limit: pagoLimit }),
     enabled: pagosModalOpen && !!id,
+    // Igual que Hechos: no colapsar a "Buscando…" al cambiar el filtro.
+    placeholderData: keepPreviousData,
   });
   const pagosVisible = pagosSearchRaw.filter(t => !t.voidedAt);
   const pagosHasMore = pagosSearchRaw.length >= pagoLimit;
@@ -376,12 +378,20 @@ export default function FichaRapidaPage() {
         limit: hechosLimit,
       }),
     enabled: hechosModalOpen && !!id,
+    // Mantener las filas previas durante un refetch (cambio de fecha/búsqueda):
+    // si no, el cuerpo colapsa a "Buscando…" y el modal se achica y re-centra,
+    // pareciendo que se cierra y reabre.
+    placeholderData: keepPreviousData,
   });
   const hechosHasMore = hechosSearchRaw.length >= hechosLimit;
   const hechosFilterActive = !!hechosFilter.trim() || !!hechosFrom || !!hechosTo;
-  const commitHechosFilter = () => {
+  // `value` opcional: los chips de "trabajos frecuentes" commitean su texto
+  // directo (sin depender del estado draft, que es asíncrono).
+  const commitHechosFilter = (value?: string) => {
     setHechosLimit(PAGE);
-    setHechosFilter(hechosDraft);
+    const v = value ?? hechosDraft;
+    if (value !== undefined) setHechosDraft(value);
+    setHechosFilter(v);
   };
   const setHechosDate = (which: 'from' | 'to', v: string) => {
     setHechosLimit(PAGE);
@@ -395,6 +405,20 @@ export default function FichaRapidaPage() {
     setHechosFrom('');
     setHechosTo('');
   };
+  // Popover de "trabajos frecuentes" al enfocar el buscador de Hechos (mismo
+  // patrón que el input de Trabajo del alta). Cierra al click afuera.
+  const hechosSearchRef = useRef<HTMLDivElement>(null);
+  const [hechosPanelOpen, setHechosPanelOpen] = useState(false);
+  useEffect(() => {
+    if (!hechosPanelOpen) return;
+    const h = (e: MouseEvent) => {
+      if (hechosSearchRef.current && !hechosSearchRef.current.contains(e.target as Node)) {
+        setHechosPanelOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [hechosPanelOpen]);
   const [zoomPhoto, setZoomPhoto] = useState<
     { url: string; category?: string; title?: string; description?: string } | null
   >(null);
@@ -973,20 +997,61 @@ export default function FichaRapidaPage() {
                     style={{ height: 38 }}
                   />
                 </label>
-                <input
-                  className="input"
-                  placeholder="Buscar trabajo o diente…"
-                  value={hechosDraft}
-                  onChange={e => setHechosDraft(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && commitHechosFilter()}
-                  style={{ flex: '1 1 100px', minWidth: 0, height: 38 }}
-                />
-                <button className="btn btn--primary" onClick={commitHechosFilter} style={filterBtn}>
-                  <Icon name="search" size={14} /> Buscar
+                <div ref={hechosSearchRef} style={{ position: 'relative', flex: '1 1 200px', minWidth: 140 }}>
+                  <input
+                    className="input"
+                    placeholder="Buscar trabajo o diente…"
+                    value={hechosDraft}
+                    onFocus={() => setHechosPanelOpen(true)}
+                    onClick={() => setHechosPanelOpen(true)}
+                    onChange={e => setHechosDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        commitHechosFilter();
+                        setHechosPanelOpen(false);
+                      }
+                      if (e.key === 'Escape') setHechosPanelOpen(false);
+                    }}
+                    style={{ width: '100%', height: 38 }}
+                  />
+                  {hechosPanelOpen && (
+                    <div style={{ ...popover, left: 0, right: 0 }}>
+                      <div style={popTitle}>Trabajos frecuentes</div>
+                      <div style={chipsWrap}>
+                        {treatments.map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => {
+                              commitHechosFilter(t);
+                              setHechosPanelOpen(false);
+                            }}
+                            style={{ ...chip, fontWeight: 500, color: 'var(--text-primary)' }}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="btn btn--primary btn--icon"
+                  onClick={() => commitHechosFilter()}
+                  title="Buscar"
+                  style={{ ...filterBtn, width: 38 }}
+                >
+                  <Icon name="search" size={16} />
                 </button>
                 {hechosFilterActive && (
-                  <button className="btn btn--secondary" onClick={resetHechosFilter} style={filterBtn}>
-                    Limpiar
+                  <button
+                    className="btn btn--secondary btn--icon"
+                    onClick={resetHechosFilter}
+                    title="Limpiar filtros"
+                    style={{ ...filterBtn, width: 38 }}
+                  >
+                    <Icon name="x" size={16} />
                   </button>
                 )}
               </div>
@@ -997,11 +1062,13 @@ export default function FichaRapidaPage() {
             </div>
           }
         >
-          {hechosSearching ? (
-            <div style={emptyRow}>Buscando…</div>
-          ) : hechosSearchRaw.length === 0 ? (
+          {hechosSearchRaw.length === 0 ? (
             <div style={emptyRow}>
-              {hechosFilterActive ? 'Sin coincidencias.' : 'Sin trabajos hechos todavía.'}
+              {hechosSearching
+                ? 'Buscando…'
+                : hechosFilterActive
+                  ? 'Sin coincidencias.'
+                  : 'Sin trabajos hechos todavía.'}
             </div>
           ) : (
             <>
@@ -1055,24 +1122,36 @@ export default function FichaRapidaPage() {
                 value={pagoFilterDraft.q}
                 onChange={e => setPagoFilterDraft(f => ({ ...f, q: e.target.value }))}
                 onKeyDown={e => e.key === 'Enter' && commitPagoFilter()}
-                style={{ flex: '1 1 100px', minWidth: 0, height: 38 }}
+                style={{ flex: '1 1 200px', minWidth: 140, height: 38 }}
               />
-              <button className="btn btn--primary" onClick={commitPagoFilter} style={filterBtn}>
-                <Icon name="search" size={14} /> Buscar
+              <button
+                className="btn btn--primary btn--icon"
+                onClick={commitPagoFilter}
+                title="Buscar"
+                style={{ ...filterBtn, width: 38 }}
+              >
+                <Icon name="search" size={16} />
               </button>
               {pagoFilterActive && (
-                <button className="btn btn--secondary" onClick={resetPagoFilter} style={filterBtn}>
-                  Limpiar
+                <button
+                  className="btn btn--secondary btn--icon"
+                  onClick={resetPagoFilter}
+                  title="Limpiar filtros"
+                  style={{ ...filterBtn, width: 38 }}
+                >
+                  <Icon name="x" size={16} />
                 </button>
               )}
             </div>
           }
         >
-          {pagosSearching ? (
-            <div style={emptyRow}>Buscando…</div>
-          ) : pagosVisible.length === 0 ? (
+          {pagosVisible.length === 0 ? (
             <div style={emptyRow}>
-              {pagoFilterActive ? 'Sin pagos en ese filtro.' : 'Sin pagos todavía.'}
+              {pagosSearching
+                ? 'Buscando…'
+                : pagoFilterActive
+                  ? 'Sin pagos en ese filtro.'
+                  : 'Sin pagos todavía.'}
             </div>
           ) : (
             <>

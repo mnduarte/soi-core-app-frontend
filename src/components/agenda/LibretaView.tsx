@@ -121,8 +121,12 @@ export function LibretaView({
       pickPatient(newPatient);
       setSearchOpen(false);
       showToast(`${newPatient.name || fullName} creado ✓`);
-      // Si se creó con Enter (desde onKeyDown), auto-agregar el turno
-      setTimeout(() => anotar(), 50);
+      // Auto-agenda el turno con el paciente recién creado. Pasamos su _id como
+      // override explícito: si dependiéramos del estado `patientId`, el closure
+      // de este setTimeout lo lee stale (null, el setState de pickPatient todavía
+      // no re-renderizó) → anotar() reabriría el cartel "no existe" y crearía un
+      // segundo paciente al confirmar de nuevo. Con el id explícito va derecho.
+      anotar(newPatient._id);
     },
     onError: () => showToast('No se pudo crear el paciente', 'error'),
   });

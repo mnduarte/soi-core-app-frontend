@@ -964,7 +964,12 @@ export default function FichaRapidaPage() {
       {/* Historial completo de trabajos hechos — búsqueda + paginación server-side */}
       {hechosModalOpen && (
         <ListModal
-          title={`Trabajos hechos${hechosFilterActive ? ` (${hechosSearchRaw.length})` : ` (${hechosCount})`}`}
+          title={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              Trabajos hechos{hechosFilterActive ? ` (${hechosSearchRaw.length})` : ` (${hechosCount})`}
+              {hechosSearching && hechosSearchRaw.length > 0 && <TitleSpinner />}
+            </span>
+          }
           icon="check"
           accent="var(--success)"
           isMobile={isMobile}
@@ -1063,13 +1068,15 @@ export default function FichaRapidaPage() {
           }
         >
           {hechosSearchRaw.length === 0 ? (
-            <div style={emptyRow}>
-              {hechosSearching
-                ? 'Buscando…'
-                : hechosFilterActive
+            hechosSearching ? (
+              <ListSpinner />
+            ) : (
+              <div style={emptyRow}>
+                {hechosFilterActive
                   ? 'Sin coincidencias.'
                   : 'Sin trabajos hechos todavía.'}
-            </div>
+              </div>
+            )
           ) : (
             <>
               {hechosSearchRaw.map(it => renderWorkRow(it, true))}
@@ -1086,7 +1093,12 @@ export default function FichaRapidaPage() {
       {/* Historial completo de pagos — Etapa 2: filtro de fechas + búsqueda backend */}
       {pagosModalOpen && (
         <ListModal
-          title={`Pagos${pagoFilterActive ? ` (${pagosVisible.length})` : ` (${pagos.length})`}`}
+          title={
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              Pagos{pagoFilterActive ? ` (${pagosVisible.length})` : ` (${pagos.length})`}
+              {pagosSearching && pagosVisible.length > 0 && <TitleSpinner />}
+            </span>
+          }
           icon="cash"
           accent="var(--success)"
           isMobile={isMobile}
@@ -1146,13 +1158,15 @@ export default function FichaRapidaPage() {
           }
         >
           {pagosVisible.length === 0 ? (
-            <div style={emptyRow}>
-              {pagosSearching
-                ? 'Buscando…'
-                : pagoFilterActive
+            pagosSearching ? (
+              <ListSpinner />
+            ) : (
+              <div style={emptyRow}>
+                {pagoFilterActive
                   ? 'Sin pagos en ese filtro.'
                   : 'Sin pagos todavía.'}
-            </div>
+              </div>
+            )
           ) : (
             <>
               {pagosVisible.map(t => renderPagoRow(t, true))}
@@ -1184,7 +1198,7 @@ function ListModal({
   onClose,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   icon: React.ComponentProps<typeof Icon>['name'];
   accent: string;
   // Búsqueda client-side incorporada (Hechos). Si se pasa `filterSlot`, se usa
@@ -1263,7 +1277,9 @@ function ListModal({
             </div>
           )}
         </div>
-        <div style={{ maxHeight: '62vh', overflowY: 'auto', padding: '4px 8px 10px' }}>{children}</div>
+        {/* Altura FIJA (no maxHeight): así el modal no cambia de tamaño ni se
+            re-centra cuando cambia la cantidad de filas o mientras busca. */}
+        <div style={{ height: 'min(60vh, 440px)', overflowY: 'auto', padding: '4px 8px 10px' }}>{children}</div>
       </div>
     </div>
   );
@@ -1275,6 +1291,24 @@ function Spinner() {
       <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
       Guardando…
     </>
+  );
+}
+
+// Spinner centrado para el cuerpo de un ListModal mientras se busca.
+function ListSpinner({ label = 'Buscando…' }: { label?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '48px 0', color: 'var(--text-tertiary)', fontSize: 13 }}>
+      <span style={{ width: 22, height: 22, borderRadius: '50%', border: '2.5px solid var(--border-subtle)', borderTopColor: 'var(--brand-primary)', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+      {label}
+    </div>
+  );
+}
+
+// Spinner chico para el título del modal (feedback cuando ya hay filas y se
+// está refetcheando con keepPreviousData).
+function TitleSpinner() {
+  return (
+    <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid var(--border-subtle)', borderTopColor: 'var(--brand-primary)', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
   );
 }
 

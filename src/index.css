@@ -655,7 +655,6 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .sidebar__group-label,
   .nav-item span,
   .nav-item__kbd,
-  .sidebar .search span,
   .sidebar__user > div,
   .sidebar__user .btn { display: none; }
   .nav-item {
@@ -664,7 +663,6 @@ table.tbl { width: 100%; border-collapse: collapse; }
     padding: 0;
     justify-content: center;
   }
-  .sidebar .search { width: 40px; justify-content: center; padding: 0; height: 36px; }
   .sidebar__user { justify-content: center; padding: 10px 0; }
 }
 

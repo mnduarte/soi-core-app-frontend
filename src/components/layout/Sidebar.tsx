@@ -55,12 +55,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
       </div>
 
-      <div className="search" style={{ width: 'auto', marginBottom: 4 }}>
-        <Icon name="search" size={14} style={{ color: 'var(--text-tertiary)' }} />
-        <span style={{ flex: 1, fontSize: 13 }}>Buscar paciente…</span>
-        <span className="search__kbd">⌘K</span>
-      </div>
-
+      {/* Sin buscador acá: cada sección ya tiene el suyo (Pacientes y Ficha),
+          y el que había era decorativo — no tenía input ni el atajo ⌘K que
+          anunciaba. */}
       {NAV.map(it => (
         <NavLink
           key={it.to}

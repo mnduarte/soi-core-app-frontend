@@ -66,6 +66,44 @@ const ICONS: Record<IconName, ReactNode> = {
   undo: <><path d="M3 7v6h6" /><path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7" /></>,
 };
 
+// ============================================================
+// Íconos del mockup (emojis) — INTERRUPTOR
+// Poner en false para volver a los SVG del sistema.
+//
+// Ojo con lo que implica dejarlo en true:
+//   · Cada sistema operativo dibuja los emojis distinto (Windows, Android del
+//     consultorio, iPhone) — no se ven iguales en todos lados.
+//   · Los emojis a color IGNORAN el color del contexto, así que se pierde el
+//     código de color (WhatsApp verde, borrar en terracota, activo en azul).
+//     Los glifos de texto (✆ ✎ ⋯ ✓ ✕ ⌕ +) sí lo respetan.
+// Los nombres que no estén acá siguen usando el SVG.
+// ============================================================
+const USE_MOCKUP_EMOJI = true;
+
+const EMOJI: Partial<Record<IconName, string>> = {
+  calendar: '📅',
+  users: '👥',
+  clipboard: '📋',
+  history: '🕐',
+  clock: '🕐',
+  user: '👤',
+  image: '🖼',
+  tooth: '🦷',
+  cash: '💵',
+  camera: '📷',
+  trash: '🗑',
+  receipt: '🧾',
+  // Glifos de texto: monocromáticos, heredan el color del contexto.
+  whatsapp: '✆',
+  phone: '✆',
+  edit: '✎',
+  more: '⋯',
+  check: '✓',
+  x: '✕',
+  search: '⌕',
+  plus: '+',
+};
+
 interface IconProps {
   name: IconName;
   size?: number;
@@ -81,6 +119,32 @@ interface IconProps {
 // operativo distinto — en la tablet Android del consultorio se verían con otro
 // estilo y a color, rompiendo la paleta. Ver handoff-libreta, regla 5.
 export function Icon({ name, size = 17, className, style, strokeWidth = 2.1 }: IconProps) {
+  const emoji = USE_MOCKUP_EMOJI ? EMOJI[name] : undefined;
+  if (emoji) {
+    return (
+      <span
+        className={className}
+        aria-hidden="true"
+        style={{
+          // Cuadrado del mismo tamaño que el SVG, para que no se muevan los
+          // layouts que reservan ese espacio.
+          width: size,
+          height: size,
+          fontSize: size * 0.95,
+          lineHeight: 1,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          fontStyle: 'normal',
+          ...style,
+        }}
+      >
+        {emoji}
+      </span>
+    );
+  }
+
   const paths = ICONS[name];
   if (!paths) return null;
   return (

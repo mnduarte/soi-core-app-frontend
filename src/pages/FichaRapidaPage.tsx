@@ -487,16 +487,20 @@ export default function FichaRapidaPage() {
           </>
         ) : (
           <>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 13.5, color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</span>
-              {!done && <span style={pendBadge}>por hacer</span>}
+            {/* El texto va en un flex que ENVUELVE: en pantallas angostas la
+                fecha baja de línea en vez de desbordar y montarse sobre el
+                monto (el minWidth:0 solo deja encoger, no recorta). */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '2px 8px' }}>
+              <span style={{ fontSize: 13.5, wordBreak: 'break-word', color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</span>
+              {!done && <span style={{ ...pendBadge, marginLeft: 0 }}>por hacer</span>}
               {done && it.completedAt && (
-                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
                   hecho {fmtDate(it.completedAt)}
                 </span>
               )}
               {itemPhotos.length > 0 && (
-                <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+                /* flexBasis 100% → las miniaturas siempre arrancan renglón propio */
+                <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', flexBasis: '100%' }}>
                   {itemPhotos.map(({ photo, title, description }) => (
                     <img
                       key={photo._id}
@@ -509,8 +513,8 @@ export default function FichaRapidaPage() {
                 </div>
               )}
             </div>
-            <span className="mono" style={{ fontSize: 13.5, fontWeight: 600, color: it.price ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{it.price ? fmtMoney(it.price) : '—'}</span>
-            <span style={{ display: 'inline-flex' }}>
+            <span className="mono" style={{ fontSize: 13.5, fontWeight: 600, flexShrink: 0, color: it.price ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{it.price ? fmtMoney(it.price) : '—'}</span>
+            <span style={{ display: 'inline-flex', flexShrink: 0 }}>
               <button className="btn btn--ghost btn--icon btn--sm" title="Fotos del trabajo" onClick={() => openModal('uploadPhotos', { patientId: id, treatmentItemId: it._id })} style={{ color: itemPhotos.length ? 'var(--brand-primary-600)' : undefined }}><Icon name="image" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditItem(it)}><Icon name="edit" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => setDelItem(it)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
@@ -558,8 +562,8 @@ export default function FichaRapidaPage() {
                 </div>
               )}
             </div>
-            <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)' }}>{fmtMoney(t.amount)}</span>
-            <span style={{ display: 'inline-flex' }}>
+            <span className="mono" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0, color: 'var(--success)' }}>{fmtMoney(t.amount)}</span>
+            <span style={{ display: 'inline-flex', flexShrink: 0 }}>
               <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditPago(t)}><Icon name="edit" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => setDelPago(t)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
             </span>
@@ -993,11 +997,11 @@ export default function FichaRapidaPage() {
           }}
           filterSlot={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={filterRow}>
+              <div className="lb-filters">
                 {/* DatePicker propio en vez de <input type="date">: el nativo
                     muestra "mm/dd/yyyy" según el idioma del navegador, que no se
                     entiende y encima queda en formato yanqui. */}
-                <div style={filterDate}>
+                <div className="lb-filters__date" style={filterDate}>
                   <span style={filterLabel}>Fecha de inicio</span>
                   <DatePicker
                     value={hechosFrom}
@@ -1005,7 +1009,7 @@ export default function FichaRapidaPage() {
                     placeholder="Desde cuándo"
                   />
                 </div>
-                <div style={filterDate}>
+                <div className="lb-filters__date" style={filterDate}>
                   <span style={filterLabel}>Fecha de fin</span>
                   <DatePicker
                     value={hechosTo}
@@ -1013,7 +1017,7 @@ export default function FichaRapidaPage() {
                     placeholder="Hasta cuándo"
                   />
                 </div>
-                <div ref={hechosSearchRef} style={{ position: 'relative', flex: '1 1 200px', minWidth: 140 }}>
+                <div ref={hechosSearchRef} className="lb-filters__search" style={{ position: 'relative', flex: '1 1 200px', minWidth: 140 }}>
                   <input
                     className="input"
                     placeholder="Buscar trabajo o diente…"
@@ -1118,8 +1122,8 @@ export default function FichaRapidaPage() {
             resetPagoFilter();
           }}
           filterSlot={
-            <div style={filterRow}>
-              <div style={filterDate}>
+            <div className="lb-filters">
+              <div className="lb-filters__date" style={filterDate}>
                 <span style={filterLabel}>Fecha de inicio</span>
                 <DatePicker
                   value={pagoFilterDraft.from}
@@ -1127,7 +1131,7 @@ export default function FichaRapidaPage() {
                   placeholder="Desde cuándo"
                 />
               </div>
-              <div style={filterDate}>
+              <div className="lb-filters__date" style={filterDate}>
                 <span style={filterLabel}>Fecha de fin</span>
                 <DatePicker
                   value={pagoFilterDraft.to}
@@ -1136,7 +1140,7 @@ export default function FichaRapidaPage() {
                 />
               </div>
               <input
-                className="input"
+                className="input lb-filters__search"
                 placeholder="Monto o método…"
                 value={pagoFilterDraft.q}
                 onChange={e => setPagoFilterDraft(f => ({ ...f, q: e.target.value }))}
@@ -1430,9 +1434,8 @@ const verTodos: CSSProperties = {
 };
 // Fila de filtros de los modales (Hechos / Pagos): una sola línea, sin wrap. El
 // campo de texto absorbe el sobrante (flex + minWidth:0) y el botón no se parte.
-const filterRow: CSSProperties = {
-  display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'flex-end',
-};
+/* El layout de la fila de filtros vive en la clase `.lb-filters` del CSS,
+   porque necesita media query para reacomodarse en celular. */
 const filterBtn: CSSProperties = {
   height: 38, flexShrink: 0, whiteSpace: 'nowrap',
 };

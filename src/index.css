@@ -1094,6 +1094,21 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .lb-bnav { display: flex; }
 }
 
+/* Fila de filtros de los modales de histórico (Trabajos hechos / Pagos).
+   En escritorio va todo en una línea; en celular no entra, así que las dos
+   fechas comparten la primera y el buscador + botones bajan a la segunda. */
+.lb-filters {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+@media (max-width: 767px) {
+  .lb-filters { flex-wrap: wrap; }
+  .lb-filters__date { flex: 1 1 calc(50% - 4px) !important; width: auto !important; }
+  .lb-filters__search { flex: 1 1 55% !important; min-width: 0 !important; }
+}
+
 /* Estado de carga: filas fantasma con el pulso del papel. Se usan mientras
    llegan los datos (el listado de pacientes calcula saldo y última visita, así
    que puede tardar) para que nunca parezca que la app se colgó. */

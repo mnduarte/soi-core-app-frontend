@@ -366,7 +366,7 @@ export default function DashboardPage() {
                         disabled={!hasPhone || markReminderMutation.isPending}
                         onClick={() => handleSendReminder(appt, patient)}
                         style={{
-                          background: hasPhone ? '#25D366' : 'var(--bg-muted)',
+                          background: hasPhone ? 'var(--success)' : 'var(--bg-muted)',
                           color: hasPhone ? '#fff' : 'var(--text-tertiary)',
                           flexShrink: 0,
                         }}

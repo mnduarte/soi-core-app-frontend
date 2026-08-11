@@ -71,9 +71,16 @@ interface IconProps {
   size?: number;
   className?: string;
   style?: CSSProperties;
+  /** Grosor del trazo. Por defecto 2.1 (ver nota abajo). */
+  strokeWidth?: number;
 }
 
-export function Icon({ name, size = 16, className, style }: IconProps) {
+// Trazo 2.1: el rediseño "Libreta" pide íconos que se lean firmes sobre el
+// papel crema (el mockup los dibujaba con emojis, más pesados visualmente).
+// Se usan SVG y no emojis a propósito: los emojis los dibuja cada sistema
+// operativo distinto — en la tablet Android del consultorio se verían con otro
+// estilo y a color, rompiendo la paleta. Ver handoff-libreta, regla 5.
+export function Icon({ name, size = 17, className, style, strokeWidth = 2.1 }: IconProps) {
   const paths = ICONS[name];
   if (!paths) return null;
   return (
@@ -83,7 +90,7 @@ export function Icon({ name, size = 16, className, style }: IconProps) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

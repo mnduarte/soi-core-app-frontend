@@ -296,15 +296,19 @@ export function LibretaView({
           margin: '0 auto',
         }}
       >
-        {/* ---------- Columna principal ---------- */}
-        <div className="card" style={{ overflow: 'visible' }}>
+        {/* ---------- Columna principal: la hoja del cuaderno ----------
+             lb-sheet--ruled dibuja la línea de margen roja a 92px del borde,
+             igual que el renglón izquierdo de la libreta de papel. */}
+        <div className="card lb-sheet lb-sheet--ruled" style={{ overflow: 'visible' }}>
           {/* Alta rápida */}
           <div
             ref={quickRef}
             style={{
-              padding: 18,
-              borderBottom: '1px solid var(--border-subtle)',
+              padding: 14,
+              borderBottom: '2px solid var(--border-default)',
               background: 'var(--bg-muted)',
+              position: 'relative',
+              zIndex: 2,
             }}
           >
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
@@ -424,6 +428,7 @@ export function LibretaView({
                   ref={nameRef}
                   className="input"
                   placeholder="Paciente…"
+                  data-quick-add-patient
                   value={patientName}
                   onChange={e => {
                     setPatientName(e.target.value);
@@ -631,28 +636,22 @@ export function LibretaView({
                   return (
                     <div
                       key={a._id}
+                      className="lb-row"
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        padding: '12px 16px',
                         background: unresolved ? 'color-mix(in srgb, var(--warning) 6%, transparent)' : 'transparent',
                         borderTop: idx > 0 ? '1px dashed var(--border-subtle)' : 'none',
+                        borderBottom: 'none',
                       }}
                     >
-                      <div style={{ width: 48, flexShrink: 0 }}>
-                        {idx === 0 ? (
-                          <span className="mono" style={{ fontSize: 13, fontWeight: 700 }}>{t}</span>
-                        ) : (
-                          <span style={{ fontSize: 10.5, color: 'var(--warning)', fontWeight: 600 }}>sobre</span>
-                        )}
-                      </div>
+                      {idx === 0 ? (
+                        <div className="lb-time">{t}</div>
+                      ) : (
+                        <div className="lb-sobre">sobre →</div>
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 14, fontWeight: 600 }}>{label}</span>
-                          {a.title && (
-                            <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>{a.title}</span>
-                          )}
+                          <span className="lb-name">{label}</span>
+                          {a.title && <span className="lb-sub">{a.title}</span>}
                           {!a.patientId && (
                             <button
                               className="btn btn--secondary"
@@ -673,41 +672,58 @@ export function LibretaView({
                           {isFichaPending(a) && a.patientId && (
                             <FichaPendingBadge onClick={() => onOpenFicha(a)} />
                           )}
-                          {a.reminderSent && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--success)', fontWeight: 500 }}>
-                              <Icon name="check" size={11} /> recordado
-                            </span>
-                          )}
+                          {/* El estado "recordado" NO va como chip acá: lo muestra
+                              el propio botón de la acción (tilde verde + "Recordado"). */}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {canRemind && (
+                      {/* Acciones de fila (patrón obligatorio: ícono 32×32 con
+                          micro-etiqueta SIEMPRE visible debajo, nunca tooltip).
+                          En celular quedan solo "Recordar" y "Más". */}
+                      <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        {canRemind ? (
+                          // Una vez enviado, el mismo botón queda en verde con
+                          // tilde ("Recordado") — sin chip aparte. Se puede
+                          // volver a tocar para reenviar.
                           <button
-                            className="btn btn--icon"
-                            title={a.reminderSent ? 'Reenviar recordatorio por WhatsApp' : 'Recordar por WhatsApp'}
+                            className={`lb-act ${a.reminderSent ? 'lb-act--done' : 'lb-act--wsp'}`}
+                            title={a.reminderSent ? 'Ya se avisó — tocá para reenviar' : 'Recordar por WhatsApp'}
                             onClick={e => { e.stopPropagation(); setRemindTarget(a); }}
-                            style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: '#25D366' }}
                           >
-                            <Icon name="whatsapp" size={18} />
+                            <span className="lb-act__ic">
+                              <Icon name={a.reminderSent ? 'check' : 'whatsapp'} size={17} />
+                            </span>
+                            <span className="lb-act__lbl">{a.reminderSent ? 'Recordado' : 'Recordar'}</span>
+                          </button>
+                        ) : (
+                          // El slot de WhatsApp NUNCA se oculta: sin celular se
+                          // muestra apagado y al tocarlo abre editar paciente
+                          // para cargar el número.
+                          <button
+                            className="lb-act lb-act--off"
+                            title="Sin celular cargado — tocá para agregarlo"
+                            onClick={e => { e.stopPropagation(); if (a.patientId) onEditPatient?.(a.patientId); }}
+                          >
+                            <span className="lb-act__ic"><Icon name="whatsapp" size={17} /></span>
+                            <span className="lb-act__lbl">Sin celu</span>
                           </button>
                         )}
                         {a.patientId && (
                           <>
                             <button
-                              className="btn btn--icon"
-                              title="Editar paciente"
+                              className="lb-act lb-act--hide-sm"
+                              title="Ver / editar datos del paciente"
                               onClick={e => { e.stopPropagation(); onEditPatient?.(a.patientId!); }}
-                              style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}
                             >
-                              <Icon name="edit" size={17} />
+                              <span className="lb-act__ic"><Icon name="user" size={17} /></span>
+                              <span className="lb-act__lbl">Paciente</span>
                             </button>
                             <button
-                              className="btn btn--icon"
+                              className="lb-act lb-act--hide-sm"
                               title="Abrir ficha clínica"
                               onClick={e => { e.stopPropagation(); onOpenPatient(a.patientId!); }}
-                              style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--brand-primary-600)' }}
                             >
-                              <Icon name="clipboard" size={17} />
+                              <span className="lb-act__ic"><Icon name="clipboard" size={17} /></span>
+                              <span className="lb-act__lbl">Ficha</span>
                             </button>
                           </>
                         )}
@@ -718,6 +734,7 @@ export function LibretaView({
                           onReschedule={onReschedule}
                           onDelete={onDelete}
                           onRemind={canRemind ? () => setRemindTarget(a) : undefined}
+                          onEditPatient={a.patientId ? () => onEditPatient?.(a.patientId!) : undefined}
                         />
                       </div>
                     </div>
@@ -932,19 +949,17 @@ function NotesAndPriorities({ day }: { day: string }) {
   return (
     <>
       <div className="card">
-        <div className="card__header" style={{ padding: '9px 12px' }}>
-          <div className="card__title" style={{ fontSize: 12.5 }}>Notas del día</div>
+        <div className="card__header" style={{ padding: '12px 16px' }}>
+          <div className="card__title">Notas del día</div>
         </div>
-        <div style={{ padding: 10 }}>
-          <textarea
-            className="input"
-            placeholder="Anotá lo que quieras…"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            rows={3}
-            style={{ width: '100%', resize: 'vertical', minHeight: 56, lineHeight: 1.45, fontSize: 12.5 }}
-          />
-        </div>
+        {/* Renglones de cuaderno: el texto se apoya sobre las líneas */}
+        <textarea
+          className="lb-lines"
+          placeholder="Anotá lo que quieras…"
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={4}
+        />
       </div>
 
       <div className="card">

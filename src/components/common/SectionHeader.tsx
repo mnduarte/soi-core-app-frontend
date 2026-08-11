@@ -1,57 +1,35 @@
 import type { ReactNode } from 'react';
-import { Icon, type IconName } from './Icon';
-import { MobileMenuButton } from './MobileMenuButton';
-import { useIsMobile } from '../../hooks/useIsMobile';
 
 interface SectionHeaderProps {
-  icon: IconName;
-  title: string;
+  /** Microlabel en mayúsculas sobre el título (ej. AGENDA). */
+  kicker?: string;
+  /** Título de la página. La palabra clave puede ir en <em> (itálica azul). */
+  title: ReactNode;
   sub?: string;
-  accent?: string;
   actions?: ReactNode;
 }
 
-// Encabezado de sección en barra blanca full-width con borde inferior — mismo
-// molde que la Agenda, para que Pacientes / Ficha clínica queden alineados.
-// El body de la página va debajo, dentro de un contenedor con padding propio.
-export function SectionHeader({ icon, title, sub, accent, actions }: SectionHeaderProps) {
-  const isMobile = useIsMobile(720);
+// Encabezado de sección estilo Libreta: kicker en mayúsculas + título grande en
+// Newsreader, con la palabra clave en itálica azul. Sin ícono ni barra blanca —
+// el header respira sobre el papel. Ver handoff-libreta (bloque `.hd`).
+export function SectionHeader({ kicker, title, sub, actions }: SectionHeaderProps) {
   return (
     <div
+      className="lb-hd"
       style={{
-        padding: isMobile ? '12px 16px' : '16px 20px',
-        borderBottom: '1px solid var(--border-subtle)',
-        background: 'var(--bg-surface)',
+        padding: '22px 32px 14px',
+        borderBottom: '1px solid var(--border-default)',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-end',
         gap: 12,
         flexWrap: 'wrap',
         flexShrink: 0,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-        <MobileMenuButton />
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 11,
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: `color-mix(in srgb, ${accent ?? 'var(--brand-primary)'} 13%, transparent)`,
-            color: accent ?? 'var(--brand-primary)',
-          }}
-        >
-          <Icon name={icon} size={20} />
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, letterSpacing: '-0.015em', margin: 0 }}>
-            {title}
-          </h1>
-          {sub && <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 2 }}>{sub}</div>}
-        </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {kicker && <div className="page-kicker">{kicker}</div>}
+        <h1 className="page-title">{title}</h1>
+        {sub && <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 2 }}>{sub}</div>}
       </div>
       {actions && <div className="row" style={{ gap: 8 }}>{actions}</div>}
     </div>

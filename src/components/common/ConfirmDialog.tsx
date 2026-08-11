@@ -82,7 +82,7 @@ export function ConfirmDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(15, 23, 42, 0.42)',
+        background: 'rgba(60, 52, 34, 0.42)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

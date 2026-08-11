@@ -9,7 +9,6 @@ import {
 import { patientsApi, type Patient } from '../api/patients';
 import { useUIStore } from '../store/ui.store';
 import { Icon } from '../components/common/Icon';
-import { MobileMenuButton } from '../components/common/MobileMenuButton';
 import { Avatar } from '../components/common/Avatar';
 import { StatusBadge, FichaPendingBadge } from '../components/common/StatusBadge';
 import { ResolveMenu } from '../components/common/ResolveMenu';
@@ -225,51 +224,22 @@ export default function AgendaPage() {
     <div className="content" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Toolbar */}
       <div
+        className="lb-hd"
         style={{
-          padding: isMobile ? '12px 16px' : '16px 20px',
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-surface)',
+          padding: isMobile ? '16px 16px 10px' : '22px 32px 14px',
+          borderBottom: '1px solid var(--border-default)',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-end',
           gap: isMobile ? 8 : 12,
           flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <MobileMenuButton />
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 11,
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'color-mix(in srgb, var(--brand-primary) 13%, transparent)',
-              color: 'var(--brand-primary)',
-            }}
-          >
-            <Icon name="calendar" size={20} />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--text-tertiary)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                fontWeight: 600,
-              }}
-            >
-              Agenda
-            </div>
-            <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, margin: '2px 0 0', textTransform: 'capitalize' }}>
-              {todayLabel}
-            </h1>
-          </div>
+        <div style={{ minWidth: 0 }}>
+          <div className="page-kicker">Agenda</div>
+          <h1 className="page-title" style={{ textTransform: 'capitalize' }}>
+            {todayLabel}
+          </h1>
         </div>
-
       </div>
 
       {/* Barra persistente en TODAS las vistas: contador + fecha, y al lado la
@@ -965,50 +935,60 @@ function WeekView({
             .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
           const isToday = sameDay(d, todayDate);
           return (
+            /* Cada día es una hoja: cabecera crema (o azul si es hoy) y los
+               turnos como fichitas con borde de color a la izquierda. */
             <div
               key={i}
               onClick={() => onPickDay(d)}
               title="Abrir la libreta de este día"
               style={{
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 10,
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
-                background: isToday ? 'var(--brand-primary-50)' : 'var(--bg-surface)',
+                background: 'var(--bg-surface)',
                 cursor: 'pointer',
               }}
             >
               <div
                 style={{
                   padding: '10px 12px',
-                  borderBottom: '1px solid var(--border-subtle)',
+                  borderBottom: isToday ? '2px solid var(--brand-primary)' : '2px solid #D9CFB4',
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'baseline',
                   justifyContent: 'space-between',
-                  background: isToday ? 'transparent' : 'var(--bg-muted)',
+                  gap: 8,
+                  background: isToday ? 'var(--brand-primary)' : 'var(--bg-sidebar)',
                 }}
               >
-                <div>
-                  <div
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span
                     style={{
                       fontSize: 11,
-                      color: 'var(--text-tertiary)',
+                      color: isToday ? 'rgba(255,255,255,0.75)' : 'var(--text-label)',
                       textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
                       fontWeight: 600,
                     }}
                   >
                     {WEEK_DAY_LABELS[i]}
-                  </div>
-                  <div
+                  </span>
+                  <span
                     style={{
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: isToday ? 'var(--brand-primary-600)' : 'var(--text-primary)',
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 20,
+                      fontWeight: 600,
+                      color: isToday ? '#fff' : 'var(--text-primary)',
                     }}
                   >
                     {d.getDate()}
-                  </div>
+                  </span>
                 </div>
-                <span className="badge badge--neutral">{dayAppts.length}</span>
+                <span
+                  className="mono"
+                  style={{ fontSize: 12, fontWeight: 600, color: isToday ? '#C9D4F5' : 'var(--ink-stamp)' }}
+                >
+                  {dayAppts.length}
+                </span>
               </div>
               <div
                 style={{
@@ -1026,8 +1006,9 @@ function WeekView({
                 )}
                 {dayAppts.map(appt => {
                   const p = appt.patientId ? patientMap.get(appt.patientId) : undefined;
-                  const bar = appt.status === 'COMPLETED'
-                    ? '#16A34A'
+                  const done = appt.status === 'COMPLETED';
+                  const bar = done
+                    ? 'var(--success)'
                     : isTerminal(appt)
                     ? 'var(--text-tertiary)'
                     : 'var(--brand-primary)';
@@ -1036,21 +1017,23 @@ function WeekView({
                       key={appt._id}
                       onClick={() => onPickDay(d)}
                       style={{
-                        background: 'var(--bg-surface)',
+                        background: done ? '#FAFCF8' : 'var(--bg-surface)',
                         border: '1px solid var(--border-subtle)',
                         borderLeft: `3px solid ${bar}`,
-                        borderRadius: 6,
-                        padding: '6px 8px',
+                        borderRadius: 7,
+                        padding: '7px 9px',
                         cursor: 'pointer',
                       }}
                     >
-                      <div className="mono" style={{ fontSize: 11, fontWeight: 600, color: bar }}>
+                      <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-stamp)' }}>
                         {hhmm(appt.startsAt)}
                       </div>
                       <div
                         style={{
-                          fontSize: 12,
-                          fontWeight: 500,
+                          fontFamily: 'var(--font-display)',
+                          fontSize: 13.5,
+                          fontWeight: 600,
+                          marginTop: 1,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -1134,8 +1117,9 @@ function MonthView({
               key={h}
               style={{
                 fontSize: 11,
-                color: 'var(--text-tertiary)',
+                color: 'var(--text-label)',
                 textTransform: 'uppercase',
+                letterSpacing: '0.1em',
                 fontWeight: 600,
                 textAlign: 'center',
                 padding: '4px 0',
@@ -1157,19 +1141,19 @@ function MonthView({
                 onClick={() => onPickDay(cellDate)}
                 style={{
                   minHeight: 96,
-                  border: '1px solid',
-                  borderColor: isToday ? 'var(--brand-primary)' : 'var(--border-subtle)',
-                  borderRadius: 8,
-                  padding: 8,
+                  border: isToday ? '2px solid var(--brand-primary)' : '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '8px 10px',
                   background: isToday ? 'var(--brand-primary-50)' : 'var(--bg-surface)',
                   cursor: 'pointer',
                 }}
               >
                 <div
                   style={{
-                    fontSize: 13,
-                    fontWeight: isToday ? 700 : 500,
-                    color: isToday ? 'var(--brand-primary-600)' : 'var(--text-primary)',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: isToday ? 'var(--brand-primary)' : 'var(--text-primary)',
                     marginBottom: 6,
                   }}
                 >
@@ -1177,28 +1161,31 @@ function MonthView({
                 </div>
                 {count > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {/* Barras de tinta: la carga del día de un vistazo */}
                     {count <= 4 ? (
                       Array.from({ length: count }).map((_, k) => (
                         <div
                           key={k}
                           style={{
-                            height: 5,
-                            borderRadius: 3,
-                            background: 'var(--brand-primary)',
-                            opacity: 0.55,
+                            height: 4,
+                            borderRadius: 2,
+                            background: '#A8B6E4',
+                            width: `${Math.max(40, 100 - k * 18)}%`,
                           }}
                         />
                       ))
                     ) : (
                       <>
-                        <div style={{ height: 5, borderRadius: 3, background: 'var(--brand-primary)', opacity: 0.55 }} />
-                        <div style={{ height: 5, borderRadius: 3, background: 'var(--brand-primary)', opacity: 0.4 }} />
+                        <div style={{ height: 4, borderRadius: 2, background: '#A8B6E4', width: '92%' }} />
+                        <div style={{ height: 4, borderRadius: 2, background: '#A8B6E4', width: '74%' }} />
+                        <div style={{ height: 4, borderRadius: 2, background: '#A8B6E4', width: '50%' }} />
                         <div
+                          className="mono"
                           style={{
-                            fontSize: 10.5,
-                            color: 'var(--brand-primary-600)',
+                            fontSize: 11,
+                            color: 'var(--brand-primary)',
                             fontWeight: 600,
-                            marginTop: 2,
+                            marginTop: 4,
                           }}
                         >
                           {count} turnos

@@ -44,6 +44,28 @@ export const withTitle = (name?: string, title?: 'DR' | 'DRA' | 'NONE' | null): 
   return name;
 };
 
+// Fecha corta para las columnas mono: 01/08/26
+export const fmtShortDate = (iso?: string | null): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+};
+
+// "hoy" / "ayer" / "hace 10 días" / "hace 4 sem." — el subtítulo de última visita.
+export const relativeDay = (iso?: string | null): string => {
+  if (!iso) return 'sin visitas';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'sin visitas';
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(new Date()) - startOf(d)) / 86400000);
+  if (days <= 0) return 'hoy';
+  if (days === 1) return 'ayer';
+  if (days < 14) return `hace ${days} días`;
+  if (days < 60) return `hace ${Math.round(days / 7)} sem.`;
+  return `hace ${Math.round(days / 30)} meses`;
+};
+
 export const initialsOf = (first: string, last?: string): string => {
   const f = (first ?? '').trim();
   const l = (last ?? '').trim();

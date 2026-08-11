@@ -20,6 +20,12 @@ export interface Patient {
     medications?: string[];
     notes?: string;
   };
+  // Campos CALCULADOS por el backend en el listado (no se persisten):
+  // última visita, cantidad de turnos y saldo (trabajos hechos − pagos).
+  // saldo > 0 = el paciente debe. Solo vienen en findAll.
+  lastVisitAt?: string | null;
+  appointmentsCount?: number;
+  balance?: number;
 }
 
 export const patientsApi = {

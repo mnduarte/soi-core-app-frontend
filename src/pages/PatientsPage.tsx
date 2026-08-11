@@ -52,12 +52,17 @@ export default function PatientsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data: patients = [], isLoading } = useQuery({
+  const { data: patients = [], isLoading, isFetching } = useQuery({
     queryKey: ['patients', debouncedSearch],
     queryFn: () => patientsApi.findAll(debouncedSearch || undefined),
     // Un paciente cargado en otro dispositivo aparece acá sin recargar. El
     // refresh lo dispara el heartbeat central (useClinicChanges en AppLayout).
+    // `placeholderData` mantiene en pantalla el resultado anterior mientras
+    // llega el nuevo, así al tipear en el buscador la lista no parpadea a vacío.
+    placeholderData: prev => prev,
   });
+  // Refetch en curso (buscar, heartbeat) con datos ya en pantalla.
+  const refreshing = isFetching && !isLoading;
 
   const debtCount = useMemo(() => patients.filter(p => debtOf(p) > 0).length, [patients]);
   const shown = useMemo(
@@ -78,7 +83,12 @@ export default function PatientsPage() {
   }, [patients]);
 
   return (
-    <div className="content fade-in" style={{ padding: 0 }}>
+    /* Columna fija: header + filtros quedan siempre visibles y solo scrollea
+       la lista (con su encabezado de columnas pegado arriba). */
+    <div
+      className="content fade-in"
+      style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}
+    >
       <SectionHeader
         kicker={classic ? 'Pacientes viejos' : 'Pacientes'}
         title={
@@ -97,6 +107,7 @@ export default function PatientsPage() {
           flexWrap: 'wrap',
           padding: isMobile ? '10px 16px' : '12px 32px',
           borderBottom: '1px solid var(--border-default)',
+          flexShrink: 0,
         }}
       >
         <div
@@ -116,6 +127,8 @@ export default function PatientsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {/* Spinner dentro del buscador mientras se re-consulta */}
+          {refreshing && <span className="spinner" style={{ width: 14, height: 14 }} />}
         </div>
 
         <button
@@ -144,7 +157,16 @@ export default function PatientsPage() {
         )}
       </div>
 
-      <div style={{ padding: isMobile ? '12px 12px 24px' : '20px 32px 32px' }}>
+      <div
+        style={{
+          padding: isMobile ? '12px 12px 16px' : '20px 32px 24px',
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
         {/* DNI duplicados — banner suave de reconciliación */}
         {dupDniGroups.length > 0 && (
           <div
@@ -153,8 +175,8 @@ export default function PatientsPage() {
               border: '1px solid var(--warning-border)',
               borderRadius: 'var(--radius-lg)',
               padding: '10px 14px',
-              marginBottom: 12,
               fontSize: 12.5,
+              flexShrink: 0,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: 'var(--warning)', marginBottom: 6 }}>
@@ -184,9 +206,7 @@ export default function PatientsPage() {
         )}
 
         {isLoading ? (
-          <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-            Buscando…
-          </div>
+          <LoadingList />
         ) : shown.length === 0 ? (
           <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
             {filter === 'debt'
@@ -196,11 +216,12 @@ export default function PatientsPage() {
                 : 'Aún no hay pacientes cargados.'}
           </div>
         ) : isMobile ? (
-          <CardsView patients={shown} onOpen={openPatient} />
+          <CardsView patients={shown} onOpen={openPatient} refreshing={refreshing} />
         ) : (
           <TableView
             patients={shown}
             compact={isTablet}
+            refreshing={refreshing}
             onOpen={openPatient}
             onEdit={onEdit}
             onDelete={setToDelete}
@@ -221,6 +242,28 @@ export default function PatientsPage() {
         }}
         onCancel={() => setToDelete(null)}
       />
+    </div>
+  );
+}
+
+// Carga inicial: filas fantasma con el ancho de las columnas reales. Es más
+// tranquilizador que un "Buscando…" suelto — se ve que la lista está viniendo.
+function LoadingList() {
+  return (
+    <div className="card" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '2px solid var(--border-default)', background: 'var(--bg-muted)', color: 'var(--text-label)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <span className="spinner" style={{ width: 13, height: 13 }} /> Cargando pacientes…
+      </div>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="lb-skeleton-row" style={{ opacity: 1 - i * 0.09 }}>
+          <div className="lb-shimmer" style={{ width: 34, height: 34, borderRadius: '50%' }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="lb-shimmer" style={{ width: `${45 + ((i * 7) % 30)}%`, height: 12 }} />
+            <div className="lb-shimmer" style={{ width: '22%', height: 9 }} />
+          </div>
+          <div className="lb-shimmer" style={{ width: 74, height: 20, borderRadius: 'var(--radius-sm)' }} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -255,18 +298,23 @@ function WhatsAppCell({ phone }: { phone?: string }) {
 function TableView({
   patients,
   compact,
+  refreshing,
   onOpen,
   onEdit,
   onDelete,
 }: {
   patients: Patient[];
   compact: boolean;
+  refreshing: boolean;
   onOpen: (id: string) => void;
   onEdit: (p: Patient) => void;
   onDelete: (p: Patient) => void;
 }) {
   return (
-    <div className="card" style={{ overflowX: 'auto' }}>
+    // La hoja ocupa el alto disponible y el scroll vive ACÁ adentro, así el
+    // buscador y el encabezado de columnas nunca se van de pantalla.
+    <div className="card" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className={`table-scroll ${refreshing ? 'lb-refreshing' : ''}`} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
       <table className="tbl">
         <thead>
           <tr>
@@ -354,14 +402,26 @@ function TableView({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
 
 // Celular: tarjetas apiladas (no tabla) — nombre, última visita y saldo de un vistazo.
-function CardsView({ patients, onOpen }: { patients: Patient[]; onOpen: (id: string) => void }) {
+function CardsView({
+  patients,
+  onOpen,
+  refreshing,
+}: {
+  patients: Patient[];
+  onOpen: (id: string) => void;
+  refreshing: boolean;
+}) {
   return (
-    <div className="card">
+    <div
+      className={`card ${refreshing ? 'lb-refreshing' : ''}`}
+      style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+    >
       {patients.map(p => {
         const age = patientAge(p);
         return (

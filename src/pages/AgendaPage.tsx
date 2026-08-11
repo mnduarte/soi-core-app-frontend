@@ -221,7 +221,7 @@ export default function AgendaPage() {
   );
 
   return (
-    <div className="content" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className="content" style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Toolbar */}
       <div
         className="lb-hd"

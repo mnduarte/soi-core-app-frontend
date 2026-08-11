@@ -14,6 +14,7 @@ import { OdontogramCard } from '../components/patient/OdontogramCard';
 import { GalleryContainer } from '../components/gallery/GalleryContainer';
 import { CustomTreatmentsModal } from '../components/common/CustomTreatmentsModal';
 import { SectionHeader } from '../components/common/SectionHeader';
+import { DatePicker } from '../components/common/DatePicker';
 import { galleryApi, photoTypeLabel, type GalleryPhoto } from '../api/gallery';
 import { fmtMoney, patientAge } from '../lib/format';
 import { toWhatsAppNumber } from '../lib/phone';
@@ -162,8 +163,6 @@ export default function FichaRapidaPage() {
   const pagado = pagos.reduce((s, t) => s + t.amount, 0);
   const falta = realizado - pagado;
   const hasWorks = pendientes.length > 0 || hechosCount > 0;
-  // Total del plan = todo lo cargado (hecho + por hacer). Va al pie de la hoja.
-  const totalPlan = realizado + (summary?.pendienteTotal ?? 0);
 
   // Montos/trabajos rápidos del consultorio (personalizables).
   const { data: settings } = useQuery({ queryKey: ['clinic-settings'], queryFn: clinicsApi.getSettings });
@@ -577,7 +576,7 @@ export default function FichaRapidaPage() {
   const debe = falta > 0;
 
   return (
-    <div className="content" style={{ padding: 0, overflow: 'auto', height: '100%' }}>
+    <div className="content" style={{ padding: 0, overflow: 'auto', minHeight: 0 }}>
       <SectionHeader
         kicker="Ficha clínica"
         title={<>Trabajos, pagos y <em>cuánto falta cobrar</em></>}
@@ -824,13 +823,10 @@ export default function FichaRapidaPage() {
                 )}
               </div>
 
-              {/* Total al pie de la hoja */}
-              {hasWorks && (
-                <div className="lb-total">
-                  <span>Total del plan</span>
-                  <span className="mono">{fmtMoney(totalPlan)}</span>
-                </div>
-              )}
+              {/* Sin total al pie: el único número de plata que se muestra es
+                  "Falta cobrar" (arriba). No exponemos el total del plan ni lo
+                  pagado — es info sensible y el Dr. atiende con el paciente al
+                  lado mirando la pantalla. */}
             </div>
 
             {/* ---------- PAGOS ---------- */}
@@ -896,13 +892,7 @@ export default function FichaRapidaPage() {
                 )}
               </div>
 
-              {/* Total pagado al pie de la hoja */}
-              {pagos.length > 0 && (
-                <div className="lb-total">
-                  <span>Pagado</span>
-                  <span className="mono" style={{ color: 'var(--success)' }}>{fmtMoney(pagado)}</span>
-                </div>
-              )}
+              {/* Sin total pagado al pie — ver nota en la hoja de Trabajos. */}
             </div>
             </div>
           </>
@@ -1004,28 +994,25 @@ export default function FichaRapidaPage() {
           filterSlot={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={filterRow}>
-                <label style={filterField}>
-                  <span style={filterLabel}>Desde</span>
-                  <input
-                    type="date"
-                    className="input"
+                {/* DatePicker propio en vez de <input type="date">: el nativo
+                    muestra "mm/dd/yyyy" según el idioma del navegador, que no se
+                    entiende y encima queda en formato yanqui. */}
+                <div style={filterDate}>
+                  <span style={filterLabel}>Fecha de inicio</span>
+                  <DatePicker
                     value={hechosFrom}
-                    max={hechosTo || undefined}
-                    onChange={e => setHechosDate('from', e.target.value)}
-                    style={{ height: 38 }}
+                    onChange={v => setHechosDate('from', v)}
+                    placeholder="Desde cuándo"
                   />
-                </label>
-                <label style={filterField}>
-                  <span style={filterLabel}>Hasta</span>
-                  <input
-                    type="date"
-                    className="input"
+                </div>
+                <div style={filterDate}>
+                  <span style={filterLabel}>Fecha de fin</span>
+                  <DatePicker
                     value={hechosTo}
-                    min={hechosFrom || undefined}
-                    onChange={e => setHechosDate('to', e.target.value)}
-                    style={{ height: 38 }}
+                    onChange={v => setHechosDate('to', v)}
+                    placeholder="Hasta cuándo"
                   />
-                </label>
+                </div>
                 <div ref={hechosSearchRef} style={{ position: 'relative', flex: '1 1 200px', minWidth: 140 }}>
                   <input
                     className="input"
@@ -1132,26 +1119,22 @@ export default function FichaRapidaPage() {
           }}
           filterSlot={
             <div style={filterRow}>
-              <label style={filterField}>
-                <span style={filterLabel}>Desde</span>
-                <input
-                  type="date"
-                  className="input"
+              <div style={filterDate}>
+                <span style={filterLabel}>Fecha de inicio</span>
+                <DatePicker
                   value={pagoFilterDraft.from}
-                  onChange={e => setPagoFilterDraft(f => ({ ...f, from: e.target.value }))}
-                  style={{ height: 38 }}
+                  onChange={v => setPagoFilterDraft(f => ({ ...f, from: v }))}
+                  placeholder="Desde cuándo"
                 />
-              </label>
-              <label style={filterField}>
-                <span style={filterLabel}>Hasta</span>
-                <input
-                  type="date"
-                  className="input"
+              </div>
+              <div style={filterDate}>
+                <span style={filterLabel}>Fecha de fin</span>
+                <DatePicker
                   value={pagoFilterDraft.to}
-                  onChange={e => setPagoFilterDraft(f => ({ ...f, to: e.target.value }))}
-                  style={{ height: 38 }}
+                  onChange={v => setPagoFilterDraft(f => ({ ...f, to: v }))}
+                  placeholder="Hasta cuándo"
                 />
-              </label>
+              </div>
               <input
                 className="input"
                 placeholder="Monto o método…"
@@ -1456,9 +1439,12 @@ const filterBtn: CSSProperties = {
 const filterField: CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0,
 };
+// Los campos de fecha usan el DatePicker propio, cuyo trigger es width:100% —
+// por eso el contenedor necesita un ancho propio.
+const filterDate: CSSProperties = { ...filterField, width: 152 };
 const filterLabel: CSSProperties = {
-  fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
-  color: 'var(--text-tertiary)',
+  fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
+  color: 'var(--text-label)',
 };
 const popover: CSSProperties = {
   position: 'absolute', top: 'calc(100% - 4px)', left: 12, right: 12,

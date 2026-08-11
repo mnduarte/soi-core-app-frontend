@@ -82,7 +82,7 @@ export function WhatsAppReminderModal({
           <button
             className="btn btn--whatsapp"
             onClick={send}
-            style={{ background: '#25D366', color: '#fff' }}
+            style={{ background: 'var(--success)', color: '#fff' }}
           >
             <Icon name="whatsapp" /> Abrir WhatsApp
           </button>

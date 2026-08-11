@@ -315,7 +315,7 @@ export default function HelpPage() {
           alignItems: 'flex-start',
         }}
       >
-        <Icon name="whatsapp" size={16} style={{ color: '#25D366', marginTop: 1, flexShrink: 0 }} />
+        <Icon name="whatsapp" size={16} style={{ color: 'var(--success)', marginTop: 1, flexShrink: 0 }} />
         <span>¿Algo no funciona o tenés una duda? Escribinos por WhatsApp y te ayudamos.</span>
       </div>
     </div>

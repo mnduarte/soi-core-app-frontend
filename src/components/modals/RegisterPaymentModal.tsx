@@ -308,7 +308,7 @@ export function RegisterPaymentModal({ open, onClose, defaultPatientId }: Regist
           opacity: patient?.phone ? 1 : 0.55,
         }}
       >
-        <Icon name="whatsapp" size={16} style={{ color: '#25D366' }} />
+        <Icon name="whatsapp" size={16} style={{ color: 'var(--success)' }} />
         <div style={{ flex: 1, fontSize: 12.5 }}>
           <div style={{ fontWeight: 500 }}>Enviar comprobante por WhatsApp</div>
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>

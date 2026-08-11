@@ -6,37 +6,27 @@ import { Icon, type IconName } from '../common/Icon';
 import { BrandLogo } from '../common/BrandLogo';
 import { Avatar } from '../common/Avatar';
 
-interface NavGroup {
-  group: string;
-  items: { to: string; label: string; icon: IconName; end?: boolean; kbd?: string }[];
+interface NavItem {
+  to: string;
+  label: string;
+  icon: IconName;
+  end?: boolean;
+  kbd?: string;
 }
 
-// Nota: Dashboard, Galería, Pagos y Ayuda quedan OCULTOS del menú por ahora
-// (las rutas siguen activas). Para volver a mostrarlos, descomentar.
-const NAV: NavGroup[] = [
-  {
-    group: 'Principal',
-    items: [
-      // { to: '/', label: 'Dashboard', icon: 'home', end: true, kbd: 'G' },
-      { to: '/agenda', label: 'Agenda', icon: 'calendar', kbd: 'A' },
-      { to: '/patients', label: 'Pacientes', icon: 'users', kbd: 'P' },
-      { to: '/ficha-rapida', label: 'Ficha clínica', icon: 'clipboard', kbd: 'F' },
-    ],
-  },
-  {
-    group: 'Clínico',
-    items: [
-      // { to: '/gallery', label: 'Galería', icon: 'image' },
-      // { to: '/payments', label: 'Pagos', icon: 'receipt' },
-      { to: '/pacientes-viejos', label: 'Pacientes viejos', icon: 'history' },
-    ],
-  },
-  // {
-  //   group: 'Soporte',
-  //   items: [
-  //     { to: '/ayuda', label: 'Ayuda', icon: 'help' },
-  //   ],
-  // },
+// Tres secciones y nada más. Sin rótulos de grupo: con esta cantidad de ítems
+// un encabezado ("Principal") era puro ruido.
+// Nota: Dashboard, Galería, Pagos, Ayuda y Pacientes viejos quedan OCULTOS del
+// menú (sus rutas siguen activas por si queda algún link guardado).
+const NAV: NavItem[] = [
+  // { to: '/', label: 'Dashboard', icon: 'home', end: true, kbd: 'G' },
+  { to: '/agenda', label: 'Agenda', icon: 'calendar', kbd: 'A' },
+  { to: '/patients', label: 'Pacientes', icon: 'users', kbd: 'P' },
+  { to: '/ficha-rapida', label: 'Ficha clínica', icon: 'clipboard', kbd: 'F' },
+  // { to: '/pacientes-viejos', label: 'Pacientes viejos', icon: 'history' },
+  // { to: '/gallery', label: 'Galería', icon: 'image' },
+  // { to: '/payments', label: 'Pagos', icon: 'receipt' },
+  // { to: '/ayuda', label: 'Ayuda', icon: 'help' },
 ];
 
 interface SidebarProps {
@@ -71,23 +61,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <span className="search__kbd">⌘K</span>
       </div>
 
-      {NAV.map(group => (
-        <div key={group.group}>
-          <div className="sidebar__group-label">{group.group}</div>
-          {group.items.map(it => (
-            <NavLink
-              key={it.to}
-              to={it.to}
-              end={it.end}
-              onClick={onClose}
-              className={({ isActive }) => `nav-item ${isActive ? 'is-active' : ''}`}
-            >
-              <Icon name={it.icon} />
-              <span>{it.label}</span>
-              {it.kbd && <span className="nav-item__kbd">{it.kbd}</span>}
-            </NavLink>
-          ))}
-        </div>
+      {NAV.map(it => (
+        <NavLink
+          key={it.to}
+          to={it.to}
+          end={it.end}
+          onClick={onClose}
+          className={({ isActive }) => `nav-item ${isActive ? 'is-active' : ''}`}
+        >
+          <Icon name={it.icon} />
+          <span>{it.label}</span>
+          {it.kbd && <span className="nav-item__kbd">{it.kbd}</span>}
+        </NavLink>
       ))}
 
       <div className="sidebar__user">

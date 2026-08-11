@@ -40,23 +40,13 @@ interface SectionLabelProps {
   hint?: string;
 }
 
+// Microlabel de sección del formulario: MAYÚSCULAS con hairline debajo.
 export function SectionLabel({ children, hint }: SectionLabelProps) {
   return (
-    <div
-      style={{
-        fontSize: 11,
-        color: 'var(--text-tertiary)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.06em',
-        fontWeight: 600,
-        margin: '18px 0 10px',
-        paddingBottom: 6,
-        borderBottom: '1px solid var(--border-subtle)',
-      }}
-    >
+    <div className="section-label" style={{ margin: '18px 0 10px' }}>
       {children}
       {hint && (
-        <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: 6 }}>
+        <span style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 500, marginLeft: 6 }}>
           {hint}
         </span>
       )}

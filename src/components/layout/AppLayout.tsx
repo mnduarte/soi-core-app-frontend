@@ -9,6 +9,7 @@ import { useIdleLogout } from '../../hooks/useIdleLogout';
 import { useSessionGuard } from '../../hooks/useSessionGuard';
 import { useClinicChanges } from '../../hooks/useClinicChanges';
 import { SubscriptionBanner } from './SubscriptionBanner';
+import { BottomNav, MobileFab } from './BottomNav';
 
 export default function AppLayout() {
   const sidebarOpen = useUIStore(s => s.sidebarOpen);
@@ -92,12 +93,14 @@ export default function AppLayout() {
         {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="main">
-          {/* El botón de menú (mobile) vive dentro del header de cada página
-              (MobileMenuButton), alineado con el ícono + título. */}
+          {/* En desktop/tablet la navegación vive en el sidebar; en celular
+              (<768px) se reemplaza por la bottom nav + FAB de abajo. */}
           <Outlet />
+          <BottomNav />
         </div>
       </div>
       </div>
+      <MobileFab />
       <ModalHost />
       <ToastHost />
     </>

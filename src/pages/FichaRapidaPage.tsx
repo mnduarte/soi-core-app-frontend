@@ -162,6 +162,8 @@ export default function FichaRapidaPage() {
   const pagado = pagos.reduce((s, t) => s + t.amount, 0);
   const falta = realizado - pagado;
   const hasWorks = pendientes.length > 0 || hechosCount > 0;
+  // Total del plan = todo lo cargado (hecho + por hacer). Va al pie de la hoja.
+  const totalPlan = realizado + (summary?.pendienteTotal ?? 0);
 
   // Montos/trabajos rápidos del consultorio (personalizables).
   const { data: settings } = useQuery({ queryKey: ['clinic-settings'], queryFn: clinicsApi.getSettings });
@@ -427,6 +429,9 @@ export default function FichaRapidaPage() {
 
   // Layout: dos columnas (Trabajos | Pagos) en pantallas anchas; apiladas si no.
   const stack = useIsMobile(1000);
+  // En celular las dos columnas se reemplazan por pestañas segmentadas
+  // (Trabajos · N | Pagos · N); en tablet/desktop se muestran las dos hojas.
+  const [mobileTab, setMobileTab] = useState<'trabajos' | 'pagos'>('trabajos');
 
   // Panel de chips que se abre al enfocar los inputs (ahorra espacio vertical
   // vs. tenerlos siempre visibles). Es contextual: al enfocar "Trabajo" muestra
@@ -574,54 +579,39 @@ export default function FichaRapidaPage() {
   return (
     <div className="content" style={{ padding: 0, overflow: 'auto', height: '100%' }}>
       <SectionHeader
-        icon="clipboard"
-        accent="#7C3AED"
-        title="Ficha clínica"
-        sub="Trabajos, pagos y cuánto falta cobrar."
+        kicker="Ficha clínica"
+        title={<>Trabajos, pagos y <em>cuánto falta cobrar</em></>}
       />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 16 : 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {/* ---------- PACIENTE ---------- */}
         <div className="card" style={{ overflow: 'visible' }}>
-          <div style={{ padding: 16 }}>
-            <div style={label}>Paciente</div>
+          <div style={{ padding: patient ? 0 : 16 }}>
+            {!patient && <div style={label}>Paciente</div>}
             {patient ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                <div
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 10,
-                    padding: '6px 8px 6px 6px', border: '1px solid var(--border-default)',
-                    borderRadius: 10, background: 'var(--bg-surface)',
-                  }}
-                >
-                  <Avatar name={patient.name} lastName={patient.lastName} id={patient._id} size="sm" />
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>{patient.name} {patient.lastName}</span>
-                  <button
-                    className="btn btn--ghost btn--icon btn--sm"
-                    title="Cambiar paciente"
-                    onClick={() => { navigate('/ficha-rapida'); }}
-                  >
-                    <Icon name="x" size={14} />
-                  </button>
+              /* Encabezado del paciente: avatar + nombre + datos + acciones */
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: isMobile ? '12px 14px' : '16px 20px' }}>
+                <Avatar name={patient.name} lastName={patient.lastName} id={patient._id} size="lg" />
+                <div style={{ minWidth: 0 }}>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: isMobile ? 18 : 22, fontWeight: 600, margin: 0 }}>
+                    {patient.name} {patient.lastName}
+                  </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                    {patientAge(patient) != null && <span>{patientAge(patient)} años</span>}
+                    {patient.phone && (
+                      <a
+                        href={`https://wa.me/${toWhatsAppNumber(patient.phone)}`}
+                        target="_blank" rel="noreferrer" title="Abrir WhatsApp"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)', fontWeight: 600, textDecoration: 'none' }}
+                      >
+                        <Icon name="whatsapp" size={14} /> {patient.phone}
+                      </a>
+                    )}
+                    {patient.obraSocial && <span>{patient.obraSocial}</span>}
+                    {patient.locality && <span>{patient.locality}</span>}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-secondary)' }}>
-                  {patientAge(patient) != null && (
-                    <span><b style={{ color: 'var(--text-primary)' }}>{patientAge(patient)}</b> años</span>
-                  )}
-                  {patient.phone && (
-                    <a
-                      href={`https://wa.me/${toWhatsAppNumber(patient.phone)}`}
-                      target="_blank" rel="noreferrer" title="Abrir WhatsApp"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)', fontWeight: 500, textDecoration: 'none' }}
-                    >
-                      <Icon name="whatsapp" size={15} /> {patient.phone}
-                    </a>
-                  )}
-                  {patient.obraSocial && <span>· {patient.obraSocial}</span>}
-                  {patient.locality && <span style={{ color: 'var(--text-tertiary)' }}>· {patient.locality}</span>}
-                </div>
-
-                <div className="row" style={{ gap: 8, marginLeft: 'auto' }}>
+                <div className="row" style={{ gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
                   <button className="btn btn--secondary btn--sm" title="Editar datos del paciente" onClick={() => openModal('newPatient', { patientId: patient._id })}>
                     <Icon name="edit" size={14} /> Editar
                   </button>
@@ -629,7 +619,10 @@ export default function FichaRapidaPage() {
                     <Icon name="image" size={14} /> Galería
                   </button>
                   <button className="btn btn--secondary btn--sm" onClick={() => setOdoOpen(true)}>
-                    <Icon name="tooth" size={14} /> Odontograma
+                    <Icon name="tooth" size={14} /> {isMobile ? 'Odont.' : 'Odontograma'}
+                  </button>
+                  <button className="btn btn--ghost btn--icon btn--sm" title="Cambiar paciente" onClick={() => navigate('/ficha-rapida')}>
+                    <Icon name="x" size={15} />
                   </button>
                 </div>
               </div>
@@ -683,57 +676,65 @@ export default function FichaRapidaPage() {
             {/* ---------- BANNER-AVISO (una sola cosa: deuda o "al día") ---------- */}
             {/* Por seguridad NO exponemos realizado/pagado/por-hacer ni el saldo a
                 favor: solo el monto que falta cobrar (ámbar) o "al día" (verde). */}
+            {/* Sello de estado de cuenta a todo ancho */}
             <div
-              className="card"
-              style={{
-                padding: isMobile ? '11px 14px' : '11px 18px',
-                display: 'flex', alignItems: 'center', gap: 11,
-                background: debe ? 'rgba(245,158,11,0.10)' : 'rgba(16,185,129,0.10)',
-                border: '1px solid',
-                borderColor: debe ? 'rgba(245,158,11,0.35)' : 'rgba(16,185,129,0.35)',
-              }}
+              key={debe ? 'debe' : 'aldia'}
+              className={`lb-estado ${debe ? 'lb-estado--debe' : ''}`}
+              style={{ animation: 'dialogPop 0.22s cubic-bezier(0.16,1,0.3,1)' }}
             >
-              <div
-                key={debe ? 'debe' : 'aldia'}
-                style={{
-                  width: 34, height: 34, borderRadius: 999, flexShrink: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: debe ? '#B45309' : 'var(--success)',
-                  color: 'white',
-                  animation: 'dialogPop 0.22s cubic-bezier(0.16,1,0.3,1)',
-                }}
-              >
-                <Icon name={debe ? 'cash' : 'check'} size={18} />
-              </div>
+              <Icon name={debe ? 'cash' : 'check'} size={18} />
               {debe ? (
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>
-                    Falta cobrar
-                  </span>
-                  <span style={{ fontSize: 20, fontWeight: 700, lineHeight: 1, color: '#B45309' }}>
-                    {fmtMoney(falta)}
-                  </span>
-                </div>
-              ) : (
-                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>
-                  Al día ✓
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  Falta cobrar
+                  <b className="mono" style={{ fontSize: 20, lineHeight: 1 }}>{fmtMoney(falta)}</b>
                 </span>
+              ) : (
+                <span>Al día — no debe nada</span>
               )}
             </div>
+
+            {/* En celular: pestañas en vez de dos columnas */}
+            {isMobile && (
+              <div className="seg" style={{ width: '100%' }}>
+                <button
+                  type="button"
+                  className={`seg__btn ${mobileTab === 'trabajos' ? 'is-active' : ''}`}
+                  onClick={() => setMobileTab('trabajos')}
+                  style={{ flex: 1 }}
+                >
+                  Trabajos · {pendientes.length + hechosCount}
+                </button>
+                <button
+                  type="button"
+                  className={`seg__btn ${mobileTab === 'pagos' ? 'is-active' : ''}`}
+                  onClick={() => setMobileTab('pagos')}
+                  style={{ flex: 1 }}
+                >
+                  Pagos · {pagos.length}
+                </button>
+              </div>
+            )}
 
             {/* ---------- DOS COLUMNAS: Trabajos | Pagos ---------- */}
             <div style={{ display: 'grid', gridTemplateColumns: stack ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
 
             {/* ---------- TRABAJOS ---------- */}
-            <div className="card" style={{ overflow: 'visible' }}>
+            <div
+              className="card"
+              style={{
+                overflow: 'visible',
+                display: isMobile && mobileTab !== 'trabajos' ? 'none' : 'flex',
+                flexDirection: 'column',
+              }}
+            >
               <div className="card__header" style={{ alignItems: 'center' }}>
                 <div className="card__title">
-                  Plan de tratamiento - Trabajos
+                  Plan de tratamiento · Trabajos
                   {pendientes.length > 0 && <span style={countBadge}>{pendientes.length} por hacer</span>}
                 </div>
               </div>
 
-              <div ref={workRef} style={{ padding: 12, borderBottom: '1px solid var(--border-subtle)', position: 'relative' }}>
+              <div ref={workRef} className="lb-addrow" style={{ position: 'relative', display: 'block' }}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <input
                     className="input"
@@ -822,10 +823,25 @@ export default function FichaRapidaPage() {
                   </>
                 )}
               </div>
+
+              {/* Total al pie de la hoja */}
+              {hasWorks && (
+                <div className="lb-total">
+                  <span>Total del plan</span>
+                  <span className="mono">{fmtMoney(totalPlan)}</span>
+                </div>
+              )}
             </div>
 
             {/* ---------- PAGOS ---------- */}
-            <div className="card" style={{ overflow: 'visible' }}>
+            <div
+              className="card"
+              style={{
+                overflow: 'visible',
+                display: isMobile && mobileTab !== 'pagos' ? 'none' : 'flex',
+                flexDirection: 'column',
+              }}
+            >
               <div className="card__header" style={{ alignItems: 'center' }}>
                 <div className="card__title">
                   Pagos
@@ -833,7 +849,7 @@ export default function FichaRapidaPage() {
                 </div>
               </div>
 
-              <div ref={pagoRef} style={{ padding: 12, borderBottom: '1px solid var(--border-subtle)', position: 'relative' }}>
+              <div ref={pagoRef} className="lb-addrow" style={{ position: 'relative', display: 'block' }}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <div style={{ position: 'relative', flex: '1 1 110px', minWidth: 100 }}>
                     <span style={dollarPrefix}>$</span>
@@ -879,6 +895,14 @@ export default function FichaRapidaPage() {
                   </button>
                 )}
               </div>
+
+              {/* Total pagado al pie de la hoja */}
+              {pagos.length > 0 && (
+                <div className="lb-total">
+                  <span>Pagado</span>
+                  <span className="mono" style={{ color: 'var(--success)' }}>{fmtMoney(pagado)}</span>
+                </div>
+              )}
             </div>
             </div>
           </>
@@ -915,7 +939,7 @@ export default function FichaRapidaPage() {
 
       {/* Modal del odontograma */}
       {odoOpen && patient && (
-        <div onClick={() => setOdoOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.42)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: isMobile ? 8 : 24, overflowY: 'auto', animation: 'overlayFade 0.12s ease-out' }}>
+        <div onClick={() => setOdoOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(60,52,34,0.42)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: isMobile ? 8 : 24, overflowY: 'auto', animation: 'overlayFade 0.12s ease-out' }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, margin: 'auto', animation: 'dialogPop 0.16s cubic-bezier(0.16,1,0.3,1)' }}>
             <OdontogramCard patientId={patient._id} patientName={`${patient.name} ${patient.lastName}`} onClose={() => setOdoOpen(false)} />
           </div>
@@ -924,7 +948,7 @@ export default function FichaRapidaPage() {
 
       {/* Modal de galería */}
       {galleryOpen && patient && (
-        <div onClick={() => setGalleryOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.42)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: isMobile ? 8 : 24, overflowY: 'auto', animation: 'overlayFade 0.12s ease-out' }}>
+        <div onClick={() => setGalleryOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(60,52,34,0.42)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: isMobile ? 8 : 24, overflowY: 'auto', animation: 'overlayFade 0.12s ease-out' }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, margin: 'auto', background: 'var(--bg-surface)', borderRadius: 14, boxShadow: 'var(--shadow-lg)', animation: 'dialogPop 0.16s cubic-bezier(0.16,1,0.3,1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600 }}>
@@ -1217,7 +1241,7 @@ function ListModal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(15,23,42,0.42)',
+        background: 'rgba(60,52,34,0.42)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
@@ -1350,7 +1374,7 @@ function CustomAmountsModal({ open, initial, onClose }: { open: boolean; initial
   };
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16, animation: 'overlayFade 0.12s ease-out' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(60,52,34,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16, animation: 'overlayFade 0.12s ease-out' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderRadius: 14, width: '100%', maxWidth: 380, boxShadow: 'var(--shadow-lg)', overflow: 'hidden', animation: 'dialogPop 0.16s cubic-bezier(0.16,1,0.3,1)' }}>
         <div style={{ padding: '18px 20px 6px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ flex: 1 }}>

@@ -415,7 +415,7 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
                 style={{
                   fontSize: 13,
                   fontWeight: 600,
-                  color: scanDone ? '#16A34A' : 'var(--brand-primary-600)',
+                  color: scanDone ? 'var(--success)' : 'var(--brand-primary)',
                 }}
               >
                 {scanning
@@ -454,9 +454,9 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
       {duplicate && (
         <div
           style={{
-            border: '1px solid #FCD34D',
-            background: '#FEF3C7',
-            color: '#92400E',
+            border: '1px solid var(--warning-border)',
+            background: 'var(--warning-bg)',
+            color: 'var(--warning)',
             borderRadius: 10,
             padding: '10px 14px',
             marginBottom: 16,
@@ -570,22 +570,13 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
       </div>
 
       <SectionLabel>Obra social</SectionLabel>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         {OBRA_SOCIAL_OPTIONS.map(o => (
           <button
             key={o}
             type="button"
+            className={`chip-pill ${data.obraSocial === o ? 'is-active' : ''}`}
             onClick={() => upd('obraSocial', o)}
-            style={{
-              padding: '5px 11px',
-              fontSize: 12,
-              borderRadius: 999,
-              border: '1px solid',
-              borderColor: data.obraSocial === o ? 'var(--brand-primary)' : 'var(--border-default)',
-              background: data.obraSocial === o ? 'var(--brand-primary-50)' : 'var(--bg-surface)',
-              color: data.obraSocial === o ? 'var(--brand-primary-600)' : 'var(--text-secondary)',
-              cursor: 'pointer',
-            }}
           >
             {o}
           </button>
@@ -611,27 +602,28 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
 
       <SectionLabel hint="(opcional, se puede completar después)">Antecedentes</SectionLabel>
       <FormField label="Alergias y advertencias">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {ALLERGY_OPTIONS.map(a => {
             const has = data.allergies.includes(a);
             return (
               <button
                 key={a}
                 type="button"
+                className={`chip-pill ${has ? 'is-active' : ''}`}
                 onClick={() => toggleAllergy(a)}
-                style={{
-                  padding: '5px 11px',
-                  fontSize: 12,
-                  borderRadius: 999,
-                  border: '1px solid',
-                  borderColor: has ? 'var(--warning)' : 'var(--border-default)',
-                  background: has ? '#FEF3C7' : 'var(--bg-surface)',
-                  color: has ? '#92400E' : 'var(--text-secondary)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  cursor: 'pointer',
-                }}
+                style={
+                  has
+                    ? {
+                        // Las alergias marcadas van en terracota (alerta), no en azul.
+                        borderColor: 'var(--warning)',
+                        background: 'var(--warning-bg)',
+                        color: 'var(--warning)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                      }
+                    : undefined
+                }
               >
                 {has && <Icon name="check" size={11} />}{a}
               </button>

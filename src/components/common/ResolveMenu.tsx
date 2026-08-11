@@ -10,6 +10,9 @@ interface ResolveMenuProps {
   onReschedule?: (appt: Appointment) => void;
   onDelete?: (appt: Appointment) => void;
   onRemind?: (appt: Appointment) => void;
+  // En celular las acciones de fila se reducen a "Recordar" y "Más", así que
+  // editar paciente / ver ficha tienen que estar también acá dentro.
+  onEditPatient?: (appt: Appointment) => void;
   align?: 'left' | 'right';
 }
 
@@ -28,6 +31,7 @@ export function ResolveMenu({
   onReschedule,
   onDelete,
   onRemind,
+  onEditPatient,
   align = 'right',
 }: ResolveMenuProps) {
   const [open, setOpen] = useState(false);
@@ -67,6 +71,16 @@ export function ResolveMenu({
     actions.push({ key: 'remind', icon: 'whatsapp', label: 'Recordar por WhatsApp', accent: true });
   }
 
+  // Ver ficha / Editar paciente: en desktop y tablet están como botones de la
+  // fila, pero en celular solo quedan "Recordar" y "Más" — así que acá adentro
+  // tienen que estar siempre disponibles.
+  if (onOpenFicha && !actions.some(a => a.key === 'ficha')) {
+    actions.push({ key: 'ficha', icon: 'clipboard', label: 'Ver ficha clínica' });
+  }
+  if (onEditPatient) {
+    actions.push({ key: 'editPatient', icon: 'user', label: 'Editar paciente' });
+  }
+
   // Borrar turno: disponible siempre. Es un borrado físico (no "cancelar", que
   // dejaba el turno tachado ensuciando la lista) — si fue un error, se rehace.
   if (onDelete) {
@@ -78,6 +92,7 @@ export function ResolveMenu({
     e.stopPropagation();
     setOpen(false);
     if (key === 'ficha') return onOpenFicha?.(appt);
+    if (key === 'editPatient') return onEditPatient?.(appt);
     if (key === 'reschedule') return onReschedule?.(appt);
     if (key === 'remind') return onRemind?.(appt);
     if (key === 'delete') return onDelete?.(appt);
@@ -87,20 +102,18 @@ export function ResolveMenu({
 
   return (
     <div ref={ref} style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+      {/* Patrón de acción de fila: ícono 32×32 + micro-etiqueta debajo,
+          siempre visible (nunca tooltip). Ver handoff-libreta §3. */}
       <button
-        className="btn btn--icon"
-        title="Acciones"
+        className="lb-act"
+        title="Más acciones"
         onClick={e => {
           e.stopPropagation();
           setOpen(o => !o);
         }}
-        style={{
-          border: '1px solid var(--border-default)',
-          background: 'var(--bg-surface)',
-          color: 'var(--text-secondary)',
-        }}
       >
-        <Icon name="more" size={20} />
+        <span className="lb-act__ic"><Icon name="more" size={17} /></span>
+        <span className="lb-act__lbl">Más</span>
       </button>
       {open && (
         <div
@@ -109,12 +122,13 @@ export function ResolveMenu({
             top: 'calc(100% + 4px)',
             [align]: 0,
             zIndex: 50,
-            minWidth: 188,
+            minWidth: 210,
             background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 10,
-            boxShadow: 'var(--shadow-lg)',
+            border: '1px solid var(--border-input)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-md)',
             padding: 5,
+            overflow: 'hidden',
           }}
         >
           {actions.map(a => (
@@ -124,20 +138,22 @@ export function ResolveMenu({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 9,
+                gap: 10,
                 width: '100%',
-                padding: '8px 10px',
+                padding: '10px 12px',
+                minHeight: 40,
                 border: 'none',
                 background: 'transparent',
                 borderRadius: 7,
                 cursor: 'pointer',
-                fontSize: 13,
+                fontSize: 13.5,
+                fontWeight: 500,
                 textAlign: 'left',
                 color: a.danger
                   ? 'var(--danger)'
                   : a.accent
-                  ? 'var(--brand-primary-600)'
-                  : 'var(--text-primary)',
+                  ? 'var(--brand-primary)'
+                  : '#4A4438',
               }}
               onMouseOver={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
               onMouseOut={e => (e.currentTarget.style.background = 'transparent')}

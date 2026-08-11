@@ -76,7 +76,7 @@ export function CustomSlotsModal({
   return (
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16, animation: 'overlayFade 0.12s ease-out' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(60,52,34,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16, animation: 'overlayFade 0.12s ease-out' }}
     >
       <div
         onClick={e => e.stopPropagation()}

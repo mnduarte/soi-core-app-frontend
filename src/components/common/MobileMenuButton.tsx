@@ -1,9 +1,12 @@
 import { Icon } from './Icon';
 import { useUIStore } from '../../store/ui.store';
 
-// Botón de menú (☰) que abre el drawer del sidebar. Solo se ve en mobile
-// (la clase .topbar__menu es display:none y pasa a inline-flex ≤1024px).
-// Va dentro del header de cada página, alineado con el ícono + título.
+// Botón de menú (☰) del layout anterior. Con el rediseño "Libreta" ya NO se
+// muestra en ningún breakpoint: desktop y tablet tienen el sidebar siempre
+// visible (completo o como rail de íconos) y en celular la navegación es la
+// bottom nav. La clase .topbar__menu quedó en display:none, así que esto
+// renderiza nada; se conserva para no tocar los headers de las pantallas
+// secundarias, que están fuera del alcance del rediseño.
 export function MobileMenuButton() {
   const setSidebarOpen = useUIStore(s => s.setSidebarOpen);
   return (

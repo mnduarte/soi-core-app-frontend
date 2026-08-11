@@ -57,7 +57,7 @@ export function AppointmentReminderModal({
       footer={
         <>
           <button className="btn btn--ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn" onClick={send} style={{ background: '#25D366', color: '#fff' }}>
+          <button className="btn" onClick={send} style={{ background: 'var(--success)', color: '#fff' }}>
             <Icon name="whatsapp" /> {alreadySent ? 'Reenviar por WhatsApp' : 'Abrir WhatsApp'}
           </button>
         </>

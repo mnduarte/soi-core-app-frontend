@@ -892,7 +892,30 @@ table.tbl { width: 100%; border-collapse: collapse; }
 
 /* Nombre del paciente en la fila */
 .lb-name { font-family: var(--font-display); font-size: 16.5px; font-weight: 600; }
-.lb-sub { font-size: 13px; color: var(--text-tertiary); }
+/* El trabajo a realizar (LIMP, ORT, "6 reconstrucciones"). Va como etiqueta
+   con fondo y en MAYÚSCULA a pedido del Dr.: en gris pálido se le pasaba por
+   alto y llegaba al sillón sin saber qué tenía que hacer. Tiene que competirle
+   al nombre del paciente, no acompañarlo. */
+.lb-sub {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  /* Marrón sello: el color de lo escrito a mano en la libreta (el mismo de los
+     horarios). A propósito NO usa el azul de marca — ese es el de botones y
+     estados, y hacía que el trabajo pareciera "un chip de estado" más. */
+  color: var(--ink-stamp);
+  background: #F3E4D8;
+  border: 1px solid #E3CDB8;
+  border-radius: var(--radius-xs);
+  padding: 1px 7px;
+  vertical-align: middle;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Acción de fila: ícono 32×32 con micro-etiqueta SIEMPRE visible debajo */
 .lb-act {
@@ -1105,6 +1128,264 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .lb-filters { flex-wrap: wrap; }
   .lb-filters__date { flex: 1 1 calc(50% - 4px) !important; width: auto !important; }
   .lb-filters__search { flex: 1 1 55% !important; min-width: 0 !important; }
+}
+
+/* Chips de atajo (trabajos frecuentes, montos rapidos). Se usan en la Agenda y
+   en la Ficha: una sola clase para que no vuelvan a quedar distintos en cada
+   lado. Antes eran casi invisibles — borde y texto muy tenues — y el Dr. no los
+   registraba como algo tocable. */
+.lb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-input);
+  background: #fff;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.lb-chip:hover,
+.lb-chip:focus-visible {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-50);
+  color: var(--brand-primary);
+}
+.lb-chip:active { transform: translateY(0.5px); }
+/* Variante "Personalizar…": misma caja pero punteada, para que se lea como
+   una accion secundaria y no como un trabajo mas de la lista. */
+.lb-chip--add {
+  border-style: dashed;
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+/* Tablet/celular: la mano necesita mas superficie que el mouse */
+@media (max-width: 1199px) {
+  .lb-chip { min-height: 40px; padding: 7px 16px; font-size: 13.5px; }
+}
+
+/* Fila que entra o sale (un pago, o un trabajo que cambia de lista).
+   IMPORTANTE: acá solo se animan `opacity` y `transform`. Se probó antes
+   animando `max-height` para que las filas se empujaran entre sí, y nunca
+   quedó fluido: cambiar el alto obliga al navegador a recalcular la posición
+   de TODA la lista en cada frame, y eso no lo puede acelerar por GPU. Con
+   opacidad y desplazamiento el movimiento va a 60fps siempre, y el cierre de
+   la lista queda en un solo salto, tan corto que no se percibe. */
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rowInFlash {
+  0%, 45% { background: var(--success-bg); }
+  100% { background: transparent; }
+}
+@keyframes rowOut {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-8px); }
+}
+.lb-rowin {
+  animation: rowIn 0.15s ease-out, rowInFlash 0.8s ease-out;
+  will-change: opacity, transform;
+}
+.lb-rowout {
+  animation: rowOut 0.12s ease-in forwards;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+/* La fila viajo a su lugar nuevo con FLIP (no nacio ahi): no lleva el
+   translate de entrada, solo el destello verde que confirma el cambio. */
+.lb-rowflash { animation: rowInFlash 0.8s ease-out; }
+/* Mientras una fila viaja puede cruzarse con las que van en sentido contrario.
+   Fondo opaco + z-index para que se lea entera y no se transparenten una sobre
+   otra. Dura solo lo que dura la animacion (el hook saca la clase). */
+.lb-flip { position: relative; background: var(--bg-surface); }
+/* Chips de la fila en edición: renglón propio dentro de la fila (la fila hace
+   flex-wrap). En línea y no flotando, porque la lista scrollea y un popover
+   absoluto se recorta contra el borde. */
+.lb-editpanel {
+  flex-basis: 100%;
+  margin-top: 2px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-app);
+}
+
+/* Respeta a quien pidio menos movimiento en el sistema: se queda el resaltado,
+   se va el desplazamiento. */
+@media (prefers-reduced-motion: reduce) {
+  .lb-rowin { animation: rowInFlash 0.8s ease-out; }
+  .lb-rowout { animation-duration: 0.01s; }
+}
+
+/* Accion discreta dentro de una fila (ej. "vincular" en un pago sin trabajo) */
+.lb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px dashed var(--border-input);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-label);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lb-link:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
+
+/* Opcion de una lista para elegir (modal de vincular pago a trabajo) */
+.lb-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 13.5px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+.lb-pick:hover { border-color: var(--brand-primary); background: var(--brand-primary-50); }
+
+/* Fila de trabajo/pago: en escritorio el contenedor de plata+acciones no existe
+   para el layout, así que la fila va en una sola línea como siempre. */
+.fr-money { display: contents; }
+
+@media (max-width: 767px) {
+  /* En celular no entra todo a lo ancho. En vez de comprimir (o peor, dejar
+     scroll horizontal), se apila: arriba el nombre, abajo la plata y las
+     acciones. En el teléfono sobra alto y falta ancho. */
+  .fr-row { flex-wrap: wrap; row-gap: 8px; }
+  /* El precio se queda en el renglón del nombre, alineado a la derecha: es el
+     par "concepto — importe" de toda la vida (una carta, un ticket). Suelto en
+     otra línea el número no se sabía de qué era. */
+  .fr-price { margin-left: auto; }
+  /* Solo los botones bajan al segundo renglón */
+  .fr-money {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 100%;
+    padding-left: 32px; /* alinea con el texto, debajo del círculo */
+  }
+  /* Las acciones se van al extremo derecho de su renglón */
+  .fr-money > span:last-child { margin-left: auto; }
+  /* Red de seguridad: que nada pueda provocar scroll lateral en la lista */
+  .fr-row { overflow-x: hidden; }
+}
+
+/* Franja "recien lo marcaste hecho, te lo pago?". Aparece arriba de la lista de
+   trabajos apenas se tilda uno. No es un modal a proposito: el Dr. cobra el
+   mismo dia en el 98% de los casos, asi que preguntar traba mas de lo que ayuda. */
+.lb-askcobro {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--success-bg);
+  font-size: 13.5px;
+  color: var(--text-primary);
+  animation: askIn 0.18s ease-out;
+}
+.lb-askcobro b { font-weight: 600; }
+.lb-askrow__q { display: flex; align-items: center; gap: 8px; }
+.lb-askrow__txt { flex: 1; min-width: 0; font-size: 13.5px; }
+.lb-askrow__txt b { font-weight: 600; }
+/* Las respuestas reparten el ancho disponible en vez de amontonarse a un lado:
+   así el bloque se ve parejo en celular, tablet y escritorio sin media queries,
+   y cada botón crece con la pantalla (blanco más grande = menos errar el toque).
+   El "Sí" pesa más porque lleva el monto adentro y no debe cortarse. */
+.lb-askrow__acts { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.lb-askrow__acts > .btn {
+  flex: 1 1 0; min-width: 0; justify-content: center;
+  padding-inline: 8px; white-space: nowrap;
+}
+.lb-askrow__acts > .btn--primary { flex-grow: 1.7; }
+
+/* Al editar el monto manda el campo: se estira y los dos botones quedan al
+   tamaño justo del ícono. */
+.lb-askrow__acts--edit > .btn { flex: 0 0 auto; }
+.lb-askrow__field { position: relative; flex: 1 1 auto; min-width: 0; }
+.lb-askrow__pencil { position: absolute; left: 9px; top: 9px; opacity: .65; pointer-events: none; z-index: 1; }
+.lb-askrow__peso { position: absolute; left: 26px; top: 7px; font-size: 12.5px; color: var(--text-tertiary); pointer-events: none; z-index: 1; }
+.lb-askrow__x {
+  flex-shrink: 0; display: inline-flex; padding: 3px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-tertiary); cursor: pointer;
+}
+.lb-askrow__x:hover { color: var(--danger); background: var(--danger-bg); }
+/* La fila-pregunta reemplaza a la fila normal en su mismo lugar: el trabajo no
+   se mueve hasta responder, así no se pierde de vista lo que se está
+   resolviendo y un toque sin querer se cancela ahí mismo.
+   `block` a propósito: como flex, los dos renglones quedaban del ancho de su
+   contenido y los botones no podían repartirse la fila. */
+.lb-askrow {
+  display: block;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--success-bg);
+  font-size: 13.5px;
+  color: var(--text-primary);
+  animation: askIn 0.18s ease-out;
+}
+.lb-askrow b { font-weight: 600; }
+@keyframes askIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* Cobro rapido desde la fila del trabajo (pedido del Dr.: no volver a tipear
+   el monto en la columna de Pagos). Tildado = ya cobrado por completo. */
+.lb-cobro {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-input);
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.lb-cobro:hover:not(:disabled) { border-color: var(--success); color: var(--success); }
+/* Con saldo: "Cobrar" arriba y el monto abajo, para no estirar la fila a lo
+   ancho (que es donde falta lugar, no a lo alto). */
+.lb-cobro--2l {
+  flex-direction: column;
+  gap: 0;
+  padding: 3px 10px;
+  line-height: 1.15;
+}
+.lb-cobro.is-on {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success);
+}
+.lb-cobro:disabled { opacity: 0.5; cursor: default; }
+
+/* "pago $X de $Y" — para los tratamientos que se pagan en cuotas */
+.lb-paidprog {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--success);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  white-space: nowrap;
 }
 
 /* Estado de carga: filas fantasma con el pulso del papel. Se usan mientras

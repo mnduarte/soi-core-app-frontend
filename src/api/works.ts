@@ -28,6 +28,9 @@ export interface Work {
   completedAt?: string;
   estimatedDate?: string;
   notes?: string;
+  // CALCULADO por el backend: suma de los pagos imputados a este trabajo.
+  // Permite mostrar "pago $X de $Y" en tratamientos largos. No se persiste.
+  paid?: number;
   createdAt: string;
   updatedAt: string;
 }

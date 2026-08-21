@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useFlip } from '../hooks/useFlip';
 import { useNavigate, useParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../api/patients';
@@ -46,6 +47,11 @@ function num(s: string): number {
   return Number(s.replace(/[^\d]/g, '')) || 0;
 }
 
+// Duración de la animación de salida de una fila: antes de borrar o de mover
+// un trabajo de lista se espera esto para que alcance a desvanecerse. Tiene que
+// coincidir con la animación `rowOut` de index.css.
+const ROW_OUT_MS = 120;
+
 export default function FichaRapidaPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -88,6 +94,9 @@ export default function FichaRapidaPage() {
   // Inline mostramos solo los N más recientes de cada historial; PAGE = tamaño
   // de página de los modales ("Cargar más").
   const CAP = 5;
+  // Se traen mas de los que se van a ver: la cantidad visible depende del alto
+  // disponible en pantalla, asi que conviene tenerlos ya en memoria.
+  const HECHOS_FETCH = 25;
   const PAGE = 20;
 
   // ---- datos: trabajos (works) + pagos (transactions) ----
@@ -101,7 +110,7 @@ export default function FichaRapidaPage() {
   });
   const { data: hechosRecent = [] } = useQuery({
     queryKey: ['works', id, 'done', 'recent'],
-    queryFn: () => worksApi.findAll(id!, { status: 'done', limit: CAP }),
+    queryFn: () => worksApi.findAll(id!, { status: 'done', limit: HECHOS_FETCH }),
     enabled: Boolean(id),
   });
   const { data: summary } = useQuery({
@@ -152,7 +161,16 @@ export default function FichaRapidaPage() {
     () =>
       txs
         .filter(t => t.type === 'PAYMENT' && !t.voidedAt)
-        .sort((a, b) => isoDateOf(b).localeCompare(isoDateOf(a))),
+        // Fecha del movimiento descendente y, ante EMPATE, por hora de carga.
+        // Todos los pagos de un día se guardan con la misma hora (mediodía), así
+        // que sin el desempate quedaban en orden azaroso y encima se
+        // reacomodaban al editar cualquier cosa. Con `createdAt` el orden es
+        // estable: el último que cargó queda arriba y no se mueve más.
+        .sort(
+          (a, b) =>
+            isoDateOf(b).localeCompare(isoDateOf(a)) ||
+            (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+        ),
     [txs],
   );
 
@@ -190,10 +208,20 @@ export default function FichaRapidaPage() {
     setTwBusy(true);
     setWorkPanel(null);
     try {
-      await addItemMut.mutateAsync({ description: d, price: num(twAmount), status: twDone ? DONE : PENDING });
+      const creado = await addItemMut.mutateAsync({ description: d, price: num(twAmount), status: twDone ? DONE : PENDING });
+      const eraHecho = twDone, precio = num(twAmount);
       setTwDesc(''); setTwAmount(''); setTwDone(false);
       invalidateWorks();
-      showToast(twDone ? '¡Hecho! ✓ Trabajo agregado' : 'Trabajo agregado', 'success');
+      // Si lo cargó ya hecho y tiene precio, preguntamos por el cobro igual que
+      // al tildar el circulito. Este es el camino que más usa (la mayoría de los
+      // trabajos hechos se cargan directamente con "Ya lo hice"), así que sin
+      // esto la pregunta casi nunca aparecería.
+      if (creado?._id) setNewWorkId(creado._id);
+      if (eraHecho && precio > 0) {
+        setAskCobro(prev => [...prev, { id: creado._id, unsaved: false }]);
+      } else {
+        showToast(eraHecho ? '¡Hecho! ✓ Trabajo agregado' : 'Trabajo agregado', 'success');
+      }
     } catch {
       showToast('No se pudo agregar', 'error');
     } finally { setTwBusy(false); }
@@ -203,26 +231,87 @@ export default function FichaRapidaPage() {
   const [editItem, setEditItem] = useState<string | null>(null);
   const [eiDesc, setEiDesc] = useState('');
   const [eiAmount, setEiAmount] = useState('');
+  // Chips de la fila en edición. Van EN LÍNEA (empujando la fila hacia abajo) y
+  // no flotando como en el form de arriba: la lista tiene scroll propio y un
+  // popover absoluto se cortaba contra el borde.
+  const [editPanel, setEditPanel] = useState<'trabajo' | 'monto' | null>(null);
+  const editRowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!editPanel || customTreatOpen || customAmountsOpen) return;
+    const h = (e: MouseEvent) => {
+      if (editRowRef.current && !editRowRef.current.contains(e.target as Node)) setEditPanel(null);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [editPanel, customTreatOpen, customAmountsOpen]);
   const updateItemMut = useMutation({
     mutationFn: (v: { workId: string; dto: Partial<CreateWorkInput> }) =>
       worksApi.update(v.workId, v.dto),
   });
-  const toggleDone = async (it: Work) => {
-    const next = it.status === DONE ? PENDING : DONE;
+  // Guarda el "hecho" de un trabajo (y opcionalmente el cobro). Es el commit
+  // real: hasta acá no se tocó la base.
+  const confirmarHecho = async (it: Work, monto?: number, cobrar = false) => {
+    const yaGuardado = esPregunta(it._id)?.unsaved === false;
+    setAskCobro(prev => prev.filter(a => a.id !== it._id));
     try {
-      await updateItemMut.mutateAsync({ workId: it._id, dto: { status: next } });
-      invalidateWorks();
-      // Refuerzo positivo: al marcar hecho lo festejamos y confirmamos que
-      // sumó a lo que hay que cobrar (así no "se sale de una" sin feedback).
-      if (next === DONE) {
-        showToast(it.price ? `¡Hecho! ✓ Suma ${fmtMoney(it.price)} a cobrar` : '¡Hecho! ✓', 'success');
-      } else {
-        showToast('Volvió a pendiente', 'success');
+      if (!yaGuardado) {
+        // La red viaja EN PARALELO con la animación. Antes esperábamos la
+        // respuesta con la fila ya desvanecida: se veía como un tirón porque el
+        // movimiento quedaba a merced de la latencia, no del navegador.
+        const req = updateItemMut
+          .mutateAsync({ workId: it._id, dto: { status: DONE } })
+          .then(() => true, () => false);
+
+        // Si "Hechos" está abierto, la fila no desaparece: FLIP la hace viajar
+        // hasta su lugar nuevo. Si está cerrado, sí se va, y ahí sí va el fade.
+        if (!showDone) { setOutWorkId(it._id); await new Promise(r => setTimeout(r, ROW_OUT_MS)); }
+        const movido: Work = { ...it, status: DONE, completedAt: new Date().toISOString() };
+        qc.setQueryData<Work[]>(['works', id, 'pending'], (old = []) => old.filter(w => w._id !== it._id));
+        qc.setQueryData<Work[]>(['works', id, 'done', 'recent'], (old = []) => [movido, ...old]);
+        setOutWorkId(null);
+        if (showDone) { setFlashWorkId(it._id); setTimeout(() => setFlashWorkId(null), 900); }
+        else setNewWorkId(it._id);
+
+        if (!(await req)) { showToast('No se pudo guardar', 'error'); invalidateWorks(); return; }
       }
-    } catch { showToast('No se pudo actualizar', 'error'); }
+      if (cobrar) await cobrarTanda([{ ...it, status: DONE }], monto);
+      else { invalidateWorks(); showToast('¡Hecho! ✓', 'success'); }
+    } catch {
+      showToast('No se pudo guardar', 'error');
+      setOutWorkId(null);
+      invalidateWorks();
+    }
+  };
+
+  const toggleDone = async (it: Work) => {
+    // Marcar HECHO: no se guarda todavía. La fila se transforma en la pregunta
+    // y recién al responder se escribe. Así, si el toque fue sin querer,
+    // "deshacer" no genera ninguna escritura que después haya que revertir.
+    if (it.status !== DONE) {
+      if ((it.price ?? 0) - (it.paid ?? 0) > 0) {
+        setAskCobro(prev => [...prev.filter(a => a.id !== it._id), { id: it._id, unsaved: true }]);
+      } else {
+        await confirmarHecho(it); // sin precio no hay nada que cobrar
+      }
+      return;
+    }
+
+    // DESMARCAR: esto sí es un cambio directo, no hay nada que preguntar.
+    // El destino (pendientes) siempre está a la vista, así que la fila sube
+    // sola con FLIP: no hace falta desvanecerla ni esperar a la red.
+    const req = updateItemMut
+      .mutateAsync({ workId: it._id, dto: { status: PENDING } })
+      .then(() => true, () => false);
+    const movido: Work = { ...it, status: PENDING, completedAt: undefined };
+    qc.setQueryData<Work[]>(['works', id, 'pending'], (old = []) => [movido, ...old]);
+    qc.setQueryData<Work[]>(['works', id, 'done', 'recent'], (old = []) => old.filter(w => w._id !== it._id));
+    setFlashWorkId(it._id); setTimeout(() => setFlashWorkId(null), 900);
+    if (await req) { invalidateWorks(); showToast('Volvió a pendiente', 'success'); }
+    else { showToast('No se pudo actualizar', 'error'); invalidateWorks(); }
   };
   const startEditItem = (it: Work) => {
     setEditItem(it._id);
+    setEditPanel(null);
     setEiDesc(it.description);
     setEiAmount(it.price ? String(it.price) : '');
   };
@@ -233,6 +322,7 @@ export default function FichaRapidaPage() {
     try {
       await updateItemMut.mutateAsync({ workId: editItem, dto: { description: d, price: num(eiAmount) } });
       setEditItem(null);
+      setEditPanel(null);
       invalidateWorks();
       showToast('Trabajo actualizado', 'success');
     } catch { showToast('No se pudo guardar', 'error'); }
@@ -241,21 +331,205 @@ export default function FichaRapidaPage() {
     mutationFn: (workId: string) => worksApi.remove(workId),
   });
   const [delItem, setDelItem] = useState<Work | null>(null);
+  // Pagos imputados al trabajo que se va a borrar + si se borran con él.
+  const [delItemPagos, setDelItemPagos] = useState<Transaction[]>([]);
+  const [alsoDelPagos, setAlsoDelPagos] = useState(false);
+
+  // Antes de confirmar traemos los pagos del trabajo: hay que poder decir cuánta
+  // plata está en juego. Borrar el trabajo sin tocar los pagos deja al paciente
+  // con saldo "a favor" — que a veces es lo correcto (tratamiento cancelado que
+  // ya había pagado) y a veces no (se cargó mal). Por eso decide el Dr.
+  const pedirBorrarTrabajo = async (it: Work) => {
+    setAlsoDelPagos(false);
+    setDelItemPagos([]);
+    setDelItem(it);
+    if ((it.paid ?? 0) > 0) {
+      try { setDelItemPagos(await transactionsApi.byWork(id!, it._id)); } catch { /* el confirm igual sirve */ }
+    }
+  };
+
   const confirmDelItem = async () => {
     if (!delItem) return;
-    const it = delItem; setDelItem(null);
+    const it = delItem, pagos = delItemPagos, borrarPagos = alsoDelPagos;
+    setDelItem(null);
     try {
       await removeItemMut.mutateAsync(it._id);
-      invalidateWorks();
-      showToast('Trabajo borrado', 'success');
+      if (borrarPagos) { for (const pg of pagos) await transactionsApi.remove(pg._id); }
+      invalidateWorks(); invalidateTx();
+      showToast(
+        borrarPagos && pagos.length
+          ? `Trabajo y ${pagos.length === 1 ? 'su pago' : `sus ${pagos.length} pagos`} borrados`
+          : 'Trabajo borrado',
+        'success',
+      );
     } catch { showToast('No se pudo borrar', 'error'); }
+  };
+
+  // ---- cobro rapido desde la fila del trabajo ----
+  // Tildar = registrar el pago de lo que FALTA de ese trabajo, imputado con
+  // workId. Asi la fila puede mostrar "pago $X de $Y" en tratamientos largos
+  // (opcion elegida por el Dr.). La formula de "Falta cobrar" no cambia: el
+  // pago entra en la lista de Pagos como cualquier otro.
+  const [cobroBusy, setCobroBusy] = useState<string | null>(null);
+  // Trabajo recien marcado como hecho, a la espera de responder si se cobro.
+  // Se muestra como franja arriba de la lista (no modal) porque al marcarlo
+  // hecho el trabajo se va a la seccion "Hechos" y habria que ir a buscarlo.
+  // Trabajos con la pregunta de cobro abierta. La pregunta se dibuja EN LA
+  // PROPIA FILA y el trabajo no se mueve hasta que se responde: así queda a la
+  // vista lo que estás resolviendo y un toque sin querer se deshace en el acto.
+  //   `unsaved: true`  -> se tocó el círculo y todavía NO se guardó nada. Si
+  //                       cancela, no se escribe en la base (era un error).
+  //   `unsaved: false` -> el trabajo ya existe como hecho (se cargó con "Ya lo
+  //                       hice"), solo falta saber si lo cobró.
+  const [askCobro, setAskCobro] = useState<{ id: string; unsaved: boolean }[]>([]);
+  const esPregunta = (workId: string) => askCobro.find(a => a.id === workId);
+
+  // Sin confirmación no hay escritura: si se va de la ficha con la pregunta
+  // abierta, el trabajo queda como estaba (pendiente). Nada se guarda a medias.
+
+  const [askPanel, setAskPanel] = useState(false); // popover de montos rápidos
+  const [askMontoId, setAskMontoId] = useState<string | null>(null);
+  const askRef = useRef<HTMLDivElement>(null);
+  // Se cierra al tocar cualquier otro lado, aunque no se haya elegido monto —
+  // como los popovers de Monto y Trabajo. Volver a tocar el campo lo reabre.
+  useEffect(() => {
+    if (!askPanel) return;
+    // Mientras se personalizan los montos, el modal cuenta como "adentro": si
+    // no, tocar el modal cerraría el panel y al volver los montos nuevos no
+    // estarían a la vista.
+    if (customAmountsOpen) return;
+    const h = (e: MouseEvent) => {
+      if (askRef.current && !askRef.current.contains(e.target as Node)) setAskPanel(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [askPanel, customAmountsOpen]);
+  // Monto en edición dentro de la franja (null = todavía no lo tocó). Existe
+  // porque 1 de cada 5 veces cobra solo una parte de lo que hizo, y 1 de cada
+  // 10 cobra de más (adelanto o deuda vieja): con un botón de monto fijo esos
+  // casos no entraban.
+  const [askMonto, setAskMonto] = useState<string | null>(null);
+  // Fila en modo "cobrar": monto precargado y editable (para pagos parciales).
+  const [cobroItem, setCobroItem] = useState<string | null>(null);
+  const [cobroAmount, setCobroAmount] = useState('');
+  const [uncollect, setUncollect] = useState<{ work: Work; pagos: Transaction[] } | null>(null);
+
+  // Cobra una tanda de trabajos con un solo importe. Se genera UN PAGO POR
+  // TRABAJO (cada uno con su workId) para que cada fila quede con su estado
+  // correcto; si el monto no alcanza para todos, se reparte en orden hasta donde
+  // llega — el resto queda sin cobrar.
+  const cobrarTanda = async (works: Work[], montoTotal?: number) => {
+    const faltaDe = (w: Work) => (w.price ?? 0) - (w.paid ?? 0);
+    let restante = montoTotal ?? works.reduce((a, w) => a + faltaDe(w), 0);
+    if (restante <= 0) { showToast('Poné un monto mayor a cero', 'error'); return; }
+    let ultimo: string | null = null, cobrado = 0;
+    try {
+      for (const w of works) {
+        if (restante <= 0) break;
+        const cuota = Math.min(faltaDe(w), restante);
+        if (cuota <= 0) continue;
+        const creado = await addPagoMut.mutateAsync({
+          patientId: id!,
+          type: 'PAYMENT',
+          amount: cuota,
+          workId: w._id,
+          description: w.description,
+          paymentMethod: 'CASH',
+          date: new Date(`${todayYMD()}T12:00:00`).toISOString(),
+        });
+        ultimo = creado._id; cobrado += cuota; restante -= cuota;
+      }
+      if (ultimo) setNewPagoId(ultimo);
+      invalidateWorks(); invalidateTx();
+      showToast(`Cobrado ${fmtMoney(cobrado)}`, 'success');
+    } catch { showToast('No se pudo registrar el pago', 'error'); }
+  };
+
+  // `monto` permite cobrar solo una parte (ej. una cuota de brackets). Si no se
+  // pasa, se cobra todo lo que falta de ese trabajo.
+  const marcarCobrado = async (it: Work, monto?: number) => {
+    const price = it.price ?? 0;
+    const resta = monto ?? price - (it.paid ?? 0);
+    if (price <= 0) { showToast('Ponele un precio al trabajo antes de cobrarlo', 'error'); return; }
+    if (resta <= 0) { showToast('Poné un monto mayor a cero', 'error'); return; }
+    setCobroBusy(it._id);
+    try {
+      const creado = await addPagoMut.mutateAsync({
+        patientId: id!,
+        type: 'PAYMENT',
+        amount: resta,
+        workId: it._id,
+        description: it.description,
+        paymentMethod: 'CASH',
+        date: new Date(`${todayYMD()}T12:00:00`).toISOString(),
+      });
+      setNewPagoId(creado._id);
+      invalidateWorks(); invalidateTx();
+      showToast(`Cobrado ${fmtMoney(resta)} - ${it.description}`, 'success');
+    } catch { showToast('No se pudo registrar el pago', 'error'); }
+    finally { setCobroBusy(null); }
+  };
+
+  // Destildar: primero traemos los pagos de ese trabajo para poder decir en el
+  // confirm cuanta plata se va a borrar (nunca borrar montos a ciegas).
+  const pedirDescobrar = async (it: Work) => {
+    setCobroBusy(it._id);
+    try {
+      const pagos = await transactionsApi.byWork(id!, it._id);
+      if (pagos.length === 0) { showToast('Este trabajo no tiene pagos cargados', 'error'); return; }
+      setUncollect({ work: it, pagos });
+    } catch { showToast('No se pudieron leer los pagos', 'error'); }
+    finally { setCobroBusy(null); }
+  };
+
+  const confirmDescobrar = async () => {
+    if (!uncollect) return;
+    const { work, pagos } = uncollect; setUncollect(null);
+    try {
+      for (const pg of pagos) await transactionsApi.remove(pg._id);
+      invalidateWorks(); invalidateTx();
+      showToast(`Se borraron los pagos de ${work.description}`, 'success');
+    } catch { showToast('No se pudo deshacer', 'error'); }
   };
 
   // ---- alta de pago ----
   const [pgAmount, setPgAmount] = useState('');
   const [pgMethod, setPgMethod] = useState<PaymentMethod>('CASH');
   const [pgDate, setPgDate] = useState(todayYMD());
+  // Trabajo al que se imputa el pago cargado desde esta columna ('' = a cuenta).
+  // Existe para el paciente que pasa solo a dejar una cuota: no hay ningún
+  // trabajo que marcar hecho, así que la franja "¿te lo pagó?" nunca aparece.
+  const [pgWorkId, setPgWorkId] = useState('');
   const [pgBusy, setPgBusy] = useState(false);
+  // Pago recién creado: su fila entra animada (crece desde arriba empujando al
+  // resto) y queda resaltada un instante. Sirve de confirmación visual de que
+  // el pago entró — sobre todo cuando se carga desde la fila del trabajo, que
+  // está en la otra columna y es fácil no registrar el cambio.
+  const [newPagoId, setNewPagoId] = useState<string | null>(null);
+  // Fila que se está yendo. React saca el elemento del DOM apenas cambian los
+  // datos, así que para poder animar la salida primero marcamos la fila, la
+  // dejamos encogerse, y recién después pegamos el borrado al servidor.
+  const [outPagoId, setOutPagoId] = useState<string | null>(null);
+  // Pago (viejo, sin trabajo) al que se le está eligiendo un trabajo. Los 130+
+  // pagos que ya existían quedaron sin vincular — no se podía adivinar a qué
+  // trabajo correspondía cada uno —, así que se pueden asociar a mano.
+  const [linkPago, setLinkPago] = useState<Transaction | null>(null);
+  // Mismo mecanismo para el trabajo que cambia de lista al marcarse hecho: se
+  // encoge en "pendientes" (las de abajo suben) y entra creciendo en "Hechos"
+  // (empuja al resto). Sin esto el trabajo desaparece de un lado y aparece en
+  // el otro de golpe, y cuesta seguir a dónde fue.
+  const [outWorkId, setOutWorkId] = useState<string | null>(null);
+  const [newWorkId, setNewWorkId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!newWorkId) return;
+    const t = setTimeout(() => setNewWorkId(null), 900);
+    return () => clearTimeout(t);
+  }, [newWorkId]);
+  useEffect(() => {
+    if (!newPagoId) return;
+    const t = setTimeout(() => setNewPagoId(null), 900);
+    return () => clearTimeout(t);
+  }, [newPagoId]);
   const addPagoMut = useMutation({ mutationFn: transactionsApi.addMovement });
   const addPago = async () => {
     if (!patient || pgBusy) return;
@@ -264,14 +538,20 @@ export default function FichaRapidaPage() {
     setPgBusy(true);
     setPagoPanel(false);
     try {
-      await addPagoMut.mutateAsync({
+      const creado = await addPagoMut.mutateAsync({
         patientId: patient._id,
         type: 'PAYMENT',
         amount: amt,
+        workId: pgWorkId || undefined,
+        description: pgWorkId
+          ? trabajosCobrables.find(w => w._id === pgWorkId)?.description
+          : undefined,
         paymentMethod: pgMethod,
         date: new Date(`${pgDate}T12:00:00`).toISOString(),
       });
-      setPgAmount(''); setPgDate(todayYMD());
+      setNewPagoId(creado._id);
+      setPgAmount(''); setPgDate(todayYMD()); setPgWorkId('');
+      invalidateWorks();
       invalidateTx();
       showToast(`¡Pago de ${fmtMoney(amt)} registrado!`, 'success');
     } catch {
@@ -310,9 +590,22 @@ export default function FichaRapidaPage() {
   };
   const delPagoMut = useMutation({ mutationFn: (txId: string) => transactionsApi.remove(txId) });
   const [delPago, setDelPago] = useState<Transaction | null>(null);
+  const vincularPago = async (t: Transaction, workId: string) => {
+    const w = trabajosCobrables.find(x => x._id === workId);
+    setLinkPago(null);
+    try {
+      await transactionsApi.updateMovement(t._id, { workId, description: w?.description });
+      invalidateWorks(); invalidateTx();
+      showToast(`Pago vinculado a ${w?.description ?? 'el trabajo'}`, 'success');
+    } catch { showToast('No se pudo vincular', 'error'); }
+  };
+
   const confirmDelPago = async () => {
     if (!delPago) return;
     const t = delPago; const photos = photosByTx.get(t._id) ?? []; setDelPago(null);
+    // La fila se encoge y las de abajo suben; recién ahí se borra de verdad.
+    setOutPagoId(t._id);
+    await new Promise(r => setTimeout(r, ROW_OUT_MS));
     try {
       await delPagoMut.mutateAsync(t._id);
       // Las fotos quedan en la galería (solo se desvinculan del pago borrado).
@@ -322,7 +615,12 @@ export default function FichaRapidaPage() {
       if (photos.length) qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
       invalidateTx();
       showToast('Pago borrado', 'success');
-    } catch { showToast('No se pudo borrar', 'error'); }
+    } catch {
+      showToast('No se pudo borrar', 'error');
+    } finally {
+      // Si falló, la fila vuelve a aparecer (no se borró nada).
+      setOutPagoId(null);
+    }
   };
 
   // ---- modales ----
@@ -454,36 +752,256 @@ export default function FichaRapidaPage() {
   }, [pagoPanel]);
 
   // Los trabajos ya hechos se colapsan (para no saturar cuando se acumulan).
-  const [showDone, setShowDone] = useState(false);
+  // Desplegado por defecto: con el cobro desde la fila, los trabajos recién
+  // hechos son justo los que hay que cobrar — tenerlos escondidos obligaba a
+  // desplegar cada vez. Se muestran los CAP más recientes + "Ver todos".
+  const [showDone, setShowDone] = useState(true);
+
+  // Cuantas filas de "hechos" entran sin que la lista scrollee. El objetivo es
+  // llenar el alto de la pantalla: los pendientes tienen prioridad (van todos) y
+  // los hechos ocupan lo que sobra. Se recalcula al cambiar el tamano de la
+  // ventana. En celular no se mide: ahi la pagina scrollea de arriba a abajo.
+  const [flashWorkId, setFlashWorkId] = useState<string | null>(null);
+  const worksListRef = useRef<HTMLDivElement>(null);
+  useFlip(worksListRef);
+  const [fitHechos, setFitHechos] = useState(CAP);
+  useLayoutEffect(() => {
+    if (stack) { setFitHechos(CAP); return; }
+    const el = worksListRef.current;
+    if (!el) return;
+    const ROW = 46;     // alto tipico de una fila
+    const HEADER = 40;  // franja "Hechos (N)"
+    const FOOTER = 44;  // link "Ver los N trabajos hechos"
+    const calc = () => {
+      const libre = el.clientHeight - pendientes.length * ROW - HEADER - FOOTER;
+      setFitHechos(Math.max(1, Math.floor(libre / ROW)));
+    };
+    calc();
+    // Con debounce a propósito: al marcar un trabajo aparece la franja
+    // "¿te lo pagó?", eso cambia el alto de la lista y dispara el observer.
+    // Sin la espera, el recálculo agregaba o quitaba filas EN MEDIO de la
+    // animación — la lista se re-armaba mientras la fila se encogía y se veía
+    // a los saltos. Ahora se recalcula una sola vez, ya terminado el
+    // movimiento.
+    let t: ReturnType<typeof setTimeout>;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(t);
+      t = setTimeout(calc, 220);
+    });
+    ro.observe(el);
+    return () => { clearTimeout(t); ro.disconnect(); };
+  }, [stack, pendientes.length, patient?._id]);
+
+  // Los hechos que realmente se dibujan: los que entran en el alto disponible.
+  const hechosVisibles = hechosRecent.slice(0, stack ? CAP : fitHechos);
+
+  // Trabajos a los que todavía se les puede imputar plata (tienen precio y algo
+  // sin cobrar). Alimentan el selector del formulario de Pagos.
+  const trabajosCobrables = useMemo(
+    () =>
+      [...pendientes, ...hechosRecent].filter(
+        w => (w.price ?? 0) > 0 && (w.paid ?? 0) < (w.price ?? 0),
+      ),
+    [pendientes, hechosRecent],
+  );
+  // Agrupados para el selector: primero lo que ya hizo y no cobró (el caso más
+  // probable), después los tratamientos largos que sigue pagando en cuotas. NO
+  // se filtran los pendientes: los brackets y los retenedores viven meses en
+  // "por hacer" mientras se pagan, y son justo los que se imputan de a partes.
+  const cobrablesHechos = trabajosCobrables.filter(w => w.status === DONE);
+  const cobrablesPlan = trabajosCobrables.filter(w => w.status !== DONE);
+
+  // Misma idea para la columna de Pagos, asi las dos crecen parejo.
+  const pagosListRef = useRef<HTMLDivElement>(null);
+  useFlip(pagosListRef);
+  const [fitPagos, setFitPagos] = useState(CAP);
+  useLayoutEffect(() => {
+    if (stack) { setFitPagos(CAP); return; }
+    const el = pagosListRef.current;
+    if (!el) return;
+    const ROW = 46, FOOTER = 44;
+    const calc = () => setFitPagos(Math.max(1, Math.floor((el.clientHeight - FOOTER) / ROW)));
+    calc();
+    let t: ReturnType<typeof setTimeout>;
+    const ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(calc, 220); });
+    ro.observe(el);
+    return () => { clearTimeout(t); ro.disconnect(); };
+    // `patient?._id` es imprescindible: en el primer render la tarjeta todavía
+    // no existe (no cargó el paciente), el ref está en null y el efecto sale
+    // sin medir. Sin esta dependencia no se volvía a ejecutar nunca y la lista
+    // quedaba clavada en el valor inicial.
+  }, [stack, patient?._id]);
 
   // ---- fila de un trabajo (se reusa en pendientes y en hechos) ----
   const renderWorkRow = (it: Work, dense = false) => {
     const done = it.status === DONE;
     const editing = editItem === it._id;
     const itemPhotos = photosByItem.get(it._id) ?? [];
+    // Estado de cobro del trabajo (calculado con los pagos imputados a el).
+    const price = it.price ?? 0;
+    const paid = it.paid ?? 0;
+    const cobrado = price > 0 && paid >= price;
+    const parcial = paid > 0 && paid < price;
+
+    // La fila se transforma en la pregunta de cobro, en su lugar. El trabajo no
+    // se mueve hasta que se responde: así no perdés de vista lo que estás
+    // resolviendo, y "deshacer" cancela sin haber escrito nada.
+    const preg = esPregunta(it._id);
+    if (preg && !editing) {
+      const falta = price - paid;
+      const editandoMonto = askMonto !== null && askMontoId === it._id;
+      const cerrarPanel = () => { setAskMonto(null); setAskMontoId(null); setAskPanel(false); };
+      return (
+        <div key={it._id} data-flip={it._id} className="lb-askrow">
+          {/* Dos renglones: la pregunta arriba y las respuestas abajo. En una
+              sola línea no entraban y el texto se partía letra por letra. */}
+          <div className="lb-askrow__q">
+            <Icon name="check" size={15} style={{ color: 'var(--success)', flexShrink: 0 }} />
+            <span className="lb-askrow__txt">
+              <b>{it.description}</b>
+              {' — '}{editandoMonto ? '¿cuánto pagó?' : '¿lo pagó?'}
+            </span>
+            {/* Descartar vive acá, lejos de las respuestas, para que no se lea
+                como una cuarta opción. Solo si todavía no se guardó nada. */}
+            {preg.unsaved && !editandoMonto && (
+              <button className="lb-askrow__x" title="Descartar: dejarlo como estaba"
+                onClick={() => setAskCobro(prev => prev.filter(a => a.id !== it._id))}>
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </div>
+          {editandoMonto ? (
+            <span ref={askRef} className="lb-askrow__acts lb-askrow__acts--edit">
+              <span className="lb-askrow__field">
+                <Icon name="edit" size={13} className="lb-askrow__pencil" />
+                <span className="lb-askrow__peso">$</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  autoFocus
+                  value={askMonto ? Number(askMonto).toLocaleString('es-AR') : ''}
+                  onChange={e => setAskMonto(e.target.value.replace(/[^\d]/g, ''))}
+                  onFocus={() => setAskPanel(true)}
+                  onClick={() => setAskPanel(true)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { const m = num(askMonto ?? ''); cerrarPanel(); confirmarHecho(it, m, true); }
+                    if (e.key === 'Escape') cerrarPanel();
+                  }}
+                  style={{ width: '100%', height: 32, paddingLeft: 36, fontSize: 13 }}
+                />
+                {askPanel && (
+                  <div style={{ ...popover, top: 'calc(100% + 5px)', left: 0, right: 'auto', width: 250 }}>
+                    <div style={popTitle}>Montos</div>
+                    <div style={chipsWrap}>
+                      {quickAmounts.map(v => (
+                        <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => { setAskMonto(String(v)); setAskPanel(false); }}>
+                          {fmtMoney(v)}
+                        </button>
+                      ))}
+                      {/* Misma lista y mismo editor que el resto de la ficha:
+                          los montos son del consultorio, no de cada panel. */}
+                      <button type="button" onMouseDown={e => e.preventDefault()}
+                        onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
+                        <Icon name="settings" size={12} /> Editar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </span>
+              <button className="btn btn--primary btn--sm" onClick={() => { const m = num(askMonto ?? ''); cerrarPanel(); confirmarHecho(it, m, true); }}>
+                <Icon name="check" size={13} />
+              </button>
+              <button className="btn btn--ghost btn--icon btn--sm" onClick={cerrarPanel}><Icon name="x" size={14} /></button>
+            </span>
+          ) : (
+            <div className="lb-askrow__acts">
+              <button className="btn btn--primary btn--sm" onClick={() => confirmarHecho(it, undefined, true)}>
+                Pagó {fmtMoney(falta)}
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={() => { setAskMontoId(it._id); setAskMonto(String(falta)); setAskPanel(true); }}>
+                Otro monto
+              </button>
+              <button className="btn btn--secondary btn--sm" onClick={() => confirmarHecho(it)}>
+                Todavía no
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
-      <div key={it._id} className="fr-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : undefined} className={`fr-row ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', flexWrap: editing ? 'wrap' : 'nowrap', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+        {/* El circulito solo no dice qué hace, y en tablet no hay tooltip que lo
+            aclare. Los pendientes llevan la etiqueta al lado; los hechos no la
+            necesitan (el tilde verde + el tachado + "hecho DD/MM" ya se leen). */}
         <button
           onClick={() => toggleDone(it)}
-          title={done ? 'Marcar pendiente' : 'Marcar hecho'}
+          title={done ? 'Marcar como pendiente' : 'Marcar como hecho'}
           style={{
-            width: 22, height: 22, borderRadius: 999, flexShrink: 0, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: done ? 'none' : '2px solid var(--border-default)',
-            background: done ? 'var(--success)' : 'transparent', color: 'white', padding: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+            flexShrink: 0, minWidth: dense ? 22 : 46,
+            cursor: 'pointer', background: 'none', border: 0, padding: 0,
           }}
         >
-          {done && <Icon name="check" size={13} />}
+          <span
+            style={{
+              width: 22, height: 22, borderRadius: 999, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: done ? 'none' : '2px solid var(--border-input)',
+              background: done ? 'var(--success)' : '#fff', color: 'white',
+            }}
+          >
+            {done && <Icon name="check" size={13} />}
+          </span>
+          {!dense && (
+            <span className="lb-act__lbl">{done ? 'Desmarcar' : 'Hecho'}</span>
+          )}
         </button>
         {editing ? (
           <>
-            <input className="input" value={eiDesc} onChange={e => setEiDesc(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveEditItem()} style={{ flex: 1, height: 32 }} autoFocus />
+            <input className="input" value={eiDesc} onChange={e => setEiDesc(e.target.value)}
+              onFocus={() => setEditPanel('trabajo')} onClick={() => setEditPanel('trabajo')}
+              onKeyDown={e => e.key === 'Enter' && saveEditItem()} style={{ flex: 1, minWidth: 120, height: 32 }} autoFocus />
             <div style={{ position: 'relative', width: 100 }}>
               <span style={{ position: 'absolute', left: 9, top: 7, color: 'var(--text-tertiary)', fontSize: 12 }}>$</span>
-              <input className="input" inputMode="numeric" value={eiAmount} onChange={e => setEiAmount(e.target.value.replace(/[^\d]/g, ''))} onKeyDown={e => e.key === 'Enter' && saveEditItem()} style={{ width: '100%', height: 32, paddingLeft: 18 }} />
+              <input className="input" inputMode="numeric" value={eiAmount} onChange={e => setEiAmount(e.target.value.replace(/[^\d]/g, ''))}
+                onFocus={() => setEditPanel('monto')} onClick={() => setEditPanel('monto')}
+                onKeyDown={e => e.key === 'Enter' && saveEditItem()} style={{ width: '100%', height: 32, paddingLeft: 18 }} />
             </div>
             <button className="btn btn--primary btn--sm" onClick={saveEditItem}><Icon name="check" size={13} /></button>
-            <button className="btn btn--ghost btn--icon btn--sm" onClick={() => setEditItem(null)}><Icon name="x" size={14} /></button>
+            <button className="btn btn--ghost btn--icon btn--sm" onClick={() => { setEditItem(null); setEditPanel(null); }}><Icon name="x" size={14} /></button>
+            {/* `data-flip` propio: el hook lo ve como un nodo nuevo y se saltea
+                la animación en esa pasada, así las filas de abajo no quedan
+                dibujadas encima del panel mientras se abre. */}
+            {editPanel && (
+              <div data-flip={`panel-${it._id}`} className="lb-editpanel">
+                <div style={popTitle}>{editPanel === 'trabajo' ? 'Trabajos frecuentes' : 'Montos'}</div>
+                <div style={chipsWrap}>
+                  {editPanel === 'trabajo' ? (
+                    <>
+                      {treatments.map(t => (
+                        <button key={t} type="button" className="lb-chip" onMouseDown={e => e.preventDefault()}
+                          onClick={() => { setEiDesc(p => (p.trim() ? `${p.trim()} ${t}` : t)); setEditPanel(null); }}>{t}</button>
+                      ))}
+                      <button type="button" className="lb-chip lb-chip--add" onMouseDown={e => e.preventDefault()}
+                        onClick={() => setCustomTreatOpen(true)}><Icon name="settings" size={12} /> Editar</button>
+                    </>
+                  ) : (
+                    <>
+                      {quickAmounts.map(v => (
+                        <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }} onMouseDown={e => e.preventDefault()}
+                          onClick={() => { setEiAmount(String(v)); setEditPanel(null); }}>{fmtMoney(v)}</button>
+                      ))}
+                      <button type="button" className="lb-chip lb-chip--add" onMouseDown={e => e.preventDefault()}
+                        onClick={() => setCustomAmountsOpen(true)}><Icon name="settings" size={12} /> Editar</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -492,11 +1010,23 @@ export default function FichaRapidaPage() {
                 monto (el minWidth:0 solo deja encoger, no recorta). */}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '2px 8px' }}>
               <span style={{ fontSize: 13.5, wordBreak: 'break-word', color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</span>
-              {!done && <span style={{ ...pendBadge, marginLeft: 0 }}>por hacer</span>}
+              {/* Sin tag "por hacer": estos trabajos ya viven en la sección de
+                  pendientes, arriba de "Hechos". Repetirlo ocupaba ancho (partía
+                  descripciones largas al medio) y no aportaba nada. */}
               {done && it.completedAt && (
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
                   hecho {fmtDate(it.completedAt)}
                 </span>
+              )}
+              {/* Cuanto lleva pagado, para los que se pagan en cuotas */}
+              {parcial && (
+                <span className="lb-paidprog">pagó {fmtMoney(paid)}</span>
+              )}
+              {/* Pendiente ya cobrado por completo (una seña que cubre todo):
+                  el botón de cobrar no está en esta lista, así que el estado
+                  tiene que verse igual. */}
+              {!done && cobrado && (
+                <span className="lb-paidprog">✓ pagado</span>
               )}
               {itemPhotos.length > 0 && (
                 /* flexBasis 100% → las miniaturas siempre arrancan renglón propio */
@@ -513,11 +1043,79 @@ export default function FichaRapidaPage() {
                 </div>
               )}
             </div>
-            <span className="mono" style={{ fontSize: 13.5, fontWeight: 600, flexShrink: 0, color: it.price ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{it.price ? fmtMoney(it.price) : '—'}</span>
+            {/* Precio + cobro + acciones. En escritorio este contenedor no
+                existe para el layout (`display: contents`), así que la fila se
+                ve igual que siempre. En celular pasa a ocupar su propio renglón:
+                no entra todo a lo ancho y el scroll horizontal en una lista es
+                lo peor que le podés dar a alguien con el dedo en la pantalla. */}
+            <span className="mono fr-price" style={{ fontSize: 13.5, fontWeight: 600, flexShrink: 0, color: it.price ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{it.price ? fmtMoney(it.price) : '—'}</span>
+            <span className="fr-money">
+            {!done ? (
+              /* Pendiente: se MUESTRA el estado de cobro (una seña se ve como
+                 "pagó $X de $Y" junto a la descripción) pero no se ofrece la
+                 acción — para eso está el selector del formulario de Pagos. */
+              null
+            ) : cobroItem === it._id ? (
+              /* Monto precargado y EDITABLE: si paga todo se confirma de una, y
+                 si deja una parte (cuota de brackets) se corrige el número —
+                 ese pago queda atado al trabajo y alimenta el "pagó $X de $Y". */
+              <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                <span style={{ position: 'relative', width: 92 }}>
+                  <span style={{ position: 'absolute', left: 8, top: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>$</span>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    autoFocus
+                    value={cobroAmount ? Number(cobroAmount).toLocaleString('es-AR') : ''}
+                    onChange={e => setCobroAmount(e.target.value.replace(/[^\d]/g, ''))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { const m = num(cobroAmount); setCobroItem(null); marcarCobrado(it, m); }
+                      if (e.key === 'Escape') setCobroItem(null);
+                    }}
+                    style={{ width: '100%', height: 30, paddingLeft: 17, fontSize: 12.5 }}
+                  />
+                </span>
+                <button
+                  className="btn btn--primary btn--sm"
+                  style={{ height: 30, padding: '0 9px' }}
+                  onClick={() => { const m = num(cobroAmount); setCobroItem(null); marcarCobrado(it, m); }}
+                >
+                  <Icon name="check" size={13} />
+                </button>
+                <button className="btn btn--ghost btn--icon btn--sm" onClick={() => setCobroItem(null)}>
+                  <Icon name="x" size={14} />
+                </button>
+              </span>
+            ) : (
+              <button
+                className={`lb-cobro ${cobrado ? 'is-on' : ''} ${!cobrado && parcial ? 'lb-cobro--2l' : ''}`}
+                disabled={cobroBusy === it._id}
+                title={cobrado ? 'Ya cobrado - tocá para deshacer' : `Cobrar (podés editar el monto)`}
+                onClick={() => {
+                  if (cobrado) { pedirDescobrar(it); return; }
+                  setCobroAmount(String(price - paid));
+                  setCobroItem(it._id);
+                }}
+              >
+                {/* En un cobro parcial el botón dice el saldo: el Dr. no tiene
+                    que restar de cabeza y sabe qué va a pasar si lo toca. El
+                    monto va en un renglón aparte para no estirar la fila. */}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Icon name={cobrado ? 'check' : 'cash'} size={12} />
+                  {cobrado ? 'Pagado' : 'Cobrar'}
+                </span>
+                {!cobrado && parcial && (
+                  <span className="mono" style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.1 }}>
+                    {fmtMoney(price - paid)}
+                  </span>
+                )}
+              </button>
+            )}
             <span style={{ display: 'inline-flex', flexShrink: 0 }}>
               <button className="btn btn--ghost btn--icon btn--sm" title="Fotos del trabajo" onClick={() => openModal('uploadPhotos', { patientId: id, treatmentItemId: it._id })} style={{ color: itemPhotos.length ? 'var(--brand-primary-600)' : undefined }}><Icon name="image" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditItem(it)}><Icon name="edit" size={14} /></button>
-              <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => setDelItem(it)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
+              <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => pedirBorrarTrabajo(it)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
+            </span>
             </span>
           </>
         )}
@@ -530,7 +1128,7 @@ export default function FichaRapidaPage() {
     const editing = editPago === t._id;
     const ph = photosByTx.get(t._id) ?? [];
     return (
-      <div key={t._id} className="fr-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={t._id} data-flip={t._id} className={`fr-row ${t._id === newPagoId ? 'lb-rowin' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {editing ? (
           <>
             <input type="date" className="input" value={epDate} onChange={e => setEpDate(e.target.value)} style={{ width: 130, height: 32 }} />
@@ -549,8 +1147,22 @@ export default function FichaRapidaPage() {
         ) : (
           <>
             <span className="mono" style={{ fontSize: 12.5, color: 'var(--text-tertiary)', width: 56, flexShrink: 0 }}>{fmtDate(isoDateOf(t))}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{methodLabel(t.paymentMethod)}</span>
+              {/* De qué trabajo fue el pago. Misma etiqueta que en la agenda,
+                  para que el mismo dato se lea igual en toda la app. */}
+              {t.workId && t.description && <span className="lb-sub">{t.description}</span>}
+              {/* Pago sin trabajo: se puede asociar a uno a mano. Es la forma de
+                  recuperar los pagos viejos, que quedaron todos sin vincular. */}
+              {!t.workId && trabajosCobrables.length > 0 && (
+                <button
+                  className="lb-link"
+                  title="Asociar este pago a un trabajo"
+                  onClick={e => { e.stopPropagation(); setLinkPago(t); }}
+                >
+                  <Icon name="link" size={11} /> vincular
+                </button>
+              )}
               {ph.length > 0 && (
                 <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
                   {ph.map(({ photo, title, description }) => (
@@ -562,10 +1174,12 @@ export default function FichaRapidaPage() {
                 </div>
               )}
             </div>
-            <span className="mono" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0, color: 'var(--success)' }}>{fmtMoney(t.amount)}</span>
+            <span className="mono fr-price" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0, color: 'var(--success)' }}>{fmtMoney(t.amount)}</span>
+            <span className="fr-money">
             <span style={{ display: 'inline-flex', flexShrink: 0 }}>
               <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditPago(t)}><Icon name="edit" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => setDelPago(t)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
+            </span>
             </span>
           </>
         )}
@@ -580,12 +1194,23 @@ export default function FichaRapidaPage() {
   const debe = falta > 0;
 
   return (
-    <div className="content" style={{ padding: 0, overflow: 'auto', minHeight: 0 }}>
+    <div
+      className="content"
+      style={{
+        padding: 0,
+        minHeight: 0,
+        // Escritorio/tablet: alto fijo y sin scroll de pagina — las listas se
+        // adaptan al espacio. Celular: las columnas se apilan, ahi si scrollea.
+        overflow: stack ? 'auto' : 'hidden',
+        display: stack ? 'block' : 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <SectionHeader
         kicker="Ficha clínica"
         title={<>Trabajos, pagos y <em>cuánto falta cobrar</em></>}
       />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 14, width: '100%', flex: stack ? undefined : 1, minHeight: 0 }}>
         {/* ---------- PACIENTE ---------- */}
         <div className="card" style={{ overflow: 'visible' }}>
           <div style={{ padding: patient ? 0 : 16 }}>
@@ -719,7 +1344,7 @@ export default function FichaRapidaPage() {
             )}
 
             {/* ---------- DOS COLUMNAS: Trabajos | Pagos ---------- */}
-            <div style={{ display: 'grid', gridTemplateColumns: stack ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: stack ? '1fr' : '1fr 1fr', gap: 16, alignItems: stack ? 'start' : 'stretch', flex: stack ? undefined : 1, minHeight: 0 }}>
 
             {/* ---------- TRABAJOS ---------- */}
             <div
@@ -728,6 +1353,7 @@ export default function FichaRapidaPage() {
                 overflow: 'visible',
                 display: isMobile && mobileTab !== 'trabajos' ? 'none' : 'flex',
                 flexDirection: 'column',
+                minHeight: 0,
               }}
             >
               <div className="card__header" style={{ alignItems: 'center' }}>
@@ -776,9 +1402,9 @@ export default function FichaRapidaPage() {
                     <div style={popTitle}>Trabajos frecuentes</div>
                     <div style={chipsWrap}>
                       {treatments.map(t => (
-                        <button key={t} type="button" onMouseDown={e => e.preventDefault()} onClick={() => { addChip(t); setWorkPanel(null); }} style={{ ...chip, fontWeight: 500, color: 'var(--text-primary)' }}>{t}</button>
+                        <button key={t} type="button" onMouseDown={e => e.preventDefault()} onClick={() => { addChip(t); setWorkPanel(null); }} className="lb-chip">{t}</button>
                       ))}
-                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomTreatOpen(true)} style={{ ...chip, borderStyle: 'dashed', color: 'var(--brand-primary-600)' }}>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomTreatOpen(true)} className="lb-chip lb-chip--add">
                         <Icon name="settings" size={12} /> Editar
                       </button>
                     </div>
@@ -789,9 +1415,9 @@ export default function FichaRapidaPage() {
                     <div style={popTitle}>Montos</div>
                     <div style={chipsWrap}>
                       {quickAmounts.map(v => (
-                        <button key={v} type="button" className="mono" onMouseDown={e => e.preventDefault()} onClick={() => { setTwAmount(String(v)); setWorkPanel(null); }} style={{ ...chip, fontWeight: 600 }}>{fmtMoney(v)}</button>
+                        <button key={v} type="button" className="lb-chip mono" onMouseDown={e => e.preventDefault()} onClick={() => { setTwAmount(String(v)); setWorkPanel(null); }} style={{ fontWeight: 600 }}>{fmtMoney(v)}</button>
                       ))}
-                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomAmountsOpen(true)} style={{ ...chip, borderStyle: 'dashed', color: 'var(--brand-primary-600)' }}>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
                         <Icon name="settings" size={12} /> Editar
                       </button>
                     </div>
@@ -799,8 +1425,18 @@ export default function FichaRapidaPage() {
                 )}
               </div>
 
-              {/* lista de trabajos: pendientes visibles, hechos colapsados */}
-              <div style={{ maxHeight: 'min(48vh, 520px)', overflowY: 'auto' }}>
+
+              {/* Lista: los pendientes van siempre; los hechos, los que entren.
+                  En escritorio ocupa el alto disponible y no scrollea (scrollear
+                  una lista corta marea); en celular mantiene el tope de siempre. */}
+              <div
+                ref={worksListRef}
+                style={
+                  stack
+                    ? { maxHeight: 'min(48vh, 520px)', overflowY: 'auto' }
+                    : { flex: 1, minHeight: 0, overflowY: 'auto' }
+                }
+              >
                 {!hasWorks && (
                   <div style={emptyRow}>Todavía no cargaste trabajos. Agregá el primero arriba ↑</div>
                 )}
@@ -815,8 +1451,8 @@ export default function FichaRapidaPage() {
                     </button>
                     {showDone && (
                       <>
-                        {hechosRecent.map(it => renderWorkRow(it))}
-                        {hechosCount > CAP && (
+                        {hechosVisibles.map(it => renderWorkRow(it))}
+                        {hechosCount > hechosVisibles.length && (
                           <button onClick={() => setHechosModalOpen(true)} style={verTodos}>
                             Ver los {hechosCount} trabajos hechos <Icon name="chevronRight" size={13} />
                           </button>
@@ -840,6 +1476,7 @@ export default function FichaRapidaPage() {
                 overflow: 'visible',
                 display: isMobile && mobileTab !== 'pagos' ? 'none' : 'flex',
                 flexDirection: 'column',
+                minHeight: 0,
               }}
             >
               <div className="card__header" style={{ alignItems: 'center' }}>
@@ -850,15 +1487,53 @@ export default function FichaRapidaPage() {
               </div>
 
               <div ref={pagoRef} className="lb-addrow" style={{ position: 'relative', display: 'block' }}>
+                {/* Imputar el pago a un trabajo (opcional). Solo aparece si hay
+                    alguno con saldo: si no, sería un campo vacío molestando. Por
+                    defecto va "a cuenta", que es como se cargó siempre. */}
+                {trabajosCobrables.length > 0 && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12.5, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                    <span style={{ whiteSpace: 'nowrap' }}>¿De qué trabajo?</span>
+                    <select
+                      className="input"
+                      value={pgWorkId}
+                      onFocus={() => setPagoPanel(false)}
+                      onChange={e => setPgWorkId(e.target.value)}
+                      style={{ flex: '1 1 200px', minWidth: 160, height: 34, fontSize: 13 }}
+                    >
+                      <option value="">A cuenta (sin trabajo)</option>
+                      {cobrablesHechos.length > 0 && (
+                        <optgroup label="Hechos sin cobrar">
+                          {cobrablesHechos.map(w => (
+                            <option key={w._id} value={w._id}>
+                              {w.description} — falta {fmtMoney((w.price ?? 0) - (w.paid ?? 0))}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {cobrablesPlan.length > 0 && (
+                        <optgroup label="Del plan (por hacer)">
+                          {cobrablesPlan.map(w => (
+                            <option key={w._id} value={w._id}>
+                              {w.description} — falta {fmtMoney((w.price ?? 0) - (w.paid ?? 0))}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </label>
+                )}
+
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <div style={{ position: 'relative', flex: '1 1 110px', minWidth: 100 }}>
                     <span style={dollarPrefix}>$</span>
                     <input className="input" inputMode="numeric" placeholder="Monto" value={pgAmount} onFocus={() => setPagoPanel(true)} onClick={() => setPagoPanel(true)} onChange={e => setPgAmount(e.target.value.replace(/[^\d]/g, ''))} onKeyDown={e => e.key === 'Enter' && addPago()} style={{ width: '100%', height: 38, paddingLeft: 20 }} />
                   </div>
-                  <input type="date" className="input" value={pgDate} onChange={e => setPgDate(e.target.value)} style={{ width: 140, height: 38 }} />
+                  {/* Tocar otro campo del formulario también cierra el panel de
+                      montos: para el usuario es "otro lado" igual que afuera. */}
+                  <input type="date" className="input" value={pgDate} onFocus={() => setPagoPanel(false)} onChange={e => setPgDate(e.target.value)} style={{ width: 140, height: 38 }} />
                   <div className="seg">
                     {(['CASH', 'TRANSFER'] as const).map(m => (
-                      <button key={m} type="button" className={`seg__btn ${pgMethod === m ? 'is-active' : ''}`} onClick={() => setPgMethod(m)}>
+                      <button key={m} type="button" className={`seg__btn ${pgMethod === m ? 'is-active' : ''}`} onClick={() => { setPgMethod(m); setPagoPanel(false); }}>
                         {m === 'CASH' ? 'Efec.' : 'Transf.'}
                       </button>
                     ))}
@@ -868,14 +1543,15 @@ export default function FichaRapidaPage() {
                   </button>
                 </div>
 
+
                 {pagoPanel && (
                   <div style={popover}>
                     <div style={popTitle}>Montos</div>
                     <div style={chipsWrap}>
                       {quickAmounts.map(v => (
-                        <button key={v} type="button" className="mono" onMouseDown={e => e.preventDefault()} onClick={() => { setPgAmount(String(v)); setPagoPanel(false); }} style={{ ...chip, fontWeight: 600 }}>{fmtMoney(v)}</button>
+                        <button key={v} type="button" className="lb-chip mono" onMouseDown={e => e.preventDefault()} onClick={() => { setPgAmount(String(v)); setPagoPanel(false); }} style={{ fontWeight: 600 }}>{fmtMoney(v)}</button>
                       ))}
-                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomAmountsOpen(true)} style={{ ...chip, borderStyle: 'dashed', color: 'var(--brand-primary-600)' }}>
+                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
                         <Icon name="settings" size={12} /> Editar
                       </button>
                     </div>
@@ -884,12 +1560,19 @@ export default function FichaRapidaPage() {
               </div>
 
               {/* lista de pagos */}
-              <div style={{ maxHeight: 'min(48vh, 520px)', overflowY: 'auto' }}>
+              <div
+                ref={pagosListRef}
+                style={
+                  stack
+                    ? { maxHeight: 'min(48vh, 520px)', overflowY: 'auto' }
+                    : { flex: 1, minHeight: 0, overflowY: 'auto' }
+                }
+              >
                 {pagos.length === 0 && (
                   <div style={emptyRow}>Sin pagos todavía.</div>
                 )}
-                {pagos.slice(0, CAP).map(t => renderPagoRow(t))}
-                {pagos.length > CAP && (
+                {pagos.slice(0, stack ? CAP : fitPagos).map(t => renderPagoRow(t))}
+                {pagos.length > (stack ? CAP : fitPagos) && (
                   <button onClick={() => setPagosModalOpen(true)} style={verTodos}>
                     Ver los {pagos.length} pagos <Icon name="chevronRight" size={13} />
                   </button>
@@ -903,16 +1586,106 @@ export default function FichaRapidaPage() {
         )}
       </div>
 
+      {/* Elegir a qué trabajo se imputa un pago viejo */}
+      {linkPago && (
+        <div className="modal-overlay" onClick={() => setLinkPago(null)}>
+          <div className="modal-card" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-card__header">
+              <div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 600 }}>
+                  ¿De qué trabajo fue este pago?
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                  {fmtDate(isoDateOf(linkPago))} · {fmtMoney(linkPago.amount)}
+                </div>
+              </div>
+              <button className="btn btn--ghost btn--icon" onClick={() => setLinkPago(null)}>
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="modal-card__body" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {trabajosCobrables.map(w => (
+                <button
+                  key={w._id}
+                  className="lb-pick"
+                  onClick={() => vincularPago(linkPago, w._id)}
+                >
+                  <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    {w.description}
+                    {w.status !== DONE && <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}> · por hacer</span>}
+                  </span>
+                  <span className="mono" style={{ fontSize: 12.5, color: 'var(--text-secondary)', flexShrink: 0 }}>
+                    falta {fmtMoney((w.price ?? 0) - (w.paid ?? 0))}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Destildar "Pagado": se borran los pagos imputados a ese trabajo. El
+          mensaje dice cuantos y cuanta plata, para no borrar montos a ciegas. */}
+      {(() => {
+        const total = uncollect ? uncollect.pagos.reduce((a, pg) => a + pg.amount, 0) : 0;
+        const n = uncollect?.pagos.length ?? 0;
+        return (
+          <ConfirmDialog
+            open={!!uncollect}
+            title="¿Marcar como NO cobrado?"
+            message={
+              uncollect
+                ? `Se ${n === 1 ? 'borra el pago' : `borran los ${n} pagos`} de "${uncollect.work.description}" por ${fmtMoney(total)}. Vuelve a sumar a lo que falta cobrar.`
+                : ''
+            }
+            confirmLabel={n === 1 ? 'Borrar el pago' : 'Borrar los pagos'}
+            danger
+            onConfirm={confirmDescobrar}
+            onCancel={() => setUncollect(null)}
+          />
+        );
+      })()}
+
       {/* ---------- confirmaciones de borrado ---------- */}
-      <ConfirmDialog
-        open={!!delItem}
-        title="¿Borrar este trabajo?"
-        message="Se saca del plan. No se puede deshacer."
-        confirmLabel="Borrar"
-        danger
-        onConfirm={confirmDelItem}
-        onCancel={() => setDelItem(null)}
-      />
+      {(() => {
+        const cobrado = delItemPagos.reduce((a, pg) => a + pg.amount, 0);
+        const n = delItemPagos.length;
+        return (
+          <ConfirmDialog
+            open={!!delItem}
+            title="¿Borrar este trabajo?"
+            message={
+              n > 0
+                ? `Este trabajo tiene ${fmtMoney(cobrado)} cobrado${n === 1 ? '' : 's'}.`
+                : 'Se saca del plan. No se puede deshacer.'
+            }
+            confirmLabel="Borrar"
+            danger
+            extra={
+              n > 0 ? (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: 'var(--text-secondary)', cursor: 'pointer', lineHeight: 1.45 }}>
+                  <input
+                    type="checkbox"
+                    checked={alsoDelPagos}
+                    onChange={e => setAlsoDelPagos(e.target.checked)}
+                    style={{ marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+                  />
+                  <span>
+                    Borrar también {n === 1 ? 'el pago' : `los ${n} pagos`} de {fmtMoney(cobrado)}.
+                    <br />
+                    <span style={{ color: 'var(--text-tertiary)' }}>
+                      Si no, la plata queda registrada como pago a cuenta y el paciente
+                      va a figurar con {fmtMoney(cobrado)} a favor.
+                    </span>
+                  </span>
+                </label>
+              ) : undefined
+            }
+            onConfirm={confirmDelItem}
+            onCancel={() => setDelItem(null)}
+          />
+        );
+      })()}
       {(() => {
         const n = delPago ? (photosByTx.get(delPago._id)?.length ?? 0) : 0;
         return (
@@ -1047,7 +1820,7 @@ export default function FichaRapidaPage() {
                               commitHechosFilter(t);
                               setHechosPanelOpen(false);
                             }}
-                            style={{ ...chip, fontWeight: 500, color: 'var(--text-primary)' }}
+                            className="lb-chip"
                           >
                             {t}
                           </button>
@@ -1399,23 +2172,15 @@ const label: CSSProperties = {
   fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase',
   letterSpacing: '0.05em', fontWeight: 600, marginBottom: 6,
 };
-const chip: CSSProperties = {
-  fontSize: 12, padding: '4px 10px', borderRadius: 999,
-  border: '1px solid var(--border-default)', background: 'var(--bg-surface)',
-  color: 'var(--text-secondary)', cursor: 'pointer',
-  display: 'inline-flex', alignItems: 'center', gap: 5,
-};
+/* Los chips de atajo usan la clase `.lb-chip` del CSS global (compartida con la
+   Agenda), no un estilo local — antes cada pantalla tenía el suyo y quedaban
+   distintos. */
 const emptyRow: CSSProperties = {
   padding: 24, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13,
 };
 const countBadge: CSSProperties = {
   marginLeft: 8, fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)',
   background: 'var(--bg-hover)', borderRadius: 999, padding: '1px 8px',
-};
-const pendBadge: CSSProperties = {
-  marginLeft: 8, fontSize: 10.5, fontWeight: 600, color: 'var(--text-tertiary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 999, padding: '1px 7px',
-  whiteSpace: 'nowrap',
 };
 const dollarPrefix: CSSProperties = {
   position: 'absolute', left: 10, top: 10, color: 'var(--text-tertiary)',

@@ -87,16 +87,25 @@ const EMOJI: Partial<Record<IconName, string>> = {
   history: '🕐',
   clock: '🕐',
   user: '👤',
-  image: '🖼',
+  // 🖼 y 🗑 son de un bloque viejo de Unicode: por defecto se dibujan como
+  // texto monocromático (gris). El carácter invisible U+FE0F fuerza la
+  // versión a color, para que acompañen a 🦷 y ✏️.
+  image: '🖼️',
   tooth: '🦷',
   cash: '💵',
   camera: '📷',
-  trash: '🗑',
+  // trash NO va como emoji: el 🗑 de Windows es un tacho casi blanco, ilegible
+  // a 14px, y encima el emoji ignora el color del contexto — el botón de borrar
+  // está en terracota (peligro) y quedaba pálido y sin jerarquía. El SVG se
+  // dibuja nítido y sí toma la terracota, que acá es información.
   receipt: '🧾',
+  // Editar va como emoji (no como el glifo ✎) para que acompañe a 🖼 y 🦷: en
+  // la misma barra de la ficha y en las filas de las tablas quedaban mezclados
+  // un dibujito a color y una tilde monocromática.
+  edit: '✏️',
   // Glifos de texto: monocromáticos, heredan el color del contexto.
   whatsapp: '✆',
   phone: '✆',
-  edit: '✎',
   more: '⋯',
   check: '✓',
   x: '✕',

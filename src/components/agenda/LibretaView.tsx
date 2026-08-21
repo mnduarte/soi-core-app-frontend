@@ -409,7 +409,8 @@ export function LibretaView({
                     <button
                       type="button"
                       onMouseDown={e => { e.preventDefault(); setSlotOpen(false); setCustomSlotsOpen(true); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginTop: 10, padding: 8, borderRadius: 7, border: '1px dashed var(--border-default)', background: 'transparent', color: 'var(--brand-primary-600)', cursor: 'pointer', fontSize: 12.5, fontWeight: 500, justifyContent: 'center' }}
+                      className="lb-chip lb-chip--add"
+                      style={{ width: '100%', marginTop: 10, justifyContent: 'center' }}
                     >
                       <Icon name="settings" size={13} /> Personalizar horarios
                     </button>
@@ -575,16 +576,8 @@ export function LibretaView({
                         <button
                           key={c}
                           type="button"
+                          className="lb-chip"
                           onMouseDown={e => { e.preventDefault(); addChip(c); }}
-                          style={{
-                            fontSize: 12,
-                            padding: '4px 10px',
-                            borderRadius: 999,
-                            border: '1px solid var(--border-default)',
-                            background: 'var(--bg-surface)',
-                            color: 'var(--text-secondary)',
-                            cursor: 'pointer',
-                          }}
                         >
                           {c}
                         </button>
@@ -662,19 +655,31 @@ export function LibretaView({
                             </button>
                           )}
                         </div>
-                        <div className="row" style={{ gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                          <StatusBadge status={a.status} />
-                          {!a.patientId && (
-                            <span className="badge badge--warning" title="Turno cargado en la agenda sin ficha de paciente vinculada">
-                              <Icon name="clipboard" size={10} /> Sin ficha
-                            </span>
-                          )}
-                          {isFichaPending(a) && a.patientId && (
-                            <FichaPendingBadge onClick={() => onOpenFicha(a)} />
-                          )}
-                          {/* El estado "recordado" NO va como chip acá: lo muestra
-                              el propio botón de la acción (tilde verde + "Recordado"). */}
-                        </div>
+                        {/* SCHEDULED es el estado por defecto (3 de cada 4 turnos):
+                            mostrarlo en todas las filas repetía lo mismo sin
+                            aportar nada y le robaba protagonismo al trabajo. El
+                            badge aparece solo cuando dice algo — atendido, no
+                            asistió, en el sillón. Si no hay nada que mostrar, la
+                            fila ni siquiera dibuja el renglón. */}
+                        {(() => {
+                          const verEstado = a.status !== 'SCHEDULED';
+                          const verSinFicha = !a.patientId;
+                          const verFichaPend = isFichaPending(a) && !!a.patientId;
+                          if (!verEstado && !verSinFicha && !verFichaPend) return null;
+                          return (
+                            <div className="row" style={{ gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                              {verEstado && <StatusBadge status={a.status} />}
+                              {verSinFicha && (
+                                <span className="badge badge--warning" title="Turno cargado en la agenda sin ficha de paciente vinculada">
+                                  <Icon name="clipboard" size={10} /> Sin ficha
+                                </span>
+                              )}
+                              {verFichaPend && <FichaPendingBadge onClick={() => onOpenFicha(a)} />}
+                              {/* El estado "recordado" NO va como chip acá: lo muestra
+                                  el propio botón de la acción (tilde verde + "Recordado"). */}
+                            </div>
+                          );
+                        })()}
                       </div>
                       {/* Acciones de fila (patrón obligatorio: ícono 32×32 con
                           micro-etiqueta SIEMPRE visible debajo, nunca tooltip).

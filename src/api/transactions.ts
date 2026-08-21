@@ -9,6 +9,8 @@ export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
 export interface Transaction {
   _id: string;
   patientId: string;
+  // Trabajo al que se imputo el pago (null = pago a cuenta).
+  workId?: string | null;
   type: TransactionType;
   amount: number;
   paymentMethod: string;
@@ -22,6 +24,7 @@ export interface MovementInput {
   patientId: string;
   type: 'CHARGE' | 'PAYMENT';
   amount: number;
+  workId?: string;
   paymentMethod?: PaymentMethod;
   description?: string;
   date?: string; // ISO
@@ -38,6 +41,12 @@ export const transactionsApi = {
   ) =>
     apiClient
       .get<{ data: Transaction[] }>('/transactions', { params: { patientId, ...opts } })
+      .then(r => r.data.data),
+
+  // Pagos imputados a un trabajo puntual (para destildar "cobrado").
+  byWork: (patientId: string, workId: string) =>
+    apiClient
+      .get<{ data: Transaction[] }>('/transactions', { params: { patientId, workId, type: 'PAYMENT' } })
       .then(r => r.data.data),
 
   getBalance: (patientId: string) =>

@@ -55,7 +55,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapsed }: Sideb
   };
 
   return (
-    <aside className={`sidebar ${isOpen ? 'is-open' : ''} ${collapsed ? 'sidebar--rail' : ''}`}>
+    <aside className={`sidebar ${isOpen ? 'is-open' : ''} ${collapsed ? 'sidebar--rail' : 'sidebar--wide'}`}>
       <div className="sidebar__brand">
         <BrandLogo />
         <div className="sidebar__brand-txt">

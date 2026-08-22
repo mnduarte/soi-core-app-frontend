@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Icon } from '../common/Icon';
@@ -13,13 +14,22 @@ import { SubscriptionBanner } from './SubscriptionBanner';
 import { BottomNav, MobileFab } from './BottomNav';
 
 export default function AppLayout() {
-  // Sidebar angosto (solo íconos). Se recuerda entre sesiones: es una
-  // preferencia de cómo trabaja cada uno, no algo que se elija cada vez.
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === '1');
-  const toggleCollapsed = () => setCollapsed(c => {
-    localStorage.setItem('sidebarCollapsed', c ? '0' : '1');
-    return !c;
+  // Sidebar angosto (solo íconos). Tres estados, no dos: `null` = como venía
+  // por defecto (angosto en tablet, ancho en escritorio), y true/false = lo que
+  // el usuario eligió a mano. Sin el `null` no se podría distinguir "nunca lo
+  // tocó" de "lo quiere ancho", y en tablet el default pisaba su decisión.
+  const [collapsed, setCollapsed] = useState<boolean | null>(() => {
+    const v = localStorage.getItem('sidebarCollapsed');
+    return v === '1' ? true : v === '0' ? false : null;
   });
+  // Hasta 1199px el sidebar arranca angosto: en tablet 232px de menú para tres
+  // ítems se comen la pantalla donde está el trabajo.
+  const railPorDefecto = useIsMobile(1199);
+  const rail = collapsed ?? railPorDefecto;
+  const toggleCollapsed = () => {
+    localStorage.setItem('sidebarCollapsed', rail ? '0' : '1');
+    setCollapsed(!rail);
+  };
   const sidebarOpen = useUIStore(s => s.sidebarOpen);
   const setSidebarOpen = useUIStore(s => s.setSidebarOpen);
   const isImpersonating = useAuthStore(s => s.isImpersonating);
@@ -97,9 +107,9 @@ export default function AppLayout() {
         </div>
       )}
       <SubscriptionBanner />
-      <div className={`app ${collapsed ? 'app--rail' : ''}`}>
+      <div className={`app ${rail ? 'app--rail' : 'app--wide'}`}>
         {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={rail} onToggleCollapsed={toggleCollapsed} />
         <div className="main">
           {/* En desktop/tablet la navegación vive en el sidebar; en celular
               (<768px) se reemplaza por la bottom nav + FAB de abajo. */}

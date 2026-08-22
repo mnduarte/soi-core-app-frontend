@@ -115,10 +115,14 @@ export function useFlip(
     // con su propio fade y las de abajo acompañan de una.
     if (hayNuevas && (!opts?.insert || !esAlta)) return;
 
-    // Si TODAS se corrieron lo mismo, la lista no se reordenó: se movió entera
-    // porque cambió algo arriba (un panel que se abre, un aviso que aparece).
-    // Ahí no hay nada que explicar y animarlo se ve como un empujón sin causa.
+    // Si TODAS se corrieron lo mismo Y no cambió la cantidad, la lista no se
+    // reordenó: se movió entera porque cambió algo arriba (un panel que se
+    // abre, un aviso que aparece). Ahí no hay nada que explicar.
+    // El "no cambió la cantidad" es imprescindible: al borrar la PRIMERA fila
+    // todas las de abajo también suben lo mismo, y sin esa condición el borrado
+    // más común se quedaba sin animación.
     const todasIgual = movidas.length === nodes.length
+      && nodes.length === prevSize
       && movidas.every(m => m.d === movidas[0].d);
     if (todasIgual) return;
 

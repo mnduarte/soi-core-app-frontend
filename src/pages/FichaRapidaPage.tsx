@@ -436,13 +436,13 @@ export default function FichaRapidaPage() {
     const faltaDe = (w: Work) => (w.price ?? 0) - (w.paid ?? 0);
     let restante = montoTotal ?? works.reduce((a, w) => a + faltaDe(w), 0);
     if (restante <= 0) { showToast('Poné un monto mayor a cero', 'error'); return; }
-    let ultimo: string | null = null, cobrado = 0;
+    let cobrado = 0;
     try {
       for (const w of works) {
         if (restante <= 0) break;
         const cuota = Math.min(faltaDe(w), restante);
         if (cuota <= 0) continue;
-        const creado = await addPagoMut.mutateAsync({
+        await addPagoMut.mutateAsync({
           patientId: id!,
           type: 'PAYMENT',
           amount: cuota,
@@ -451,9 +451,12 @@ export default function FichaRapidaPage() {
           paymentMethod: 'CASH',
           date: new Date(`${todayYMD()}T12:00:00`).toISOString(),
         });
-        ultimo = creado._id; cobrado += cuota; restante -= cuota;
+        // Reparto en cascada: cada trabajo se lleva lo suyo y lo que queda pasa
+        // al siguiente. Sin descontar, un pago parcial se cobraria entero en
+        // CADA trabajo de la tanda.
+        cobrado += cuota;
+        restante -= cuota;
       }
-      if (ultimo) setNewPagoId(ultimo);
       invalidateWorks(); invalidateTx();
       showToast(`Cobrado ${fmtMoney(cobrado)}`, 'success');
     } catch { showToast('No se pudo registrar el pago', 'error'); }
@@ -468,7 +471,7 @@ export default function FichaRapidaPage() {
     if (resta <= 0) { showToast('Poné un monto mayor a cero', 'error'); return; }
     setCobroBusy(it._id);
     try {
-      const creado = await addPagoMut.mutateAsync({
+      await addPagoMut.mutateAsync({
         patientId: id!,
         type: 'PAYMENT',
         amount: resta,
@@ -477,7 +480,6 @@ export default function FichaRapidaPage() {
         paymentMethod: 'CASH',
         date: new Date(`${todayYMD()}T12:00:00`).toISOString(),
       });
-      setNewPagoId(creado._id);
       invalidateWorks(); invalidateTx();
       showToast(`Cobrado ${fmtMoney(resta)} - ${it.description}`, 'success');
     } catch { showToast('No se pudo registrar el pago', 'error'); }
@@ -519,7 +521,6 @@ export default function FichaRapidaPage() {
   // resto) y queda resaltada un instante. Sirve de confirmación visual de que
   // el pago entró — sobre todo cuando se carga desde la fila del trabajo, que
   // está en la otra columna y es fácil no registrar el cambio.
-  const [newPagoId, setNewPagoId] = useState<string | null>(null);
   // Fila que se está yendo. React saca el elemento del DOM apenas cambian los
   // datos, así que para poder animar la salida primero marcamos la fila, la
   // dejamos encogerse, y recién después pegamos el borrado al servidor.
@@ -539,11 +540,6 @@ export default function FichaRapidaPage() {
     const t = setTimeout(() => setNewWorkId(null), 900);
     return () => clearTimeout(t);
   }, [newWorkId]);
-  useEffect(() => {
-    if (!newPagoId) return;
-    const t = setTimeout(() => setNewPagoId(null), 900);
-    return () => clearTimeout(t);
-  }, [newPagoId]);
   const addPagoMut = useMutation({ mutationFn: transactionsApi.addMovement });
   const addPago = async () => {
     if (!patient || pgBusy) return;
@@ -552,7 +548,7 @@ export default function FichaRapidaPage() {
     setPgBusy(true);
     setPagoPanel(false);
     try {
-      const creado = await addPagoMut.mutateAsync({
+      await addPagoMut.mutateAsync({
         patientId: patient._id,
         type: 'PAYMENT',
         amount: amt,
@@ -563,7 +559,6 @@ export default function FichaRapidaPage() {
         paymentMethod: pgMethod,
         date: new Date(`${pgDate}T12:00:00`).toISOString(),
       });
-      setNewPagoId(creado._id);
       setPgAmount(''); setPgDate(todayYMD()); setPgWorkId('');
       invalidateWorks();
       invalidateTx();
@@ -842,7 +837,12 @@ export default function FichaRapidaPage() {
 
   // Misma idea para la columna de Pagos, asi las dos crecen parejo.
   const pagosListRef = useRef<HTMLDivElement>(null);
-  useFlip(pagosListRef);
+  // `insert` para que un pago nuevo abra su hueco empujando a los de abajo. Va
+  // en la LISTA y no en cada `setNewPagoId(...)`: así lo agarra venga de donde
+  // venga —del formulario, de cobrar un trabajo, de una tanda— sin que cada
+  // lugar tenga que acordarse de avisar. Los pagos se ordenan por fecha, así
+  // que uno con fecha vieja nace en el medio.
+  useFlip(pagosListRef, { insert: true });
   const [fitPagos, setFitPagos] = useState(CAP);
   useLayoutEffect(() => {
     if (stack) { setFitPagos(CAP); return; }
@@ -1183,7 +1183,7 @@ export default function FichaRapidaPage() {
     const editing = editPago === t._id;
     const ph = photosByTx.get(t._id) ?? [];
     return (
-      <div key={t._id} data-flip={t._id} ref={editing ? epRef : undefined} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === newPagoId ? 'lb-rowin' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={t._id} data-flip={t._id} ref={editing ? epRef : undefined} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {editing ? (
           <>
             <div style={{ width: 132 }}><DatePicker value={epDate} onChange={setEpDate} /></div>

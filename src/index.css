@@ -671,6 +671,30 @@ table.tbl { width: 100%; border-collapse: collapse; }
     justify-content: center;
   }
   .sidebar__user { justify-content: center; padding: 10px 0; }
+
+  /* ...salvo que lo haya expandido a mano. Estas reglas van DENTRO del media
+     query porque si no, las de arriba —que aparecen después en el archivo—
+     les ganarían y el botón de expandir no haría nada en tablet. */
+  .app--wide { grid-template-columns: 232px 1fr; }
+  .sidebar--wide {
+    width: auto;
+    padding: 20px 14px;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .sidebar--wide .sidebar__brand { padding: 0 4px 18px; }
+  .sidebar--wide .sidebar__brand > div:last-child,
+  .sidebar--wide .sidebar__user > div { display: block; }
+  .sidebar--wide .nav-item span { display: inline; }
+  .sidebar--wide .nav-item__kbd,
+  .sidebar--wide .sidebar__user .btn { display: inline-flex; }
+  .sidebar--wide .nav-item {
+    width: auto;
+    height: auto;
+    padding: 10px 12px;
+    justify-content: flex-start;
+  }
+  .sidebar--wide .sidebar__user { justify-content: flex-start; padding: 12px 0 0; }
 }
 
 /* CELULAR: sin sidebar, navegación por bottom nav.
@@ -1227,6 +1251,9 @@ table.tbl { width: 100%; border-collapse: collapse; }
   100%    { background: transparent; }
 }
 .lb-flipnew { animation: flipNewGlow 1s ease-out; }
+/* En la ficha el destello va en verde: ahi el verde es plata cobrada, y el
+   azul de la agenda (que significa "agendado") diria otra cosa. */
+.fr-row.lb-flipnew { animation: rowInFlash 0.9s ease-out; }
 
 /* Los estados (En curso · Atendido · Ficha pendiente) aparecen y desaparecen
    según lo que pasa en el consultorio. Que broten de golpe hace dudar de si se

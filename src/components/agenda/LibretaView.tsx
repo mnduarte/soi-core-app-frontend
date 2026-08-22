@@ -11,6 +11,7 @@ import { dayNotesApi, type Priority } from '../../api/dayNotes';
 import { clinicsApi } from '../../api/clinics';
 import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
+import { useFlip } from '../../hooks/useFlip';
 import { Icon } from '../common/Icon';
 import { Avatar } from '../common/Avatar';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -53,6 +54,8 @@ function apptLabel(a: Appointment, patientMap: Map<string, Patient>): string {
 }
 
 interface LibretaViewProps {
+  /** Dirección del último salto de día (para deslizar la hoja al lado correcto). */
+  dayMove?: { dir: 'next' | 'prev'; n: number };
   appts: Appointment[];
   patientMap: Map<string, Patient>;
   selectedDate: Date;
@@ -67,6 +70,7 @@ interface LibretaViewProps {
 }
 
 export function LibretaView({
+  dayMove,
   appts,
   patientMap,
   selectedDate,
@@ -284,6 +288,12 @@ export function LibretaView({
     return Array.from(map.entries());
   }, [appts]);
 
+  // Mismo efecto que en la ficha: al anotar un turno, las filas de abajo se
+  // corren para hacerle lugar en vez de saltar. Anda igual en celular y tablet
+  // (es transform puro, corre en el compositor).
+  const listaRef = useRef<HTMLDivElement>(null);
+  useFlip(listaRef, { insert: true });
+
   return (
     <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-app)', padding: isMobile ? 12 : 20 }}>
       <div
@@ -308,7 +318,11 @@ export function LibretaView({
               borderBottom: '2px solid var(--border-default)',
               background: 'var(--bg-muted)',
               position: 'relative',
-              zIndex: 2,
+              // Por encima de cualquier cosa que la lista pueda generar: sus
+              // filas llegan a z-index 2 mientras el FLIP las mueve, y en un
+              // empate gana la de más abajo en el HTML (la fila). El
+              // formulario y sus paneles tienen que ganar siempre.
+              zIndex: 20,
             }}
           >
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
@@ -333,7 +347,9 @@ export function LibretaView({
                 </button>
                 {slotOpen && (
                   <div
+                    className="lb-menupop"
                     style={{
+                      transformOrigin: 'top left',
                       position: 'absolute',
                       top: 'calc(100% + 4px)',
                       left: 0,
@@ -460,7 +476,9 @@ export function LibretaView({
                 )}
                 {searchOpen && !patientId && (
                   <div
+                    className="lb-menupop"
                     style={{
+                      transformOrigin: 'top left',
                       position: 'absolute',
                       top: 'calc(100% + 4px)',
                       left: 0,
@@ -554,7 +572,9 @@ export function LibretaView({
                 />
                 {trabOpen && (
                   <div
+                    className="lb-menupop"
                     style={{
+                      transformOrigin: 'top left',
                       position: 'absolute',
                       top: 'calc(100% + 4px)',
                       left: 0,
@@ -613,7 +633,20 @@ export function LibretaView({
             </div>
           </div>
 
-          {/* Lista */}
+          {/* Lista. `insert: true` porque acá una fila puede nacer EN EL MEDIO
+              (un sobreturno entre dos turnos, o una hora anterior a las ya
+              anotadas): las de abajo tienen que correrse para abrirle lugar. */}
+          <div
+            ref={listaRef}
+            // Encierra el apilado de las filas: los z-index que pone el FLIP se
+            // resuelven acá adentro y no pueden competir con el formulario.
+            style={{ isolation: 'isolate' }}
+            // La `key` remonta la lista para que la animación vuelva a correr
+            // en cada salto. Solo la hoja: el formulario de arriba se queda
+            // quieto (si no, se perdería lo que estuvieras tipeando).
+            key={dayMove?.n ?? 0}
+            className={dayMove && dayMove.n > 0 ? `lb-day-${dayMove.dir}` : undefined}
+          >
           {groups.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
               Sin turnos anotados. Cargá el primero arriba ↑
@@ -629,9 +662,13 @@ export function LibretaView({
                   return (
                     <div
                       key={a._id}
+                      data-flip={a._id}
                       className="lb-row"
                       style={{
-                        background: unresolved ? 'color-mix(in srgb, var(--warning) 6%, transparent)' : 'transparent',
+                        // Sin `transparent` explícito: un fondo inline le gana a
+                        // .lb-flip, y la fila que se mueve necesita ser opaca
+                        // para no transparentarse sobre la de al lado.
+                        ...(unresolved ? { background: 'color-mix(in srgb, var(--warning) 6%, transparent)' } : {}),
                         borderTop: idx > 0 ? '1px dashed var(--border-subtle)' : 'none',
                         borderBottom: 'none',
                       }}
@@ -668,7 +705,7 @@ export function LibretaView({
                           if (!verEstado && !verSinFicha && !verFichaPend) return null;
                           return (
                             <div className="row" style={{ gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                              {verEstado && <StatusBadge status={a.status} />}
+                              {verEstado && <StatusBadge key={a.status} status={a.status} />}
                               {verSinFicha && (
                                 <span className="badge badge--warning" title="Turno cargado en la agenda sin ficha de paciente vinculada">
                                   <Icon name="clipboard" size={10} /> Sin ficha
@@ -751,7 +788,9 @@ export function LibretaView({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 5,
-                    padding: '7px 16px 10px 60px',
+                    // 94px = donde arranca el texto de las filas, o sea a la
+                    // derecha de la línea de margen. Antes la cruzaba.
+                    padding: '7px 16px 10px 94px',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
@@ -765,6 +804,7 @@ export function LibretaView({
               </div>
             ))
           )}
+          </div>
         </div>
 
         {/* ---------- Aside: Notas + Prioridades ---------- */}

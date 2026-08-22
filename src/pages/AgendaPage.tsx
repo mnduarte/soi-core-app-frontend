@@ -80,6 +80,16 @@ export default function AgendaPage() {
 
   const [view, setView] = useState<View>('libreta');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  // Hacia dónde fue el último salto de día: la Libreta lo usa para deslizar
+  // para el lado correcto. `n` es un contador — sin él, dos "siguiente"
+  // seguidos no volverían a disparar la animación (la dirección no cambia).
+  const [dayMove, setDayMove] = useState({ dir: 'next' as 'next' | 'prev', n: 0 });
+  const goToDate = (d: Date) => {
+    if (!sameDay(d, selectedDate)) {
+      setDayMove(m => ({ dir: d > selectedDate ? 'next' : 'prev', n: m.n + 1 }));
+    }
+    setSelectedDate(d);
+  };
   const [searchParams] = useSearchParams();
 
   // Si llegamos con ?patientId (ej. desde "Guardar y agendar turno"), aseguramos
@@ -182,7 +192,7 @@ export default function AgendaPage() {
     if (view === 'day' || view === 'libreta') next.setDate(next.getDate() + delta);
     else if (view === 'week') next.setDate(next.getDate() + delta * 7);
     else next.setMonth(next.getMonth() + delta);
-    setSelectedDate(next);
+    goToDate(next);
   };
 
   // Stats are scoped to the visible day even in week/month views, so the
@@ -205,6 +215,17 @@ export default function AgendaPage() {
     return { total: dayList.length, completed, confirmed, pending };
   }, [dayList]);
 
+  // Las vistas están ordenadas de más chica a más grande (día → semana → mes).
+  // Ir hacia una más amplia desliza para un lado; volver, para el otro.
+  const VIEW_ORDER: Record<string, number> = { day: 0, libreta: 0, week: 1, month: 2 };
+  const [viewMove, setViewMove] = useState({ dir: 'next' as 'next' | 'prev', n: 0 });
+  const goToView = (v: 'libreta' | 'week' | 'month') => {
+    if (v !== view) {
+      setViewMove(m => ({ dir: VIEW_ORDER[v] > VIEW_ORDER[view] ? 'next' : 'prev', n: m.n + 1 }));
+    }
+    setView(v);
+  };
+
   const viewSeg = (
     <div className="seg">
       {(['libreta', 'week', 'month'] as const).map(v => (
@@ -212,7 +233,7 @@ export default function AgendaPage() {
           key={v}
           type="button"
           className={`seg__btn ${view === v ? 'is-active' : ''}`}
-          onClick={() => setView(v)}
+          onClick={() => goToView(v)}
         >
           {{ libreta: 'Libreta diaria', week: 'Semana', month: 'Mes' }[v]}
         </button>
@@ -256,8 +277,12 @@ export default function AgendaPage() {
           flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14 }}>
-          <Icon name="calendar" size={15} style={{ color: 'var(--text-tertiary)' }} />
+        {/* Ancho fijo: "Turnos del día" y "Turnos de la semana" no miden lo
+            mismo, y sin esto todo lo que sigue (fecha, ‹ Hoy ›, el selector de
+            vista) se corría de lugar al cambiar de vista. Los controles tienen
+            que quedarse donde el dedo los dejó. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14, minWidth: isMobile ? undefined : 196 }}>
+          <Icon name="calendar" size={15} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
           {view === 'week' ? 'Turnos de la semana' : view === 'month' ? 'Turnos del mes' : 'Turnos del día'} · {appts.length}
         </div>
 
@@ -268,7 +293,7 @@ export default function AgendaPage() {
           value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`}
           onChange={e => {
             const v = e.target.value;
-            if (v) setSelectedDate(new Date(`${v}T00:00:00`));
+            if (v) goToDate(new Date(`${v}T00:00:00`));
           }}
           style={{ height: 34, width: 158 }}
         />
@@ -277,7 +302,7 @@ export default function AgendaPage() {
           <button className="btn btn--ghost btn--icon" onClick={() => shift(-1)}>
             <Icon name="chevronLeft" />
           </button>
-          <button className="btn btn--secondary btn--sm" onClick={() => setSelectedDate(new Date())}>
+          <button className="btn btn--secondary btn--sm" onClick={() => goToDate(new Date())}>
             Hoy
           </button>
           <button className="btn btn--ghost btn--icon" onClick={() => shift(1)}>
@@ -340,12 +365,19 @@ export default function AgendaPage() {
         />
       )}
 
-      {/* Views */}
+      {/* Views. La `key` remonta el bloque en cada cambio para que la animación
+          vuelva a correr; la clase dice para qué lado. */}
+      <div
+        key={viewMove.n}
+        className={viewMove.n > 0 ? `lb-view-${viewMove.dir}` : undefined}
+        style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+      >
       {view === 'libreta' && (
         <LibretaView
           appts={dayList}
           patientMap={patientMap}
           selectedDate={selectedDate}
+          dayMove={dayMove}
           now={now}
           isMobile={isMobile}
           onOpenPatient={(id, trabajo) =>
@@ -377,16 +409,17 @@ export default function AgendaPage() {
           appts={appts}
           patientMap={patientMap}
           selectedDate={selectedDate}
-          onPickDay={d => { setSelectedDate(d); setView('libreta'); }}
+          onPickDay={d => { setSelectedDate(d); goToView('libreta'); }}
         />
       )}
       {view === 'month' && (
         <MonthView
           appts={appts}
           selectedDate={selectedDate}
-          onPickDay={d => { setSelectedDate(d); setView('libreta'); }}
+          onPickDay={d => { setSelectedDate(d); goToView('libreta'); }}
         />
       )}
+      </div>
 
       {fichaTarget && (
         <NewClinicalEntryModal

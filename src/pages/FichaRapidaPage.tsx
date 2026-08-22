@@ -576,6 +576,7 @@ export default function FichaRapidaPage() {
   };
   const saveEditPago = async () => {
     if (!editPago) return;
+    const pagoEditado = pagos.find(p => p._id === editPago);
     const amt = num(epAmount);
     if (amt <= 0) { showToast('Ingresá un monto', 'error'); return; }
     try {
@@ -585,6 +586,7 @@ export default function FichaRapidaPage() {
       });
       setEditPago(null);
       invalidateTx();
+      if (pagoEditado?.workId) invalidateWorks();
       showToast('Pago actualizado', 'success');
     } catch { showToast('No se pudo guardar', 'error'); }
   };
@@ -614,6 +616,9 @@ export default function FichaRapidaPage() {
       }
       if (photos.length) qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
       invalidateTx();
+      // Si el pago estaba imputado a un trabajo, ese trabajo vuelve a tener
+      // saldo: hay que refrescar works o sigue mostrando "Pagado" de más.
+      if (t.workId) invalidateWorks();
       showToast('Pago borrado', 'success');
     } catch {
       showToast('No se pudo borrar', 'error');
@@ -933,7 +938,7 @@ export default function FichaRapidaPage() {
     }
 
     return (
-      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : undefined} className={`fr-row ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', flexWrap: editing ? 'wrap' : 'nowrap', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : undefined} className={`fr-row ${editing ? 'fr-row--edit' : ''} ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {/* El circulito solo no dice qué hace, y en tablet no hay tooltip que lo
             aclare. Los pendientes llevan la etiqueta al lado; los hechos no la
             necesitan (el tilde verde + el tachado + "hecho DD/MM" ya se leen). */}
@@ -1111,7 +1116,7 @@ export default function FichaRapidaPage() {
                 )}
               </button>
             )}
-            <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+            <span className="fr-acts">
               <button className="btn btn--ghost btn--icon btn--sm" title="Fotos del trabajo" onClick={() => openModal('uploadPhotos', { patientId: id, treatmentItemId: it._id })} style={{ color: itemPhotos.length ? 'var(--brand-primary-600)' : undefined }}><Icon name="image" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditItem(it)}><Icon name="edit" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => pedirBorrarTrabajo(it)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
@@ -1128,7 +1133,7 @@ export default function FichaRapidaPage() {
     const editing = editPago === t._id;
     const ph = photosByTx.get(t._id) ?? [];
     return (
-      <div key={t._id} data-flip={t._id} className={`fr-row ${t._id === newPagoId ? 'lb-rowin' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={t._id} data-flip={t._id} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === newPagoId ? 'lb-rowin' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {editing ? (
           <>
             <input type="date" className="input" value={epDate} onChange={e => setEpDate(e.target.value)} style={{ width: 130, height: 32 }} />
@@ -1146,11 +1151,9 @@ export default function FichaRapidaPage() {
           </>
         ) : (
           <>
-            <span className="mono" style={{ fontSize: 12.5, color: 'var(--text-tertiary)', width: 56, flexShrink: 0 }}>{fmtDate(isoDateOf(t))}</span>
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{methodLabel(t.paymentMethod)}</span>
-              {/* De qué trabajo fue el pago. Misma etiqueta que en la agenda,
-                  para que el mismo dato se lea igual en toda la app. */}
+            {/* De qué trabajo fue el pago. Va primero: es lo que identifica la
+                fila. Misma etiqueta que en la agenda. */}
+            <span className="fp-tag">
               {t.workId && t.description && <span className="lb-sub">{t.description}</span>}
               {/* Pago sin trabajo: se puede asociar a uno a mano. Es la forma de
                   recuperar los pagos viejos, que quedaron todos sin vincular. */}
@@ -1163,24 +1166,26 @@ export default function FichaRapidaPage() {
                   <Icon name="link" size={11} /> vincular
                 </button>
               )}
-              {ph.length > 0 && (
-                <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
-                  {ph.map(({ photo, title, description }) => (
-                    <img key={photo._id} src={photo.thumbnailUrl || photo.url}
-                      onClick={() => setZoomPhoto({ url: photo.url, category: photo.type, title, description })}
-                      title={`${photoTypeLabel(photo.type)} — foto vinculada`}
-                      style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border-subtle)', cursor: 'zoom-in', display: 'block' }} />
-                  ))}
-                </div>
-              )}
-            </div>
-            <span className="mono fr-price" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0, color: 'var(--success)' }}>{fmtMoney(t.amount)}</span>
-            <span className="fr-money">
-            <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+            </span>
+            <span className="mono fp-amount">{fmtMoney(t.amount)}</span>
+            {/* Corta el renglón en celular; en escritorio no existe. */}
+            <i className="fp-br" aria-hidden="true" />
+            <span className="mono fp-date">{fmtDate(isoDateOf(t))}</span>
+            <span className="fp-method">{methodLabel(t.paymentMethod)}</span>
+            <span className="fp-acts">
               <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditPago(t)}><Icon name="edit" size={14} /></button>
               <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => setDelPago(t)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
             </span>
-            </span>
+            {ph.length > 0 && (
+              <div className="fp-photos">
+                {ph.map(({ photo, title, description }) => (
+                  <img key={photo._id} src={photo.thumbnailUrl || photo.url}
+                    onClick={() => setZoomPhoto({ url: photo.url, category: photo.type, title, description })}
+                    title={`${photoTypeLabel(photo.type)} — foto vinculada`}
+                    style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border-subtle)', cursor: 'zoom-in', display: 'block' }} />
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1217,9 +1222,9 @@ export default function FichaRapidaPage() {
             {!patient && <div style={label}>Paciente</div>}
             {patient ? (
               /* Encabezado del paciente: avatar + nombre + datos + acciones */
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: isMobile ? '12px 14px' : '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexWrap: 'nowrap', padding: isMobile ? '12px 14px' : '16px 20px' }}>
                 <Avatar name={patient.name} lastName={patient.lastName} id={patient._id} size="lg" />
-                <div style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0, flex: '1 1 0' }}>
                   <h2 style={{ fontFamily: 'var(--font-display)', fontSize: isMobile ? 18 : 22, fontWeight: 600, margin: 0 }}>
                     {patient.name} {patient.lastName}
                   </h2>
@@ -1239,15 +1244,17 @@ export default function FichaRapidaPage() {
                   </div>
                 </div>
 
-                <div className="row" style={{ gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-                  <button className="btn btn--secondary btn--sm" title="Editar datos del paciente" onClick={() => openModal('newPatient', { patientId: patient._id })}>
-                    <Icon name="edit" size={14} /> Editar
+                {/* En celular los tres van sin texto y al lado del nombre: el ícono
+                    ya los identifica y la tarjeta baja de tres renglones a uno. */}
+                <div className="row" style={{ gap: isMobile ? 2 : 8, marginLeft: 'auto', flexWrap: 'nowrap', flexShrink: 0 }}>
+                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Editar datos del paciente" onClick={() => openModal('newPatient', { patientId: patient._id })}>
+                    <Icon name="edit" size={14} /> {!isMobile && 'Editar'}
                   </button>
-                  <button className="btn btn--secondary btn--sm" onClick={() => setGalleryOpen(true)}>
-                    <Icon name="image" size={14} /> Galería
+                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Galería de fotos" onClick={() => setGalleryOpen(true)}>
+                    <Icon name="image" size={14} /> {!isMobile && 'Galería'}
                   </button>
-                  <button className="btn btn--secondary btn--sm" onClick={() => setOdoOpen(true)}>
-                    <Icon name="tooth" size={14} /> {isMobile ? 'Odont.' : 'Odontograma'}
+                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Odontograma" onClick={() => setOdoOpen(true)}>
+                    <Icon name="tooth" size={14} /> {!isMobile && 'Odontograma'}
                   </button>
                   <button className="btn btn--ghost btn--icon btn--sm" title="Cambiar paciente" onClick={() => navigate('/ficha-rapida')}>
                     <Icon name="x" size={15} />
@@ -1267,7 +1274,7 @@ export default function FichaRapidaPage() {
                   style={{ width: '100%', paddingLeft: 34, height: 42 }}
                 />
                 {searchOpen && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', zIndex: 20, overflow: 'hidden' }}>
+                  <div className="lb-menupop" style={{ transformOrigin: 'top left', position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', zIndex: 20, overflow: 'hidden' }}>
                     <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                       {results.slice(0, 5).map(p => (
                         <div
@@ -1304,10 +1311,13 @@ export default function FichaRapidaPage() {
             {/* ---------- BANNER-AVISO (una sola cosa: deuda o "al día") ---------- */}
             {/* Por seguridad NO exponemos realizado/pagado/por-hacer ni el saldo a
                 favor: solo el monto que falta cobrar (ámbar) o "al día" (verde). */}
-            {/* Sello de estado de cuenta a todo ancho */}
+            {/* Sello de estado de cuenta a todo ancho. En celular no va como
+                tarjeta aparte sino pegado abajo de la del paciente: es el mismo
+                bloque de "quién es y cómo viene", y ahorra un alto que en el
+                teléfono se paga caro. */}
             <div
               key={debe ? 'debe' : 'aldia'}
-              className={`lb-estado ${debe ? 'lb-estado--debe' : ''}`}
+              className={`lb-estado ${debe ? 'lb-estado--debe' : ''} lb-estado--anexo`}
               style={{ animation: 'dialogPop 0.22s cubic-bezier(0.16,1,0.3,1)' }}
             >
               <Icon name={debe ? 'cash' : 'check'} size={18} />
@@ -1321,9 +1331,10 @@ export default function FichaRapidaPage() {
               )}
             </div>
 
-            {/* En celular: pestañas en vez de dos columnas */}
-            {isMobile && (
-              <div className="seg" style={{ width: '100%' }}>
+            {/* Una sola columna (celular y tablet) → pestañas. Con las dos
+                columnas a la vista no hacen falta. */}
+            {stack && (
+              <div className="seg lb-tabs-sticky" style={{ width: '100%' }}>
                 <button
                   type="button"
                   className={`seg__btn ${mobileTab === 'trabajos' ? 'is-active' : ''}`}
@@ -1351,7 +1362,7 @@ export default function FichaRapidaPage() {
               className="card"
               style={{
                 overflow: 'visible',
-                display: isMobile && mobileTab !== 'trabajos' ? 'none' : 'flex',
+                display: stack && mobileTab !== 'trabajos' ? 'none' : 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
               }}
@@ -1373,9 +1384,9 @@ export default function FichaRapidaPage() {
                     onClick={() => setWorkPanel('trabajo')}
                     onChange={e => setTwDesc(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addTrabajo()}
-                    style={{ flex: '1 1 150px', minWidth: 120, height: 38 }}
+                    style={{ flex: '1 1 110px', minWidth: 90, height: 38 }}
                   />
-                  <div style={{ position: 'relative', width: 100 }}>
+                  <div style={{ position: 'relative', width: isMobile ? 74 : 100, flexShrink: 0 }}>
                     <span style={dollarPrefix}>$</span>
                     <input
                       className="input" inputMode="numeric" placeholder="0"
@@ -1387,8 +1398,8 @@ export default function FichaRapidaPage() {
                       style={{ width: '100%', height: 38, paddingLeft: 20 }}
                     />
                   </div>
-                  <button className="btn btn--primary" onClick={addTrabajo} disabled={twBusy} style={{ height: 38 }}>
-                    {twBusy ? <Spinner /> : <><Icon name="plus" size={14} /> Agregar</>}
+                  <button className={`btn btn--primary ${isMobile ? 'btn--icon' : ''}`} onClick={addTrabajo} disabled={twBusy} title="Agregar trabajo" style={{ height: 38, flexShrink: 0 }}>
+                    {twBusy ? <Spinner /> : <><Icon name="plus" size={14} /> {!isMobile && 'Agregar'}</>}
                   </button>
                 </div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 8, fontSize: 12.5, color: twDone ? 'var(--success)' : 'var(--text-secondary)', fontWeight: twDone ? 600 : 400, cursor: 'pointer', userSelect: 'none', transition: 'color 0.15s' }}>
@@ -1432,9 +1443,13 @@ export default function FichaRapidaPage() {
               <div
                 ref={worksListRef}
                 style={
+                  // Apilado (celular/tablet) scrollea la PÁGINA: si además la
+                  // lista tuviera su propio scroll habría dos barras peleándose
+                  // bajo el mismo dedo. Solo en escritorio, donde la página no
+                  // scrollea, la lista se queda con el scroll.
                   stack
-                    ? { maxHeight: 'min(48vh, 520px)', overflowY: 'auto' }
-                    : { flex: 1, minHeight: 0, overflowY: 'auto' }
+                    ? { isolation: 'isolate' }
+                    : { flex: 1, minHeight: 0, overflowY: 'auto', isolation: 'isolate' }
                 }
               >
                 {!hasWorks && (
@@ -1474,7 +1489,7 @@ export default function FichaRapidaPage() {
               className="card"
               style={{
                 overflow: 'visible',
-                display: isMobile && mobileTab !== 'pagos' ? 'none' : 'flex',
+                display: stack && mobileTab !== 'pagos' ? 'none' : 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
               }}
@@ -1490,17 +1505,20 @@ export default function FichaRapidaPage() {
                 {/* Imputar el pago a un trabajo (opcional). Solo aparece si hay
                     alguno con saldo: si no, sería un campo vacío molestando. Por
                     defecto va "a cuenta", que es como se cargó siempre. */}
-                {trabajosCobrables.length > 0 && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12.5, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                    <span style={{ whiteSpace: 'nowrap' }}>¿De qué trabajo?</span>
+                {/* Celular: renglón 1 = trabajo + fecha. La fecha sube acá para
+                    que el renglón 2 (monto · método · +) entre entero. */}
+                {(trabajosCobrables.length > 0 || isMobile) && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12.5, color: 'var(--text-secondary)', flexWrap: 'nowrap' }}>
+                    {!isMobile && <span style={{ whiteSpace: 'nowrap' }}>¿De qué trabajo?</span>}
+                    {trabajosCobrables.length > 0 && (
                     <select
                       className="input"
                       value={pgWorkId}
                       onFocus={() => setPagoPanel(false)}
                       onChange={e => setPgWorkId(e.target.value)}
-                      style={{ flex: '1 1 200px', minWidth: 160, height: 34, fontSize: 13 }}
+                      style={{ flex: '1 1 120px', minWidth: 100, height: isMobile ? 38 : 34, fontSize: 13 }}
                     >
-                      <option value="">A cuenta (sin trabajo)</option>
+                      <option value="">{isMobile ? 'Pago a cuenta (sin trabajo)' : 'A cuenta (sin trabajo)'}</option>
                       {cobrablesHechos.length > 0 && (
                         <optgroup label="Hechos sin cobrar">
                           {cobrablesHechos.map(w => (
@@ -1520,6 +1538,17 @@ export default function FichaRapidaPage() {
                         </optgroup>
                       )}
                     </select>
+                    )}
+                    {isMobile && (
+                      <input
+                        type="date"
+                        className="input"
+                        value={pgDate}
+                        onFocus={() => setPagoPanel(false)}
+                        onChange={e => setPgDate(e.target.value)}
+                        style={{ flex: trabajosCobrables.length > 0 ? '0 0 132px' : '1 1 auto', height: 38 }}
+                      />
+                    )}
                   </label>
                 )}
 
@@ -1530,16 +1559,33 @@ export default function FichaRapidaPage() {
                   </div>
                   {/* Tocar otro campo del formulario también cierra el panel de
                       montos: para el usuario es "otro lado" igual que afuera. */}
-                  <input type="date" className="input" value={pgDate} onFocus={() => setPagoPanel(false)} onChange={e => setPgDate(e.target.value)} style={{ width: 140, height: 38 }} />
-                  <div className="seg">
-                    {(['CASH', 'TRANSFER'] as const).map(m => (
-                      <button key={m} type="button" className={`seg__btn ${pgMethod === m ? 'is-active' : ''}`} onClick={() => { setPgMethod(m); setPagoPanel(false); }}>
-                        {m === 'CASH' ? 'Efec.' : 'Transf.'}
-                      </button>
-                    ))}
-                  </div>
-                  <button className="btn btn--primary" onClick={addPago} disabled={pgBusy} style={{ height: 38 }}>
-                    {pgBusy ? <Spinner /> : <><Icon name="plus" size={14} /> Pago</>}
+                  {!isMobile && (
+                    <input type="date" className="input" value={pgDate} onFocus={() => setPagoPanel(false)} onChange={e => setPgDate(e.target.value)} style={{ width: 140, height: 38 }} />
+                  )}
+                  {/* En celular el método es UN botón que alterna, no dos: la
+                      mitad del ancho y un toque en vez de "leer y elegir".
+                      Casi siempre es efectivo, así que lo normal es no tocarlo. */}
+                  {isMobile ? (
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      title="Cambiar a efectivo o transferencia"
+                      onClick={() => { setPgMethod(m => (m === 'CASH' ? 'TRANSFER' : 'CASH')); setPagoPanel(false); }}
+                      style={{ height: 38, flexShrink: 0, minWidth: 74 }}
+                    >
+                      {pgMethod === 'CASH' ? 'Efec.' : 'Transf.'}
+                    </button>
+                  ) : (
+                    <div className="seg">
+                      {(['CASH', 'TRANSFER'] as const).map(m => (
+                        <button key={m} type="button" className={`seg__btn ${pgMethod === m ? 'is-active' : ''}`} onClick={() => { setPgMethod(m); setPagoPanel(false); }}>
+                          {m === 'CASH' ? 'Efec.' : 'Transf.'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button className={`btn btn--primary ${isMobile ? 'btn--icon' : ''}`} onClick={addPago} disabled={pgBusy} title="Agregar pago" style={{ height: 38, flexShrink: 0 }}>
+                    {pgBusy ? <Spinner /> : <><Icon name="plus" size={14} /> {!isMobile && 'Pago'}</>}
                   </button>
                 </div>
 
@@ -1564,8 +1610,8 @@ export default function FichaRapidaPage() {
                 ref={pagosListRef}
                 style={
                   stack
-                    ? { maxHeight: 'min(48vh, 520px)', overflowY: 'auto' }
-                    : { flex: 1, minHeight: 0, overflowY: 'auto' }
+                    ? { isolation: 'isolate' }
+                    : { flex: 1, minHeight: 0, overflowY: 'auto', isolation: 'isolate' }
                 }
               >
                 {pagos.length === 0 && (
@@ -2218,6 +2264,9 @@ const popover: CSSProperties = {
   position: 'absolute', top: 'calc(100% - 4px)', left: 12, right: 12,
   background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
   borderRadius: 10, boxShadow: 'var(--shadow-lg)', zIndex: 30, padding: 12,
+  // Aparece creciendo desde el campo, como el menú de acciones. Al ser un
+  // objeto compartido, alcanza con ponerlo acá para todos los paneles.
+  transformOrigin: 'top left', animation: 'menuPop 0.14s cubic-bezier(0.16,1,0.3,1)',
 };
 const popTitle: CSSProperties = {
   fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',

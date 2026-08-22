@@ -17,7 +17,7 @@ export function StatusBadge({ status }: { status: string }) {
   const s = (MAP as Record<string, { label: string; variant: string; dot: string }>)[status]
     ?? MAP.SCHEDULED;
   return (
-    <span className={`badge badge--${s.variant}`}>
+    <span className={`badge badge--${s.variant} badge--pop`}>
       <span className="dot" style={{ background: s.dot }} />
       {s.label}
     </span>
@@ -33,7 +33,7 @@ interface FichaPendingBadgeProps {
 export function FichaPendingBadge({ onClick }: FichaPendingBadgeProps) {
   return (
     <span
-      className="badge badge--warning"
+      className="badge badge--warning badge--pop"
       onClick={onClick
         ? e => { e.stopPropagation(); onClick(e); }
         : undefined}

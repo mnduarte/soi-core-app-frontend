@@ -117,7 +117,11 @@ export function ResolveMenu({
       </button>
       {open && (
         <div
+          // Crece desde la esquina donde está el botón que lo abrió, así se lee
+          // como "esto salió de acá" y no como un cartel que cayó del cielo.
+          className="lb-menupop"
           style={{
+            transformOrigin: `top ${align}`,
             position: 'absolute',
             top: 'calc(100% + 4px)',
             [align]: 0,

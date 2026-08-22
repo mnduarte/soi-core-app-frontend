@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Icon } from '../common/Icon';
@@ -12,6 +13,13 @@ import { SubscriptionBanner } from './SubscriptionBanner';
 import { BottomNav, MobileFab } from './BottomNav';
 
 export default function AppLayout() {
+  // Sidebar angosto (solo íconos). Se recuerda entre sesiones: es una
+  // preferencia de cómo trabaja cada uno, no algo que se elija cada vez.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === '1');
+  const toggleCollapsed = () => setCollapsed(c => {
+    localStorage.setItem('sidebarCollapsed', c ? '0' : '1');
+    return !c;
+  });
   const sidebarOpen = useUIStore(s => s.sidebarOpen);
   const setSidebarOpen = useUIStore(s => s.setSidebarOpen);
   const isImpersonating = useAuthStore(s => s.isImpersonating);
@@ -89,9 +97,9 @@ export default function AppLayout() {
         </div>
       )}
       <SubscriptionBanner />
-      <div className="app">
+      <div className={`app ${collapsed ? 'app--rail' : ''}`}>
         {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
         <div className="main">
           {/* En desktop/tablet la navegación vive en el sidebar; en celular
               (<768px) se reemplaza por la bottom nav + FAB de abajo. */}

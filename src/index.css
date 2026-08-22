@@ -159,13 +159,20 @@ a { color: inherit; text-decoration: none; }
 .app {
   display: grid;
   grid-template-columns: 232px 1fr;
+  transition: grid-template-columns 0.18s ease;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 
+/* Sidebar angosto: solo íconos. 68px alcanza para el ícono con blanco cómodo
+   y le devuelve ~165px a la ficha, que es donde está el trabajo real. */
+.app--rail { grid-template-columns: 68px 1fr; }
+
 /* SIDEBAR — crema, ítem activo = tarjeta blanca con texto azul */
 .sidebar {
+  position: relative;
+  z-index: 2;   /* el tirador asoma sobre el contenido, que va después en el DOM */
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-default);
   display: flex;
@@ -850,7 +857,10 @@ table.tbl { width: 100%; border-collapse: collapse; }
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 92px;
+  /* Hora hasta 74 · línea en 86 · texto desde 92. Asimétrico a propósito: en
+     un cuaderno el margen deja aire a la izquierda y se escribe apenas pasada
+     la línea. Centrarla la dejaba flotando lejos del nombre. */
+  left: 86px;
   width: 1px;
   background: var(--margin-red);
   z-index: 1;
@@ -861,7 +871,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .lb-row {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 18px;   /* el aire donde vive la línea de margen */
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -1204,10 +1214,82 @@ table.tbl { width: 100%; border-collapse: collapse; }
    Fondo opaco + z-index para que se lea entera y no se transparenten una sobre
    otra. Dura solo lo que dura la animacion (el hook saca la clase). */
 .lb-flip { position: relative; background: var(--bg-surface); }
+/* La hoja de la agenda usa el mismo fondo de tarjeta, así que la fila que se
+   mueve queda opaca sin que se note el recorte. La línea de margen roja la
+   dibuja el ::before de la hoja, que va por debajo: no se tapa. */
+.lb-sheet .lb-row.lb-flip { background: var(--bg-surface); }
+
+/* Destello de "esta es la que acabás de anotar". Dura más que el movimiento
+   porque cumple otra función: el movimiento explica QUÉ pasó, el destello dice
+   CUÁL fue. Azul (no verde) porque agendar no es cobrar. */
+@keyframes flipNewGlow {
+  0%, 35% { background: color-mix(in srgb, var(--brand-primary) 10%, transparent); }
+  100%    { background: transparent; }
+}
+.lb-flipnew { animation: flipNewGlow 1s ease-out; }
+
+/* Los estados (En curso · Atendido · Ficha pendiente) aparecen y desaparecen
+   según lo que pasa en el consultorio. Que broten de golpe hace dudar de si se
+   apretó bien; que entren con su propio gesto lo confirma. Opacidad + escala
+   (nada de layout): el alto de la fila lo resuelve el FLIP, que ya corre las
+   de abajo. */
+@keyframes badgePop {
+  from { opacity: 0; transform: scale(0.86); }
+  to   { opacity: 1; transform: none; }
+}
+.badge--pop { animation: badgePop 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Menú de acciones: sale desde su botón. Corto (140ms) porque es respuesta a
+   un toque — más lento se siente lerdo, no elegante. */
+/* SIN opacidad, a propósito. Cualquier desvanecido —por corto que sea— deja el
+   panel traslúcido y se leen los renglones de atrás cruzados con el contenido.
+   Bajarlo al 25% no alcanzó: si el navegador se come un frame pintando los
+   chips, esa fracción se estira y se ve igual. Solo movimiento: el panel es
+   opaco desde el primer frame y el efecto es imposible de romper.
+   Tampoco lleva will-change: promover la capa justo al aparecer agrega su
+   propio parpadeo, que era parte de lo mismo. */
+@keyframes menuPop {
+  from { transform: scale(0.96) translateY(-5px); }
+  to   { transform: none; }
+}
+.lb-menupop { animation: menuPop 0.14s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* El panel de la fila en edición no flota: empuja la fila. Por eso solo se
+   desvanece — escalarlo movería el layout, que es lo que venimos evitando. */
+@keyframes panelIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .lb-editpanel { animation: none; } }
+
+/* Cambio de día: la hoja se corre para el lado del salto. Al ir a un día
+   posterior el contenido entra desde la derecha (la agenda "va hacia la
+   izquierda"); al volver atrás, al revés. Da sentido de recorrido: se siente
+   que los días están en una línea y uno se mueve sobre ella. */
+@keyframes dayInNext {
+  from { opacity: 0; transform: translateX(26px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dayInPrev {
+  from { opacity: 0; transform: translateX(-26px); }
+  to   { opacity: 1; transform: none; }
+}
+/* Cambio de vista (día → semana → mes). Recorrido más largo que el de un día
+   —se cambia de escala, no de página— así que el desplazamiento es mayor. */
+.lb-view-next { animation: dayInNext 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+.lb-view-prev { animation: dayInPrev 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .lb-view-next, .lb-view-prev { animation: none; }
+}
+
+.lb-day-next { animation: dayInNext 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+.lb-day-prev { animation: dayInPrev 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .lb-day-next, .lb-day-prev { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) { .lb-menupop { animation: none; } }
 /* Chips de la fila en edición: renglón propio dentro de la fila (la fila hace
    flex-wrap). En línea y no flotando, porque la lista scrollea y un popover
    absoluto se recorta contra el borde. */
 .lb-editpanel {
+  animation: panelIn 0.16s ease-out;
   flex-basis: 100%;
   margin-top: 2px;
   padding: 9px 10px;
@@ -1261,11 +1343,67 @@ table.tbl { width: 100%; border-collapse: collapse; }
    para el layout, así que la fila va en una sola línea como siempre. */
 .fr-money { display: contents; }
 
+/* ---- Fila de un pago -------------------------------------------------
+   Hijos planos (no anidados) para poder reordenarlos con `order` en celular.
+   Escritorio: fecha · método · trabajo ......... $monto  ✏️ 🗑 */
+.fp-tag { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; }
+.fp-tag:empty { display: none; }
+.fp-amount { font-size: 14px; font-weight: 700; color: var(--success); flex-shrink: 0; margin-left: auto; }
+.fp-date { font-size: 12.5px; color: var(--text-tertiary); flex-shrink: 0; order: -2; min-width: 56px; }
+.fp-method { font-size: 13px; color: var(--text-secondary); flex-shrink: 0; order: -1; }
+.fp-acts, .fr-acts { display: inline-flex; flex-shrink: 0; gap: 2px; }
+.fp-br { display: none; }
+.fp-photos { display: flex; gap: 4px; flex-wrap: wrap; flex-basis: 100%; padding-left: 66px; }
+.fr-row--edit { flex-wrap: wrap; }
+
+/* "Falta cobrar" pegado abajo de la tarjeta del paciente (solo celular): un
+   bloque en vez de dos, sin el aire entre tarjetas ni las esquinas partidas. */
+/* Las pestañas Trabajos/Pagos quedan pegadas arriba al desplazar: es lo único
+   que se necesita SIEMPRE a mano (cambiar de lado). El resto —quién es el
+   paciente, el formulario— se lee una vez; fijarlo se comería la pantalla. */
+.lb-tabs-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  box-shadow: 0 6px 12px -8px rgb(60 40 20 / 0.28);
+}
+
+.lb-estado--anexo {
+  margin-top: -14px;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-top: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 @media (max-width: 767px) {
   /* En celular no entra todo a lo ancho. En vez de comprimir (o peor, dejar
      scroll horizontal), se apila: arriba el nombre, abajo la plata y las
      acciones. En el teléfono sobra alto y falta ancho. */
   .fr-row { flex-wrap: wrap; row-gap: 8px; }
+
+  /* Pagos en celular: estructura FIJA de dos renglones, siempre igual, no
+     importa cuán largo sea el nombre del trabajo.
+         [TRABAJO]                    $120.000
+         22/08/26 · efectivo            ✏️  🗑
+     Antes el chip envolvía adentro de su propio div y la fila cambiaba de
+     forma según el texto: deslizando la lista, cada fila se leía distinta. */
+  .fp-tag    { order: 1; flex: 1 1 auto; }
+  .fp-amount { order: 2; margin-left: auto; }
+  .fp-br     { display: block; order: 3; flex-basis: 100%; height: 0; margin: 0; }
+  .fp-date   { order: 4; min-width: 0; }
+  .fp-method { order: 5; }
+  .fp-method::before { content: '·'; margin-right: 6px; color: var(--text-tertiary); }
+  .fp-acts   { order: 6; margin-left: auto; }
+  .fp-photos { order: 7; padding-left: 0; }
+  .fp-row    { row-gap: 6px; }
+
+  /* Las tres respuestas no entran a lo ancho del teléfono. La principal se
+     lleva un renglón entero (es la que más se toca) y las otras dos comparten
+     el segundo. */
+  .lb-askrow__acts { flex-wrap: wrap; }
+  .lb-askrow__acts > .btn--primary { flex: 1 1 100%; }
   /* El precio se queda en el renglón del nombre, alineado a la derecha: es el
      par "concepto — importe" de toda la vida (una carta, un ticket). Suelto en
      otra línea el número no se sabía de qué era. */
@@ -1764,3 +1902,79 @@ table.tbl { width: 100%; border-collapse: collapse; }
   to   { opacity: 1; transform: translateX(0); }
 }
 .login-step { animation: loginStepIn 0.42s cubic-bezier(0.16, 1, 0.3, 1); }
+
+
+/* ============================================================
+   BLANCOS TÁCTILES
+   `pointer: coarse` detecta DEDO, no tamaño de pantalla: agarra la tablet del
+   consultorio y el celular, y deja el escritorio con mouse intacto.
+
+   Los íconos de fila viven en botones de 32px y "borrar" es vecino de
+   "editar": errarle no es un detalle estético, borra un trabajo o un pago.
+   ============================================================ */
+@media (pointer: coarse) {
+  /* El blanco crece SIN cambiar el tamaño dibujado: un pseudo-elemento
+     invisible de 44px centrado en el botón. Así no se mueve ningún layout
+     (que es lo que hace riesgoso agrandar los botones de verdad). */
+  .btn--icon::after,
+  .lb-askrow__x::after,
+  .lb-link::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+  .btn--icon, .lb-askrow__x, .lb-link { position: relative; }
+
+  /* Con blancos de 44px sobre botones de 32px, dos vecinos se pisarían y el
+     de más adelante en el DOM (borrar) le robaría toque al anterior. 12px de
+     separación es lo mínimo para que cada uno tenga el suyo. */
+  .fp-acts, .fr-acts { gap: 12px; }
+}
+
+
+/* ============================================================
+   SIDEBAR CONTRAÍDO (solo escritorio)
+   ============================================================ */
+/* Tirador pegado al borde del sidebar, a la altura del logo. Ahí se ve —
+   perdido a media altura, contra un panel vacío, no lo encontraba nadie.
+   Anclado al borde (y no al contenido) queda en el mismo punto ancho o
+   angosto: el logo a la izquierda y él a la derecha, siempre.
+   El 35px es el centro del logo: 20 de padding + la mitad de sus 30. */
+.sidebar__rail-btn {
+  position: absolute;
+  right: -14px;
+  top: 35px;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 28px;
+  height: 28px;
+  display: none;              /* solo escritorio; ver media query */
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.sidebar__rail-btn:hover { color: var(--brand-primary); border-color: var(--brand-primary); background: var(--bg-app); }
+
+@media (min-width: 768px) {
+  .sidebar__rail-btn { display: inline-flex; }
+}
+
+.sidebar--rail { padding-left: 10px; padding-right: 10px; align-items: center; }
+/* Los textos se van; los íconos quedan centrados y del mismo tamaño. */
+.sidebar--rail .sidebar__brand-txt,
+.sidebar--rail .nav-item__lbl,
+.sidebar--rail .nav-item__kbd,
+.sidebar--rail .sidebar__user-txt { display: none; }
+.sidebar--rail .sidebar__brand { justify-content: center; padding-inline: 0; }
+.sidebar--rail .nav-item { justify-content: center; padding-inline: 0; width: 44px; }
+.sidebar--rail .sidebar__user { justify-content: center; gap: 6px; flex-wrap: wrap; }

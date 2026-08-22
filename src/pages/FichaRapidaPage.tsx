@@ -16,6 +16,7 @@ import { GalleryContainer } from '../components/gallery/GalleryContainer';
 import { CustomTreatmentsModal } from '../components/common/CustomTreatmentsModal';
 import { SectionHeader } from '../components/common/SectionHeader';
 import { DatePicker } from '../components/common/DatePicker';
+import { Select } from '../components/common/Select';
 import { galleryApi, photoTypeLabel, type GalleryPhoto } from '../api/gallery';
 import { fmtMoney, patientAge } from '../lib/format';
 import { toWhatsAppNumber } from '../lib/phone';
@@ -412,6 +413,19 @@ export default function FichaRapidaPage() {
   // Fila en modo "cobrar": monto precargado y editable (para pagos parciales).
   const [cobroItem, setCobroItem] = useState<string | null>(null);
   const [cobroAmount, setCobroAmount] = useState('');
+  // Montos rapidos del cobro en linea y de la edicion de un pago: los mismos
+  // que en los formularios. Un campo de plata sin los montos del consultorio
+  // obliga a tipear lo que en el resto de la app se elige.
+  const [cobroPanel, setCobroPanel] = useState(false);
+  const cobroRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!cobroPanel || customAmountsOpen) return;
+    const h = (e: MouseEvent) => {
+      if (cobroRef.current && !cobroRef.current.contains(e.target as Node)) setCobroPanel(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [cobroPanel, customAmountsOpen]);
   const [uncollect, setUncollect] = useState<{ work: Work; pagos: Transaction[] } | null>(null);
 
   // Cobra una tanda de trabajos con un solo importe. Se genera UN PAGO POR
@@ -562,6 +576,16 @@ export default function FichaRapidaPage() {
   // ---- edición / borrado de pago ----
   const [editPago, setEditPago] = useState<string | null>(null);
   const [epAmount, setEpAmount] = useState('');
+  const [epPanel, setEpPanel] = useState(false);
+  const epRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!epPanel || customAmountsOpen) return;
+    const h = (e: MouseEvent) => {
+      if (epRef.current && !epRef.current.contains(e.target as Node)) setEpPanel(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [epPanel, customAmountsOpen]);
   const [epMethod, setEpMethod] = useState<PaymentMethod>('CASH');
   const [epDate, setEpDate] = useState(todayYMD());
   const updatePagoMut = useMutation({
@@ -938,7 +962,7 @@ export default function FichaRapidaPage() {
     }
 
     return (
-      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : undefined} className={`fr-row ${editing ? 'fr-row--edit' : ''} ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : cobroItem === it._id ? cobroRef : undefined} className={`fr-row fw-row ${editing || cobroItem === it._id ? 'fr-row--edit' : ''} ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {/* El circulito solo no dice qué hace, y en tablet no hay tooltip que lo
             aclare. Los pendientes llevan la etiqueta al lado; los hechos no la
             necesitan (el tilde verde + el tachado + "hecho DD/MM" ya se leen). */}
@@ -1010,28 +1034,32 @@ export default function FichaRapidaPage() {
           </>
         ) : (
           <>
-            {/* El texto va en un flex que ENVUELVE: en pantallas angostas la
-                fecha baja de línea en vez de desbordar y montarse sobre el
-                monto (el minWidth:0 solo deja encoger, no recorta). */}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '2px 8px' }}>
-              <span style={{ fontSize: 13.5, wordBreak: 'break-word', color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</span>
+            {/* Estructura FIJA en tres zonas, siempre en el mismo orden:
+                  1. nombre
+                  2. estado (hecho el X · pagó $Y)
+                  3. fotos
+                Antes iba todo en un mismo flex que envolvia, asi que segun lo
+                que hubiera —fecha, pago parcial, una foto— cada fila se armaba
+                distinta y la lista se leia desordenada. */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, wordBreak: 'break-word', color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</div>
               {/* Sin tag "por hacer": estos trabajos ya viven en la sección de
                   pendientes, arriba de "Hechos". Repetirlo ocupaba ancho (partía
                   descripciones largas al medio) y no aportaba nada. */}
-              {done && it.completedAt && (
-                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
-                  hecho {fmtDate(it.completedAt)}
-                </span>
-              )}
-              {/* Cuanto lleva pagado, para los que se pagan en cuotas */}
-              {parcial && (
-                <span className="lb-paidprog">pagó {fmtMoney(paid)}</span>
-              )}
-              {/* Pendiente ya cobrado por completo (una seña que cubre todo):
-                  el botón de cobrar no está en esta lista, así que el estado
-                  tiene que verse igual. */}
-              {!done && cobrado && (
-                <span className="lb-paidprog">✓ pagado</span>
+              {(((done && it.completedAt) || parcial || (!done && cobrado))) && (
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 8px', marginTop: 3 }}>
+                  {done && it.completedAt && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
+                      hecho {fmtDate(it.completedAt)}
+                    </span>
+                  )}
+                  {/* Cuanto lleva pagado, para los que se pagan en cuotas */}
+                  {parcial && <span className="lb-paidprog">pagó {fmtMoney(paid)}</span>}
+                  {/* Pendiente ya cobrado por completo (una seña que cubre todo):
+                      el botón de cobrar no está en esta lista, así que el estado
+                      tiene que verse igual. */}
+                  {!done && cobrado && <span className="lb-paidprog">✓ pagado</span>}
+                </div>
               )}
               {itemPhotos.length > 0 && (
                 /* flexBasis 100% → las miniaturas siempre arrancan renglón propio */
@@ -1064,6 +1092,7 @@ export default function FichaRapidaPage() {
               /* Monto precargado y EDITABLE: si paga todo se confirma de una, y
                  si deja una parte (cuota de brackets) se corrige el número —
                  ese pago queda atado al trabajo y alimenta el "pagó $X de $Y". */
+              <>
               <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                 <span style={{ position: 'relative', width: 92 }}>
                   <span style={{ position: 'absolute', left: 8, top: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>$</span>
@@ -1073,9 +1102,11 @@ export default function FichaRapidaPage() {
                     autoFocus
                     value={cobroAmount ? Number(cobroAmount).toLocaleString('es-AR') : ''}
                     onChange={e => setCobroAmount(e.target.value.replace(/[^\d]/g, ''))}
+                    onFocus={() => setCobroPanel(true)}
+                    onClick={() => setCobroPanel(true)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') { const m = num(cobroAmount); setCobroItem(null); marcarCobrado(it, m); }
-                      if (e.key === 'Escape') setCobroItem(null);
+                      if (e.key === 'Enter') { const m = num(cobroAmount); setCobroPanel(false); setCobroItem(null); marcarCobrado(it, m); }
+                      if (e.key === 'Escape') { setCobroPanel(false); setCobroItem(null); }
                     }}
                     style={{ width: '100%', height: 30, paddingLeft: 17, fontSize: 12.5 }}
                   />
@@ -1087,10 +1118,29 @@ export default function FichaRapidaPage() {
                 >
                   <Icon name="check" size={13} />
                 </button>
-                <button className="btn btn--ghost btn--icon btn--sm" onClick={() => setCobroItem(null)}>
+                <button className="btn btn--ghost btn--icon btn--sm" onClick={() => { setCobroItem(null); setCobroPanel(false); }}>
                   <Icon name="x" size={14} />
                 </button>
               </span>
+                {cobroPanel && (
+                  <div className="lb-editpanel">
+                    <div style={popTitle}>Montos</div>
+                    <div style={chipsWrap}>
+                      {quickAmounts.map(v => (
+                        <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => { setCobroAmount(String(v)); setCobroPanel(false); }}>
+                          {fmtMoney(v)}
+                        </button>
+                      ))}
+                      <button type="button" onMouseDown={e => e.preventDefault()}
+                        onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
+                        <Icon name="settings" size={12} /> Editar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <button
                 className={`lb-cobro ${cobrado ? 'is-on' : ''} ${!cobrado && parcial ? 'lb-cobro--2l' : ''}`}
@@ -1133,13 +1183,17 @@ export default function FichaRapidaPage() {
     const editing = editPago === t._id;
     const ph = photosByTx.get(t._id) ?? [];
     return (
-      <div key={t._id} data-flip={t._id} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === newPagoId ? 'lb-rowin' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={t._id} data-flip={t._id} ref={editing ? epRef : undefined} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === newPagoId ? 'lb-rowin' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {editing ? (
           <>
-            <input type="date" className="input" value={epDate} onChange={e => setEpDate(e.target.value)} style={{ width: 130, height: 32 }} />
+            <div style={{ width: 132 }}><DatePicker value={epDate} onChange={setEpDate} /></div>
             <div style={{ position: 'relative', width: 100 }}>
               <span style={{ position: 'absolute', left: 9, top: 7, color: 'var(--text-tertiary)', fontSize: 12 }}>$</span>
-              <input className="input" inputMode="numeric" value={epAmount} onChange={e => setEpAmount(e.target.value.replace(/[^\d]/g, ''))} onKeyDown={e => e.key === 'Enter' && saveEditPago()} style={{ width: '100%', height: 32, paddingLeft: 18 }} />
+              <input className="input" inputMode="numeric" value={epAmount}
+                onChange={e => setEpAmount(e.target.value.replace(/[^\d]/g, ''))}
+                onFocus={() => setEpPanel(true)} onClick={() => setEpPanel(true)}
+                onKeyDown={e => { if (e.key === 'Enter') { setEpPanel(false); saveEditPago(); } if (e.key === 'Escape') setEpPanel(false); }}
+                style={{ width: '100%', height: 32, paddingLeft: 18 }} />
             </div>
             <div className="seg">
               {(['CASH', 'TRANSFER'] as const).map(m => (
@@ -1147,7 +1201,25 @@ export default function FichaRapidaPage() {
               ))}
             </div>
             <button className="btn btn--primary btn--sm" onClick={saveEditPago}><Icon name="check" size={13} /></button>
-            <button className="btn btn--ghost btn--icon btn--sm" onClick={() => setEditPago(null)}><Icon name="x" size={14} /></button>
+            <button className="btn btn--ghost btn--icon btn--sm" onClick={() => { setEditPago(null); setEpPanel(false); }}><Icon name="x" size={14} /></button>
+                {epPanel && (
+                  <div className="lb-editpanel">
+                    <div style={popTitle}>Montos</div>
+                    <div style={chipsWrap}>
+                      {quickAmounts.map(v => (
+                        <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => { setEpAmount(String(v)); setEpPanel(false); }}>
+                          {fmtMoney(v)}
+                        </button>
+                      ))}
+                      <button type="button" onMouseDown={e => e.preventDefault()}
+                        onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
+                        <Icon name="settings" size={12} /> Editar
+                      </button>
+                    </div>
+                  </div>
+                )}
           </>
         ) : (
           <>
@@ -1222,41 +1294,55 @@ export default function FichaRapidaPage() {
             {!patient && <div style={label}>Paciente</div>}
             {patient ? (
               /* Encabezado del paciente: avatar + nombre + datos + acciones */
-              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, flexWrap: 'nowrap', padding: isMobile ? '12px 14px' : '16px 20px' }}>
+              /* Celular: tres renglones claros en vez de todo apretado contra
+                 los botones — nombre y edad · datos · acciones. La edad sube al
+                 título porque es una sola palabra y define al paciente junto
+                 con el nombre; la localidad puede ser larga y va abajo. */
+              <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? 12 : 14, flexWrap: isMobile ? 'wrap' : 'nowrap', padding: isMobile ? '14px 16px' : '16px 20px' }}>
                 <Avatar name={patient.name} lastName={patient.lastName} id={patient._id} size="lg" />
                 <div style={{ minWidth: 0, flex: '1 1 0' }}>
-                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: isMobile ? 18 : 22, fontWeight: 600, margin: 0 }}>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: isMobile ? 18 : 22, fontWeight: 600, margin: 0, lineHeight: 1.25 }}>
                     {patient.name} {patient.lastName}
+                    {isMobile && patientAge(patient) != null && (
+                      <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 400, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                        {'  ·  '}{patientAge(patient)} años
+                      </span>
+                    )}
                   </h2>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    {patientAge(patient) != null && <span>{patientAge(patient)} años</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, rowGap: 2, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-tertiary)', marginTop: isMobile ? 3 : 2 }}>
+                    {!isMobile && patientAge(patient) != null && <span>{patientAge(patient)} años</span>}
+                    {patient.obraSocial && <span>{patient.obraSocial}</span>}
+                    {patient.locality && <span>{patient.locality}</span>}
                     {patient.phone && (
                       <a
                         href={`https://wa.me/${toWhatsAppNumber(patient.phone)}`}
                         target="_blank" rel="noreferrer" title="Abrir WhatsApp"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)', fontWeight: 600, textDecoration: 'none' }}
+                        // En celular arranca renglón propio: es lo único de acá
+                        // que se toca, y merece su propio blanco.
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--success)', fontWeight: 600, textDecoration: 'none', ...(isMobile ? { flexBasis: '100%' } : {}) }}
                       >
                         <Icon name="whatsapp" size={14} /> {patient.phone}
                       </a>
                     )}
-                    {patient.obraSocial && <span>{patient.obraSocial}</span>}
-                    {patient.locality && <span>{patient.locality}</span>}
                   </div>
                 </div>
 
-                {/* En celular los tres van sin texto y al lado del nombre: el ícono
-                    ya los identifica y la tarjeta baja de tres renglones a uno. */}
-                <div className="row" style={{ gap: isMobile ? 2 : 8, marginLeft: 'auto', flexWrap: 'nowrap', flexShrink: 0 }}>
-                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Editar datos del paciente" onClick={() => openModal('newPatient', { patientId: patient._id })}>
-                    <Icon name="edit" size={14} /> {!isMobile && 'Editar'}
+                {/* Celular: renglón propio y bien espaciados (son destinos
+                    distintos, no una botonera). Escritorio: a la derecha del
+                    nombre, con texto. */}
+                <div className="row" style={isMobile
+                  ? { gap: 12, flexBasis: '100%', flexWrap: 'nowrap', marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }
+                  : { gap: 8, marginLeft: 'auto', flexWrap: 'nowrap', flexShrink: 0 }}>
+                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Editar datos del paciente" onClick={() => openModal('newPatient', { patientId: patient._id })} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
+                    <Icon name="edit" size={isMobile ? 16 : 14} /> {!isMobile && 'Editar'}
                   </button>
-                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Galería de fotos" onClick={() => setGalleryOpen(true)}>
-                    <Icon name="image" size={14} /> {!isMobile && 'Galería'}
+                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Galería de fotos" onClick={() => setGalleryOpen(true)} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
+                    <Icon name="image" size={isMobile ? 16 : 14} /> {!isMobile && 'Galería'}
                   </button>
-                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Odontograma" onClick={() => setOdoOpen(true)}>
-                    <Icon name="tooth" size={14} /> {!isMobile && 'Odontograma'}
+                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Odontograma" onClick={() => setOdoOpen(true)} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
+                    <Icon name="tooth" size={isMobile ? 16 : 14} /> {!isMobile && 'Odontograma'}
                   </button>
-                  <button className="btn btn--ghost btn--icon btn--sm" title="Cambiar paciente" onClick={() => navigate('/ficha-rapida')}>
+                  <button className="btn btn--ghost btn--icon btn--sm" title="Cambiar paciente" onClick={() => navigate('/ficha-rapida')} style={{ marginLeft: 'auto', flexShrink: 0 }}>
                     <Icon name="x" size={15} />
                   </button>
                 </div>
@@ -1511,43 +1597,36 @@ export default function FichaRapidaPage() {
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12.5, color: 'var(--text-secondary)', flexWrap: 'nowrap' }}>
                     {!isMobile && <span style={{ whiteSpace: 'nowrap' }}>¿De qué trabajo?</span>}
                     {trabajosCobrables.length > 0 && (
-                    <select
-                      className="input"
-                      value={pgWorkId}
-                      onFocus={() => setPagoPanel(false)}
-                      onChange={e => setPgWorkId(e.target.value)}
-                      style={{ flex: '1 1 120px', minWidth: 100, height: isMobile ? 38 : 34, fontSize: 13 }}
-                    >
-                      <option value="">{isMobile ? 'Pago a cuenta (sin trabajo)' : 'A cuenta (sin trabajo)'}</option>
-                      {cobrablesHechos.length > 0 && (
-                        <optgroup label="Hechos sin cobrar">
-                          {cobrablesHechos.map(w => (
-                            <option key={w._id} value={w._id}>
-                              {w.description} — falta {fmtMoney((w.price ?? 0) - (w.paid ?? 0))}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {cobrablesPlan.length > 0 && (
-                        <optgroup label="Del plan (por hacer)">
-                          {cobrablesPlan.map(w => (
-                            <option key={w._id} value={w._id}>
-                              {w.description} — falta {fmtMoney((w.price ?? 0) - (w.paid ?? 0))}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
+                      <Select
+                        value={pgWorkId}
+                        onChange={v => { setPgWorkId(v); setPagoPanel(false); }}
+                        style={{ flex: '1 1 120px', minWidth: 100 }}
+                        title="¿De qué trabajo es este pago?"
+                        options={[{ value: '', label: isMobile ? 'Pago a cuenta (sin trabajo)' : 'A cuenta (sin trabajo)' }]}
+                        groups={[
+                          {
+                            label: 'Hechos sin cobrar',
+                            options: cobrablesHechos.map(w => ({
+                              value: w._id,
+                              label: w.description,
+                              hint: `falta ${fmtMoney((w.price ?? 0) - (w.paid ?? 0))}`,
+                            })),
+                          },
+                          {
+                            label: 'Del plan (por hacer)',
+                            options: cobrablesPlan.map(w => ({
+                              value: w._id,
+                              label: w.description,
+                              hint: `falta ${fmtMoney((w.price ?? 0) - (w.paid ?? 0))}`,
+                            })),
+                          },
+                        ]}
+                      />
                     )}
                     {isMobile && (
-                      <input
-                        type="date"
-                        className="input"
-                        value={pgDate}
-                        onFocus={() => setPagoPanel(false)}
-                        onChange={e => setPgDate(e.target.value)}
-                        style={{ flex: trabajosCobrables.length > 0 ? '0 0 132px' : '1 1 auto', height: 38 }}
-                      />
+                      <div style={{ flex: trabajosCobrables.length > 0 ? '0 0 136px' : '1 1 auto' }}>
+                        <DatePicker value={pgDate} onChange={v => { setPagoPanel(false); setPgDate(v); }} />
+                      </div>
                     )}
                   </label>
                 )}
@@ -1560,7 +1639,7 @@ export default function FichaRapidaPage() {
                   {/* Tocar otro campo del formulario también cierra el panel de
                       montos: para el usuario es "otro lado" igual que afuera. */}
                   {!isMobile && (
-                    <input type="date" className="input" value={pgDate} onFocus={() => setPagoPanel(false)} onChange={e => setPgDate(e.target.value)} style={{ width: 140, height: 38 }} />
+                    <div style={{ width: 148 }}><DatePicker value={pgDate} onChange={v => { setPagoPanel(false); setPgDate(v); }} /></div>
                   )}
                   {/* En celular el método es UN botón que alterna, no dos: la
                       mitad del ancho y un toque en vez de "leer y elegir".

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import { useAnchored } from '../../hooks/useAnchored';
 
 interface DatePickerProps {
   value: string;            // YYYY-MM-DD
@@ -39,6 +41,11 @@ function formatDisplay(d: Date): string {
 export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  // Anclado con position:fixed: adentro de una lista con scroll un panel
+  // absolute se recorta contra el borde, por mas z-index que tenga.
+  const cerrar = useCallback(() => setOpen(false), []);
+  const posicion = useAnchored(open, ref, cerrar, { width: 264 });
   const selected = value ? parseISO(value) : null;
   const today = new Date();
 
@@ -59,7 +66,9 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
   useEffect(() => {
     if (!open) return;
     const onMouse = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -127,21 +136,21 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
         <Icon name="chevronDown" size={12} style={{ color: 'var(--text-tertiary)' }} />
       </button>
 
-      {open && (
+      {/* En <body>: dentro de un modal (que tiene transform por su animacion)
+          position:fixed se ancla al modal y el calendario terminaba lejos del
+          campo, abajo de todo. */}
+      {open && createPortal(
         <div
-          className="datepicker-pop"
+          ref={popRef}
+          className="datepicker-pop lb-menupop"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 4px)',
-            left: 0,
-            zIndex: 60,
+            ...posicion,
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-default)',
             borderRadius: 10,
             boxShadow: 'var(--shadow-lg)',
             padding: 12,
-            width: 264,
-            maxWidth: 'calc(100vw - 32px)',
+            overflowY: 'auto',
           }}
         >
           <div
@@ -243,7 +252,8 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
               Cerrar
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

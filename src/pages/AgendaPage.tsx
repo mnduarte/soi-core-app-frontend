@@ -8,6 +8,7 @@ import {
 } from '../api/appointments';
 import { patientsApi, type Patient } from '../api/patients';
 import { useUIStore } from '../store/ui.store';
+import { DatePicker } from '../components/common/DatePicker';
 import { Icon } from '../components/common/Icon';
 import { Avatar } from '../components/common/Avatar';
 import { StatusBadge, FichaPendingBadge } from '../components/common/StatusBadge';
@@ -226,6 +227,15 @@ export default function AgendaPage() {
     setView(v);
   };
 
+  // El boton de volver al presente nombra el periodo de la vista: en Semana
+  // "Hoy" no dice a donde lleva, y ya-estar-ahi no se distinguia de no estarlo.
+  const hoy = new Date();
+  const enPeriodoActual =
+    view === 'week' ? startOfWeek(selectedDate).getTime() === startOfWeek(hoy).getTime()
+    : view === 'month' ? selectedDate.getFullYear() === hoy.getFullYear() && selectedDate.getMonth() === hoy.getMonth()
+    : sameDay(selectedDate, hoy);
+  const hoyLabel = view === 'week' ? 'Esta semana' : view === 'month' ? 'Este mes' : 'Hoy';
+
   const viewSeg = (
     <div className="seg">
       {(['libreta', 'week', 'month'] as const).map(v => (
@@ -287,23 +297,27 @@ export default function AgendaPage() {
         </div>
 
         {/* Saltar a cualquier día; en semana/mes reposiciona el período. */}
-        <input
-          type="date"
-          className="input"
-          value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`}
-          onChange={e => {
-            const v = e.target.value;
-            if (v) goToDate(new Date(`${v}T00:00:00`));
-          }}
-          style={{ height: 34, width: 158 }}
-        />
+        <div style={{ width: 158 }}>
+          <DatePicker
+            value={`${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`}
+            onChange={v => { if (v) goToDate(new Date(`${v}T00:00:00`)); }}
+          />
+        </div>
 
         <div className="row" style={{ gap: 4 }}>
           <button className="btn btn--ghost btn--icon" onClick={() => shift(-1)}>
             <Icon name="chevronLeft" />
           </button>
-          <button className="btn btn--secondary btn--sm" onClick={() => goToDate(new Date())}>
-            Hoy
+          {/* Ancho fijo: sin esto el boton cambia de tamano al cambiar de
+              vista y corre de lugar al selector que tiene al lado. */}
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={() => goToDate(new Date())}
+            disabled={enPeriodoActual}
+            title={enPeriodoActual ? `Ya estas viendo ${hoyLabel.toLowerCase()}` : `Volver a ${hoyLabel.toLowerCase()}`}
+            style={{ minWidth: 104 }}
+          >
+            {hoyLabel}
           </button>
           <button className="btn btn--ghost btn--icon" onClick={() => shift(1)}>
             <Icon name="chevronRight" />
@@ -404,20 +418,30 @@ export default function AgendaPage() {
           isMobile={isMobile}
         />
       )}
-      {view === 'week' && (
-        <WeekView
-          appts={appts}
-          patientMap={patientMap}
-          selectedDate={selectedDate}
-          onPickDay={d => { setSelectedDate(d); goToView('libreta'); }}
-        />
-      )}
-      {view === 'month' && (
-        <MonthView
-          appts={appts}
-          selectedDate={selectedDate}
-          onPickDay={d => { setSelectedDate(d); goToView('libreta'); }}
-        />
+      {/* Semana y Mes se deslizan igual que la Libreta al cambiar de periodo.
+          Se remontan enteras (no como la Libreta, que anima solo su hoja para
+          no perder lo que haya tipeado en el formulario de alta). */}
+      {(view === 'week' || view === 'month') && (
+        <div
+          key={dayMove.n}
+          className={dayMove.n > 0 ? `lb-day-${dayMove.dir}` : undefined}
+          style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+        >
+          {view === 'week' ? (
+            <WeekView
+              appts={appts}
+              patientMap={patientMap}
+              selectedDate={selectedDate}
+              onPickDay={d => { setSelectedDate(d); goToView('libreta'); }}
+            />
+          ) : (
+            <MonthView
+              appts={appts}
+              selectedDate={selectedDate}
+              onPickDay={d => { setSelectedDate(d); goToView('libreta'); }}
+            />
+          )}
+        </div>
       )}
       </div>
 

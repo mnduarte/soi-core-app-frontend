@@ -1290,7 +1290,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
    absoluto se recorta contra el borde. */
 .lb-editpanel {
   animation: panelIn 0.16s ease-out;
-  flex-basis: 100%;
+  flex: 0 0 100%;
+  width: 100%;
   margin-top: 2px;
   padding: 9px 10px;
   border: 1px solid var(--border-subtle);
@@ -1355,6 +1356,10 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .fp-br { display: none; }
 .fp-photos { display: flex; gap: 4px; flex-wrap: wrap; flex-basis: 100%; padding-left: 66px; }
 .fr-row--edit { flex-wrap: wrap; }
+/* Fila de trabajo: todo alineado arriba. Centrado, el circulo y el precio
+   flotaban a media altura de un bloque de texto que crece con la fecha, el
+   pago parcial y las fotos — cada fila terminaba con su propia alineacion. */
+.fw-row { align-items: flex-start !important; }
 
 /* "Falta cobrar" pegado abajo de la tarjeta del paciente (solo celular): un
    bloque en vez de dos, sin el aire entre tarjetas ni las esquinas partidas. */
@@ -1414,10 +1419,13 @@ table.tbl { width: 100%; border-collapse: collapse; }
     align-items: center;
     gap: 8px;
     flex: 1 1 100%;
+    /* Envuelve: en celular el panel de montos cuelga de aca, y sin wrap
+       quedaba espichado en una columna al lado del campo. */
+    flex-wrap: wrap;
     padding-left: 32px; /* alinea con el texto, debajo del círculo */
   }
   /* Las acciones se van al extremo derecho de su renglón */
-  .fr-money > span:last-child { margin-left: auto; }
+  .fr-money > span:last-of-type { margin-left: auto; }
   /* Red de seguridad: que nada pueda provocar scroll lateral en la lista */
   .fr-row { overflow-x: hidden; }
 }
@@ -1978,3 +1986,91 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .sidebar--rail .sidebar__brand { justify-content: center; padding-inline: 0; }
 .sidebar--rail .nav-item { justify-content: center; padding-inline: 0; width: 44px; }
 .sidebar--rail .sidebar__user { justify-content: center; gap: 6px; flex-wrap: wrap; }
+
+
+/* ============================================================
+   SELECT PROPIO
+   El <select> nativo en Android abre una hoja negra a pantalla completa, con
+   la tipografia del sistema y sin control del corte de linea. Este usa el tema
+   de la app y las mismas fichas que el resto de los paneles.
+   ============================================================ */
+.sel__btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-surface);
+}
+.sel__val {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.sel__val.is-empty { color: var(--text-tertiary); }
+
+.sel__pop {
+  z-index: 200;
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  transform-origin: top left;
+}
+/* El encabezado de grupo tiene que cortar de verdad la lista: con solo un
+   texto chico arriba, las opciones de un grupo y las del siguiente se leian
+   como una sola tira. Franja con fondo y linea al tope. */
+.sel__group {
+  margin: 6px -5px 4px;
+  padding: 7px 14px 6px;
+  background: var(--bg-app);
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-stamp);
+}
+.sel__pop > div:first-child > .sel__group { margin-top: 2px; }
+.sel__opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.sel__opt:hover { background: var(--bg-hover); }
+.sel__opt.is-on { background: var(--brand-primary-50); color: var(--brand-primary-600); font-weight: 600; }
+.sel__opt-lbl {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* El monto no se parte ni empuja al nombre: el nombre se recorta si hace falta */
+.sel__opt-hint {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.sel__opt.is-on .sel__opt-hint { color: var(--brand-primary-600); }
+
+/* El calendario tambien se ancla con position:fixed para no recortarse */
+.datepicker-pop { z-index: 200; }

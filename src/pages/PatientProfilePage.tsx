@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Select } from '../components/common/Select';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../api/patients';
@@ -592,14 +593,14 @@ function DatosTab({ patient }: { patient: Patient }) {
               <input className="input" value={form.locality} onChange={e => set('locality', e.target.value)} />
             </EditField>
             <EditField label="Obra social">
-              <select className="input" value={form.obraSocial} onChange={e => set('obraSocial', e.target.value)}>
-                <option value="">Particular</option>
-                {['OSDE', 'Swiss Medical', 'Galeno', 'IOMA', 'PAMI', 'Otra'].map(o => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={form.obraSocial}
+                onChange={v => set('obraSocial', v)}
+                options={[
+                  { value: '', label: 'Particular' },
+                  ...['OSDE', 'Swiss Medical', 'Galeno', 'IOMA', 'PAMI', 'Otra'].map(o => ({ value: o, label: o })),
+                ]}
+              />
             </EditField>
             <EditField label="Nº de afiliado">
               <input className="input" value={form.nAfiliado} onChange={e => set('nAfiliado', e.target.value)} />

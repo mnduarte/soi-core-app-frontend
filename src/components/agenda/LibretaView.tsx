@@ -56,6 +56,8 @@ function apptLabel(a: Appointment, patientMap: Map<string, Patient>): string {
 interface LibretaViewProps {
   /** Dirección del último salto de día (para deslizar la hoja al lado correcto). */
   dayMove?: { dir: 'next' | 'prev'; n: number };
+  /** Turno que se está borrando: se desvanece antes de salir de la lista. */
+  outApptId?: string | null;
   appts: Appointment[];
   patientMap: Map<string, Patient>;
   selectedDate: Date;
@@ -71,6 +73,7 @@ interface LibretaViewProps {
 
 export function LibretaView({
   dayMove,
+  outApptId,
   appts,
   patientMap,
   selectedDate,
@@ -663,7 +666,7 @@ export function LibretaView({
                     <div
                       key={a._id}
                       data-flip={a._id}
-                      className="lb-row"
+                      className={`lb-row ${a._id === outApptId ? 'lb-rowout' : ''}`}
                       style={{
                         // Sin `transparent` explícito: un fondo inline le gana a
                         // .lb-flip, y la fila que se mueve necesita ser opaca

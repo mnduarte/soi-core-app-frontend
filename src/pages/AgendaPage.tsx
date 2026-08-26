@@ -159,12 +159,27 @@ export default function AgendaPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => appointmentsApi.hardRemove(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['appointments'] });
-      showToast('Turno borrado');
-    },
-    onError: () => showToast('No se pudo borrar el turno', 'error'),
+    onSuccess: () => showToast('Turno borrado'),
+    onError: () => { qc.invalidateQueries({ queryKey: ['appointments'] }); showToast('No se pudo borrar el turno', 'error'); },
   });
+
+  // Turno que se está yendo: se marca, se lo deja desvanecerse y recién ahí
+  // sale de la lista (y los de abajo suben). Antes se borraba solo cuando
+  // volvía el refetch, así que la fila se quedaba ~400ms quieta después de
+  // confirmar y después desaparecía de golpe, sin que nada acompañara.
+  const [outApptId, setOutApptId] = useState<string | null>(null);
+  const borrarTurno = async (appt: Appointment) => {
+    setOutApptId(appt._id);
+    const req = deleteMutation.mutateAsync(appt._id).catch(() => null);
+    await new Promise(r => setTimeout(r, 130));
+    // Se saca del cache a mano: el movimiento no depende de cuánto tarde la red.
+    qc.setQueryData<Appointment[]>(
+      ['appointments', view, range.from.toISOString()],
+      (old = []) => old.filter(a => a._id !== appt._id),
+    );
+    setOutApptId(null);
+    await req;
+  };
   // Confirmación con diálogo propio (no el confirm nativo del navegador).
   const [confirmDelete, setConfirmDelete] = useState<Appointment | null>(null);
   const handleDelete = (appt: Appointment) => setConfirmDelete(appt);
@@ -392,6 +407,7 @@ export default function AgendaPage() {
           patientMap={patientMap}
           selectedDate={selectedDate}
           dayMove={dayMove}
+          outApptId={outApptId}
           now={now}
           isMobile={isMobile}
           onOpenPatient={(id, trabajo) =>
@@ -461,7 +477,7 @@ export default function AgendaPage() {
         confirmLabel="Borrar turno"
         danger
         onConfirm={() => {
-          if (confirmDelete) deleteMutation.mutate(confirmDelete._id);
+          if (confirmDelete) void borrarTurno(confirmDelete);
           setConfirmDelete(null);
         }}
         onCancel={() => setConfirmDelete(null)}

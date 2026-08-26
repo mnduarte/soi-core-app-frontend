@@ -1441,7 +1441,7 @@ export default function FichaRapidaPage() {
             )}
 
             {/* ---------- DOS COLUMNAS: Trabajos | Pagos ---------- */}
-            <div style={{ display: 'grid', gridTemplateColumns: stack ? '1fr' : '1fr 1fr', gap: 16, alignItems: stack ? 'start' : 'stretch', flex: stack ? undefined : 1, minHeight: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: stack ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16, alignItems: stack ? 'start' : 'stretch', flex: stack ? undefined : 1, minHeight: 0 }}>
 
             {/* ---------- TRABAJOS ---------- */}
             <div
@@ -1451,6 +1451,7 @@ export default function FichaRapidaPage() {
                 display: stack && mobileTab !== 'trabajos' ? 'none' : 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
+                minWidth: 0,
               }}
             >
               <div className="card__header" style={{ alignItems: 'center' }}>
@@ -1578,6 +1579,7 @@ export default function FichaRapidaPage() {
                 display: stack && mobileTab !== 'pagos' ? 'none' : 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
+                minWidth: 0,
               }}
             >
               <div className="card__header" style={{ alignItems: 'center' }}>

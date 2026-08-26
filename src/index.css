@@ -1455,6 +1455,13 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .fr-money > span:last-of-type { margin-left: auto; }
   /* Red de seguridad: que nada pueda provocar scroll lateral en la lista */
   .fr-row { overflow-x: hidden; }
+  /* Idem el renglon de alta y la lista entera: los blancos tactiles de 44px
+     sobresalen del boton, y basta un pixel para que aparezca la barra. */
+  .lb-addrow, .fp-row, .fw-row { overflow-x: clip; }
+  /* Cada zona de la fila de pago se recorta adentro de lo suyo en vez de
+     empujar a la fila. El monto nunca se achica: es el dato que importa. */
+  .fp-tag { min-width: 0; overflow: hidden; }
+  .fp-method, .fp-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 /* Franja "recien lo marcaste hecho, te lo pago?". Aparece arriba de la lista de

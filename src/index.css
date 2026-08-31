@@ -1234,6 +1234,16 @@ table.tbl { width: 100%; border-collapse: collapse; }
 /* La fila viajo a su lugar nuevo con FLIP (no nacio ahi): no lleva el
    translate de entrada, solo el destello verde que confirma el cambio. */
 .lb-rowflash { animation: rowInFlash 0.8s ease-out; }
+
+/* Chip que acaba de aparecer por una accion del usuario (vincular un pago).
+   Escala minima: es un cartelito chico y un gesto grande se lee exagerado.
+   Solo transform+opacity, asi que no mueve el layout de la fila. */
+@keyframes chipPop {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: none; }
+}
+.lb-pop { animation: chipPop 0.24s cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) { .lb-pop { animation: none; } }
 /* Mientras una fila viaja puede cruzarse con las que van en sentido contrario.
    Fondo opaco + z-index para que se lea entera y no se transparenten una sobre
    otra. Dura solo lo que dura la animacion (el hook saca la clase). */

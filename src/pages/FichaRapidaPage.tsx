@@ -617,6 +617,12 @@ export default function FichaRapidaPage() {
     try {
       await transactionsApi.updateMovement(t._id, { workId, description: w?.description });
       invalidateWorks(); invalidateTx();
+      // Las dos filas se encienden a la vez, en dos columnas distintas. Lo que
+      // comunica el vínculo es la SIMULTANEIDAD: el ojo agarra el par sin que
+      // haya que dibujar una línea entre ellas. Por separado, cada cambio se
+      // leía como un salto de estado sin causa.
+      setFlashPagoId(t._id); setFlashWorkId(workId);
+      setTimeout(() => { setFlashPagoId(null); setFlashWorkId(null); }, 1000);
       showToast(`Pago vinculado a ${w?.description ?? 'el trabajo'}`, 'success');
     } catch { showToast('No se pudo vincular', 'error'); }
   };
@@ -624,27 +630,37 @@ export default function FichaRapidaPage() {
   const confirmDelPago = async () => {
     if (!delPago) return;
     const t = delPago; const photos = photosByTx.get(t._id) ?? []; setDelPago(null);
-    // La fila se encoge y las de abajo suben; recién ahí se borra de verdad.
+    // La fila se desvanece y sale de la lista; las de abajo suben con FLIP.
+    // La red viaja EN PARALELO: antes se esperaba la respuesta y recién después
+    // se sacaba la clase de salida, así que la fila REAPARECÍA un instante
+    // (ya no estaba desvanecida, pero los datos todavía la incluían) hasta que
+    // llegaba el refetch. Sacarla del cache a mano cierra esa ventana.
     setOutPagoId(t._id);
+    const req = delPagoMut.mutateAsync(t._id).then(() => true, () => false);
     await new Promise(r => setTimeout(r, ROW_OUT_MS));
-    try {
-      await delPagoMut.mutateAsync(t._id);
-      // Las fotos quedan en la galería (solo se desvinculan del pago borrado).
-      for (const item of photos) {
-        await galleryApi.updatePhoto(patient!._id, item.sessionId, item.photo._id, { transactionId: '' });
-      }
-      if (photos.length) qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
-      invalidateTx();
-      // Si el pago estaba imputado a un trabajo, ese trabajo vuelve a tener
-      // saldo: hay que refrescar works o sigue mostrando "Pagado" de más.
-      if (t.workId) invalidateWorks();
-      showToast('Pago borrado', 'success');
-    } catch {
+    qc.setQueryData<Transaction[]>(['transactions', id], (old = []) =>
+      old.filter(x => x._id !== t._id),
+    );
+    setOutPagoId(null);
+
+    if (!(await req)) {
+      // No se borró: se vuelve a pedir la lista y el pago reaparece, ahora sí
+      // con motivo.
       showToast('No se pudo borrar', 'error');
-    } finally {
-      // Si falló, la fila vuelve a aparecer (no se borró nada).
-      setOutPagoId(null);
+      invalidateTx();
+      return;
     }
+
+    // Las fotos quedan en la galería (solo se desvinculan del pago borrado).
+    for (const item of photos) {
+      await galleryApi.updatePhoto(patient!._id, item.sessionId, item.photo._id, { transactionId: '' });
+    }
+    if (photos.length) qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
+    invalidateTx();
+    // Si el pago estaba imputado a un trabajo, ese trabajo vuelve a tener
+    // saldo: hay que refrescar works o sigue mostrando "Pagado" de más.
+    if (t.workId) invalidateWorks();
+    showToast('Pago borrado', 'success');
   };
 
   // ---- modales ----
@@ -786,6 +802,7 @@ export default function FichaRapidaPage() {
   // los hechos ocupan lo que sobra. Se recalcula al cambiar el tamano de la
   // ventana. En celular no se mide: ahi la pagina scrollea de arriba a abajo.
   const [flashWorkId, setFlashWorkId] = useState<string | null>(null);
+  const [flashPagoId, setFlashPagoId] = useState<string | null>(null);
   const worksListRef = useRef<HTMLDivElement>(null);
   useFlip(worksListRef);
   const [fitHechos, setFitHechos] = useState(CAP);
@@ -1143,7 +1160,7 @@ export default function FichaRapidaPage() {
               </>
             ) : (
               <button
-                className={`lb-cobro ${cobrado ? 'is-on' : ''} ${!cobrado && parcial ? 'lb-cobro--2l' : ''}`}
+                className={`lb-cobro ${cobrado ? 'is-on' : ''} ${it._id === flashWorkId ? 'lb-pop' : ''} ${!cobrado && parcial ? 'lb-cobro--2l' : ''}`}
                 disabled={cobroBusy === it._id}
                 title={cobrado ? 'Ya cobrado - tocá para deshacer' : `Cobrar (podés editar el monto)`}
                 onClick={() => {
@@ -1183,7 +1200,7 @@ export default function FichaRapidaPage() {
     const editing = editPago === t._id;
     const ph = photosByTx.get(t._id) ?? [];
     return (
-      <div key={t._id} data-flip={t._id} ref={editing ? epRef : undefined} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={t._id} data-flip={t._id} ref={editing ? epRef : undefined} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === flashPagoId ? 'lb-rowflash' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {editing ? (
           <>
             <div style={{ width: 132 }}><DatePicker value={epDate} onChange={setEpDate} /></div>
@@ -1226,7 +1243,9 @@ export default function FichaRapidaPage() {
             {/* De qué trabajo fue el pago. Va primero: es lo que identifica la
                 fila. Misma etiqueta que en la agenda. */}
             <span className="fp-tag">
-              {t.workId && t.description && <span className="lb-sub">{t.description}</span>}
+              {t.workId && t.description && (
+                <span className={`lb-sub ${t._id === flashPagoId ? 'lb-pop' : ''}`}>{t.description}</span>
+              )}
               {/* Pago sin trabajo: se puede asociar a uno a mano. Es la forma de
                   recuperar los pagos viejos, que quedaron todos sin vincular. */}
               {!t.workId && trabajosCobrables.length > 0 && (

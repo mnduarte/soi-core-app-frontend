@@ -1013,6 +1013,32 @@ table.tbl { width: 100%; border-collapse: collapse; }
   font-size: 15px;
   font-weight: 600;
   color: var(--success);
+  /* Alto FIJO. Lo que cambia entre "Al día" y "Falta cobrar $X" es el
+     contenido, no el tamaño: el monto va en 20px y hacía el sello ~6px más
+     alto, así que al cobrar el último trabajo las dos columnas de abajo daban
+     un salto. Se leía como si la ficha se hubiera reacomodado sola, cuando en
+     realidad no se movió nada adentro. */
+  min-height: 48px;
+  box-sizing: border-box;
+}
+/* Una sola línea, siempre. Sin esto, en pantallas angostas un monto largo se
+   iba al renglón de abajo y el sello volvía a crecer — el mismo salto, pero
+   solo en celular y solo con ciertos números, que es la peor forma de que
+   aparezca. */
+.lb-estado__txt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.lb-estado__monto {
+  font-size: 20px;
+  line-height: 1;
+}
+@media (max-width: 400px) {
+  /* El número achica antes que el sello crezca. */
+  .lb-estado__monto { font-size: 17px; }
 }
 .lb-estado--debe {
   border-color: var(--danger-border);

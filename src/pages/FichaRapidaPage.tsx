@@ -516,6 +516,12 @@ export default function FichaRapidaPage() {
   // Existe para el paciente que pasa solo a dejar una cuota: no hay ningún
   // trabajo que marcar hecho, así que la franja "¿te lo pagó?" nunca aparece.
   const [pgWorkId, setPgWorkId] = useState('');
+  // Último monto que precargamos NOSOTROS al elegir un trabajo. Sirve para
+  // distinguir "el campo tiene lo que puso el sistema" de "el campo tiene lo
+  // que tipeó el Dr.": si cambia de trabajo, el primero se pisa y el segundo
+  // se respeta. Sin esto, elegir un trabajo después de haber escrito un monto
+  // le borraba la cifra sin avisar.
+  const pgAutoAmount = useRef('');
   const [pgBusy, setPgBusy] = useState(false);
   // Pago recién creado: su fila entra animada (crece desde arriba empujando al
   // resto) y queda resaltada un instante. Sirve de confirmación visual de que
@@ -559,7 +565,7 @@ export default function FichaRapidaPage() {
         paymentMethod: pgMethod,
         date: new Date(`${pgDate}T12:00:00`).toISOString(),
       });
-      setPgAmount(''); setPgDate(todayYMD()); setPgWorkId('');
+      setPgAmount(''); setPgDate(todayYMD()); setPgWorkId(''); pgAutoAmount.current = '';
       invalidateWorks();
       invalidateTx();
       showToast(`¡Pago de ${fmtMoney(amt)} registrado!`, 'success');
@@ -1425,11 +1431,11 @@ export default function FichaRapidaPage() {
               className={`lb-estado ${debe ? 'lb-estado--debe' : ''} lb-estado--anexo`}
               style={{ animation: 'dialogPop 0.22s cubic-bezier(0.16,1,0.3,1)' }}
             >
-              <Icon name={debe ? 'cash' : 'check'} size={18} />
+              <Icon name={debe ? 'cash' : 'check'} size={18} style={{ flexShrink: 0 }} />
               {debe ? (
-                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <span className="lb-estado__txt">
                   Falta cobrar
-                  <b className="mono" style={{ fontSize: 20, lineHeight: 1 }}>{fmtMoney(falta)}</b>
+                  <b className="mono lb-estado__monto">{fmtMoney(falta)}</b>
                 </span>
               ) : (
                 <span>Al día — no debe nada</span>
@@ -1620,7 +1626,18 @@ export default function FichaRapidaPage() {
                     {trabajosCobrables.length > 0 && (
                       <Select
                         value={pgWorkId}
-                        onChange={v => { setPgWorkId(v); setPagoPanel(false); }}
+                        onChange={v => {
+                          setPgWorkId(v);
+                          setPagoPanel(false);
+                          // Al elegir un trabajo, el monto casi siempre es lo que
+                          // falta de ese trabajo: precargarlo saca el paso de
+                          // mirar el saldo y tipearlo. Queda editable — si entrega
+                          // menos, se corrige encima y el pago va igual imputado.
+                          const w = trabajosCobrables.find(x => x._id === v);
+                          const falta = w ? String(Math.max(0, (w.price ?? 0) - (w.paid ?? 0))) : '';
+                          setPgAmount(prev => (prev === '' || prev === pgAutoAmount.current ? falta : prev));
+                          pgAutoAmount.current = falta;
+                        }}
                         style={{ flex: '1 1 120px', minWidth: 100 }}
                         title="¿De qué trabajo es este pago?"
                         options={[{ value: '', label: isMobile ? 'Pago a cuenta (sin trabajo)' : 'A cuenta (sin trabajo)' }]}

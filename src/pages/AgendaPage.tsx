@@ -180,6 +180,22 @@ export default function AgendaPage() {
     setOutApptId(null);
     await req;
   };
+  // Asignar o cambiar el trabajo del turno (`title`). Optimista: el chip
+  // aparece al instante y la red viaja atrás, igual que el resto de la agenda.
+  const setTrabajo = async (appt: Appointment, title: string) => {
+    const limpio = title.trim();
+    qc.setQueryData<Appointment[]>(
+      ['appointments', view, range.from.toISOString()],
+      (old = []) => old.map(a => (a._id === appt._id ? { ...a, title: limpio || undefined } : a)),
+    );
+    try {
+      await appointmentsApi.update(appt._id, { title: limpio });
+    } catch {
+      showToast('No se pudo guardar el trabajo', 'error');
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+    }
+  };
+
   // Confirmación con diálogo propio (no el confirm nativo del navegador).
   const [confirmDelete, setConfirmDelete] = useState<Appointment | null>(null);
   const handleDelete = (appt: Appointment) => setConfirmDelete(appt);
@@ -418,6 +434,7 @@ export default function AgendaPage() {
           onOpenFicha={handleOpenFicha}
           onDelete={handleDelete}
           onEditPatient={handleEditPatient}
+          onSetTrabajo={setTrabajo}
         />
       )}
       {view === 'day' && (

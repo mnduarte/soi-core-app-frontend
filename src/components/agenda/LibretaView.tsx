@@ -69,6 +69,8 @@ interface LibretaViewProps {
   onOpenFicha: (appt: Appointment) => void;
   onDelete: (appt: Appointment) => void;
   onEditPatient: (patientId: string) => void;
+  /** Asignar o cambiar el trabajo del turno. */
+  onSetTrabajo: (appt: Appointment, title: string) => void;
 }
 
 export function LibretaView({
@@ -85,6 +87,7 @@ export function LibretaView({
   onOpenFicha,
   onDelete,
   onEditPatient,
+  onSetTrabajo,
 }: LibretaViewProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
@@ -294,6 +297,24 @@ export function LibretaView({
   // Mismo efecto que en la ficha: al anotar un turno, las filas de abajo se
   // corren para hacerle lugar en vez de saltar. Anda igual en celular y tablet
   // (es transform puro, corre en el compositor).
+  // Turno al que se le está poniendo el trabajo, y el texto en curso.
+  const [trabajoTarget, setTrabajoTarget] = useState<string | null>(null);
+  const [trabajoDraft, setTrabajoDraft] = useState('');
+  const [trabajoFlash, setTrabajoFlash] = useState<string | null>(null);
+  const abrirTrabajo = (a: Appointment) => {
+    setTrabajoTarget(a._id);
+    setTrabajoDraft(a.title ?? '');
+  };
+  const guardarTrabajo = (a: Appointment, valor: string) => {
+    setTrabajoTarget(null);
+    if ((valor.trim() || '') === (a.title ?? '')) return;   // no cambió nada
+    onSetTrabajo(a, valor);
+    if (valor.trim()) {
+      setTrabajoFlash(a._id);
+      setTimeout(() => setTrabajoFlash(null), 900);
+    }
+  };
+
   const listaRef = useRef<HTMLDivElement>(null);
   useFlip(listaRef, { insert: true });
 
@@ -398,32 +419,20 @@ export function LibretaView({
                               setSearchOpen(true);
                               setTimeout(() => nameRef.current?.focus(), 60);
                             }}
-                            className="mono"
-                            title={taken ? 'Ya hay turno — se anota como sobreturno' : undefined}
-                            style={{
-                              position: 'relative',
-                              padding: '9px 0',
-                              borderRadius: 6,
-                              fontSize: 13,
-                              fontWeight: 500,
-                              background: sel ? 'var(--brand-primary)' : 'var(--bg-surface)',
-                              color: sel ? 'white' : 'var(--text-primary)',
-                              border: '1px solid',
-                              borderColor: sel ? 'var(--brand-primary)' : 'var(--border-subtle)',
-                              cursor: 'pointer',
-                            }}
+                            className={`mono slot ${taken ? 'slot--taken' : ''} ${sel ? 'slot--sel' : ''}`}
+                            title={taken ? 'Ya hay turno — se anota como sobreturno' : 'Libre'}
                           >
                             {t}
-                            {taken && !sel && (
-                              <span style={{ position: 'absolute', top: 3, right: 4, width: 5, height: 5, borderRadius: 5, background: 'var(--warning)' }} />
-                            )}
                           </button>
                         );
                       })}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: 6, background: 'var(--warning)', display: 'inline-block' }} />
-                      ya tiene turno (se apila como sobreturno)
+                    {/* La referencia de la leyenda es el mismo cuadrado pintado
+                        que se ve en la grilla, no otro símbolo: si el ejemplo no
+                        se parece a lo que hay que buscar, no explica nada. */}
+                    <div className="slot-leyenda">
+                      <span className="slot-leyenda__box" />
+                      ocupado (se apila como sobreturno)
                     </div>
                     <button
                       type="button"
@@ -684,7 +693,20 @@ export function LibretaView({
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                           <span className="lb-name">{label}</span>
-                          {a.title && <span className="lb-sub">{a.title}</span>}
+                          {a.title ? (
+                            <span className={`lb-sub ${a._id === trabajoFlash ? 'lb-pop' : ''}`}>{a.title}</span>
+                          ) : trabajoTarget === a._id ? null : (
+                            /* Falta el trabajo. Mismo gesto que el "vincular" de
+                               los pagos: se ve que hay un hueco y se completa
+                               ahí mismo, sin borrar el turno y rehacerlo. */
+                            <button
+                              className="lb-link"
+                              title="Anotar de qué es el turno"
+                              onClick={e => { e.stopPropagation(); abrirTrabajo(a); }}
+                            >
+                              <Icon name="plus" size={11} /> trabajo
+                            </button>
+                          )}
                           {!a.patientId && (
                             <button
                               className="btn btn--secondary"
@@ -694,6 +716,55 @@ export function LibretaView({
                               Vincular paciente
                             </button>
                           )}
+                        {/* Panel del trabajo: EN LINEA, no flotando. La vista
+                            scrollea y un popover se recorta contra el borde; ya
+                            nos paso en la ficha. `data-flip` para que el hook lo
+                            vea como nodo nuevo y no dibuje las filas de abajo
+                            encima mientras se abre. */}
+                        {trabajoTarget === a._id && (
+                          <div data-flip={`tw-${a._id}`} className="lb-twpanel">
+                            <div className="lb-twpanel__row">
+                              <input
+                                className="input"
+                                autoFocus
+                                placeholder="¿De qué es el turno?"
+                                value={trabajoDraft}
+                                onChange={e => setTrabajoDraft(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') guardarTrabajo(a, trabajoDraft);
+                                  if (e.key === 'Escape') setTrabajoTarget(null);
+                                }}
+                              />
+                              <button className="btn btn--primary btn--sm" onClick={() => guardarTrabajo(a, trabajoDraft)}>
+                                <Icon name="check" size={13} />
+                              </button>
+                              <button className="btn btn--ghost btn--icon btn--sm" onClick={() => setTrabajoTarget(null)}>
+                                <Icon name="x" size={14} />
+                              </button>
+                            </div>
+                            <div className="lb-twpanel__chips">
+                              {treatments.map(c => (
+                                <button key={c} type="button" className="lb-chip"
+                                  onMouseDown={e => e.preventDefault()}
+                                  onClick={() => guardarTrabajo(a, c)}>
+                                  {c}
+                                </button>
+                              ))}
+                              <button type="button" className="lb-chip lb-chip--add"
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={() => setCustomTreatOpen(true)}>
+                                <Icon name="settings" size={12} /> Editar
+                              </button>
+                              {a.title && (
+                                <button type="button" className="lb-chip lb-chip--del"
+                                  onMouseDown={e => e.preventDefault()}
+                                  onClick={() => guardarTrabajo(a, '')}>
+                                  <Icon name="x" size={11} /> sin trabajo
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         </div>
                         {/* SCHEDULED es el estado por defecto (3 de cada 4 turnos):
                             mostrarlo en todas las filas repetía lo mismo sin
@@ -779,6 +850,7 @@ export function LibretaView({
                           onReschedule={onReschedule}
                           onDelete={onDelete}
                           onRemind={canRemind ? () => setRemindTarget(a) : undefined}
+                          onEditTrabajo={a.title ? () => abrirTrabajo(a) : undefined}
                           onEditPatient={a.patientId ? () => onEditPatient?.(a.patientId!) : undefined}
                         />
                       </div>

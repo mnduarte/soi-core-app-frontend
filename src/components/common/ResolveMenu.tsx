@@ -13,6 +13,10 @@ interface ResolveMenuProps {
   // En celular las acciones de fila se reducen a "Recordar" y "Más", así que
   // editar paciente / ver ficha tienen que estar también acá dentro.
   onEditPatient?: (appt: Appointment) => void;
+  /** Cambiar el trabajo del turno. Vive acá y no en la fila a propósito: el
+      turno YA tiene trabajo, así que es una corrección ocasional. En la fila
+      sería un blanco más para errarle con el dedo en cada turno. */
+  onEditTrabajo?: () => void;
   align?: 'left' | 'right';
 }
 
@@ -32,6 +36,7 @@ export function ResolveMenu({
   onDelete,
   onRemind,
   onEditPatient,
+  onEditTrabajo,
   align = 'right',
 }: ResolveMenuProps) {
   const [open, setOpen] = useState(false);
@@ -77,6 +82,9 @@ export function ResolveMenu({
   if (onOpenFicha && !actions.some(a => a.key === 'ficha')) {
     actions.push({ key: 'ficha', icon: 'clipboard', label: 'Ver ficha clínica' });
   }
+  if (onEditTrabajo) {
+    actions.push({ key: 'editTrabajo', icon: 'edit', label: 'Cambiar trabajo' });
+  }
   if (onEditPatient) {
     actions.push({ key: 'editPatient', icon: 'user', label: 'Editar paciente' });
   }
@@ -92,7 +100,8 @@ export function ResolveMenu({
     e.stopPropagation();
     setOpen(false);
     if (key === 'ficha') return onOpenFicha?.(appt);
-    if (key === 'editPatient') return onEditPatient?.(appt);
+        if (key === 'editTrabajo') return onEditTrabajo?.();
+if (key === 'editPatient') return onEditPatient?.(appt);
     if (key === 'reschedule') return onReschedule?.(appt);
     if (key === 'remind') return onRemind?.(appt);
     if (key === 'delete') return onDelete?.(appt);

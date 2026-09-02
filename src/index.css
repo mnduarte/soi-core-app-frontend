@@ -2144,3 +2144,116 @@ table.tbl { width: 100%; border-collapse: collapse; }
 
 /* El calendario tambien se ancla con position:fixed para no recortarse */
 .datepicker-pop { z-index: 200; }
+
+
+/* ============================================================
+   SLOTS DEL DIA — libre / ocupado / elegido
+   El Dr. pidio pintar el cuadrado del turno ocupado en vez de marcarlo con un
+   punto. Tiene razon: un punto de 5px obliga a inspeccionar 25 casilleros uno
+   por uno; el bloque de color se ve de un vistazo, sin leer.
+
+   El color NO sale de la referencia que mando (rojo/azul de una planilla
+   escolar) sino de la paleta de la libreta: es el mismo tono tierra del chip
+   del trabajo, o sea "lo que ya esta escrito en la hoja". Rojo diria "error" y
+   azul chocaria con el celeste del turno elegido.
+   ============================================================ */
+.slot {
+  position: relative;
+  padding: 9px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);   /* LIBRE: en blanco, como pidio */
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  /* Solo color: no hay nada que mover. 120ms porque es respuesta a un puntero. */
+  transition: background 0.12s, border-color 0.12s;
+}
+.slot:hover { border-color: var(--brand-primary); }
+
+/* OCUPADO: el casillero pintado. */
+.slot--taken {
+  background: #EFDCC9;
+  border-color: #DCC3A6;
+  color: var(--ink-stamp);
+  font-weight: 600;
+}
+.slot--taken:hover { background: #E8D0B8; border-color: var(--ink-stamp); }
+
+/* ELEGIDO: gana sobre ocupado. Que un slot tomado este elegido es valido
+   (se apila como sobreturno) y el aviso lo da el mensaje del formulario, no
+   el casillero — pintarlo de dos cosas a la vez no se leeria. */
+.slot--sel,
+.slot--sel:hover {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #fff;
+}
+
+/* Variante chica: la grilla del modal de Nuevo turno entra en menos ancho. */
+.slot--sm { padding: 6px 0; font-size: 11.5px; border-radius: 5px; }
+
+/* No elegible. El tachado dice "no se puede", el color sigue diciendo
+   "ocupado": son dos datos distintos y cada uno tiene su marca. */
+.slot--off {
+  cursor: not-allowed;
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+.slot--off:hover { background: #EFDCC9; border-color: #DCC3A6; }
+
+.slot-leyenda {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.slot-leyenda__box {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #DCC3A6;
+  border-radius: 3px;
+  background: #EFDCC9;
+  flex-shrink: 0;
+}
+
+
+/* ---- Panel para anotar el trabajo de un turno (Libreta) ----
+   En linea y no flotando: la vista scrollea y un popover se recorta contra el
+   borde. Ocupa el ancho de la fila, debajo del nombre. */
+.lb-twpanel {
+  /* Va en el MISMO renglon que el nombre, a su derecha: ocupa el aire que de
+     todos modos estaba vacio entre el nombre y los botones de accion. Abajo se
+     comia un renglon entero y la fila quedaba el doble de alta.
+     Envuelve solo si no entra (celular). */
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-app);
+  animation: panelIn 0.16s ease-out;
+}
+.lb-twpanel__row { display: flex; align-items: center; gap: 6px; }
+/* Acotado: el campo es para dos o tres palabras, no un parrafo. A todo el
+   ancho de la fila se leia como si esperara mucho mas texto del que va. */
+.lb-twpanel__row .input { flex: 1 1 auto; max-width: 320px; min-width: 0; height: 34px; }
+.lb-twpanel__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+/* Quitar el trabajo: en terracota, para que no se confunda con elegir uno */
+.lb-chip--del { color: var(--danger); border-style: dashed; }
+
+/* Tablet y celular: renglon propio. Al lado del nombre no queda aire util —
+   el campo se reducia a "De qu" y las fichas se apilaban en columna, o sea
+   MAS alto que ocupando su propia linea. Mismo umbral que usa la app para
+   considerar algo tablet. */
+@media (max-width: 1199px) {
+  .lb-twpanel {
+    flex-basis: 100%;
+    margin-top: 6px;
+    margin-left: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) { .lb-twpanel { animation: none; } }

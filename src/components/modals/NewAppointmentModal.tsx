@@ -214,20 +214,12 @@ export function NewAppointmentModal({ open, onClose, defaultPatientId }: NewAppo
                 type="button"
                 disabled={isTaken}
                 onClick={() => setTime(t)}
-                className="mono"
-                style={{
-                  padding: '6px 0',
-                  borderRadius: 5,
-                  fontSize: 11.5,
-                  fontWeight: 500,
-                  background: isTaken ? 'var(--bg-muted)' : isSelected ? 'var(--brand-primary)' : 'var(--bg-surface)',
-                  color: isTaken ? 'var(--text-tertiary)' : isSelected ? 'white' : 'var(--text-primary)',
-                  border: '1px solid',
-                  borderColor: isSelected ? 'var(--brand-primary)' : 'var(--border-subtle)',
-                  textDecoration: isTaken ? 'line-through' : 'none',
-                  cursor: isTaken ? 'not-allowed' : 'pointer',
-                  opacity: isTaken ? 0.6 : 1,
-                }}
+                /* Mismo lenguaje que la grilla de la Libreta: pintado = ocupado.
+                   Acá además va tachado, porque en este modal el slot tomado NO
+                   se puede elegir (en la Libreta sí, se apila como sobreturno).
+                   Mismo color para el mismo hecho, marca extra para la regla
+                   distinta. */
+                className={`mono slot slot--sm ${isTaken ? 'slot--taken slot--off' : ''} ${isSelected ? 'slot--sel' : ''}`}
               >
                 {t}
               </button>

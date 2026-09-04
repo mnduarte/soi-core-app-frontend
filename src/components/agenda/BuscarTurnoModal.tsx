@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Modal } from '../common/Modal';
 import { Icon } from '../common/Icon';
 import { Avatar } from '../common/Avatar';
+import { FilasFantasma } from '../common/FilasFantasma';
 import { patientsApi, type Patient } from '../../api/patients';
 import { appointmentsApi, type Appointment } from '../../api/appointments';
 import { worksApi } from '../../api/works';
@@ -73,32 +74,6 @@ function hora(iso: string): string {
   });
 }
 
-/**
- * Filas fantasma mientras carga.
- *
- * No es decoración: ocupan el lugar EXACTO de las filas reales, así que el
- * modal abre con su tamaño final y no pega el salto de agrandarse cuando
- * llegan los datos. Animar ese salto habría sido peor —`height` dispara layout
- * en cada frame—; reservando el espacio no hay nada que animar.
- */
-function Fantasmas() {
-  return (
-    <div aria-hidden className="bt-skel">
-      {[0, 1, 2, 3, 4].map(i => (
-        <div key={i} className="bt-skel__row">
-          <div className="bt-skel__av" />
-          <div className="bt-skel__txt">
-            {/* Anchos distintos: todos iguales se leen como una tabla vacía,
-                no como nombres que están por llegar. */}
-            <div className="bt-skel__l1" style={{ width: `${58 + ((i * 13) % 30)}%` }} />
-            <div className="bt-skel__l2" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function BuscarTurnoModal({
   open,
   now,
@@ -112,41 +87,47 @@ export function BuscarTurnoModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const altoPrevio = useRef<number | null>(null);
+  const animAlto = useRef<Animation | null>(null);
 
   /**
-   * Cambiar de estado (buscar ⇄ ficha) suavizando el cambio de alto.
+   * El modal cambia de alto sin saltar, sea cual sea el motivo.
    *
-   * El contenido ya se funde, pero la CAJA saltaba de un tamaño a otro de
-   * golpe: el modal crecía o se encogía en un frame y el salto tapaba el
-   * fundido. Se mide antes de cambiar y después de pintar, y se anima entre
-   * los dos valores.
+   * Hay dos: cambiar de estado (buscar ⇄ ficha) y —el que más se nota— los
+   * datos que llegan tarde. La tarjeta se arma con TRES consultas separadas
+   * (turnos, pendientes, saldo) que vuelven en momentos distintos, así que
+   * puede crecer dos veces seguidas después de abrirse.
+   *
+   * Corre en cada render y compara contra el último alto medido, en vez de
+   * atarse a un evento puntual: así no hay que acordarse de avisarle cada vez
+   * que se agrega un dato nuevo a la tarjeta.
+   *
+   * Alto fijo no servía: un paciente con tres turnos, pendientes y saldo mide
+   * el doble que uno sin nada, y reservar para el peor caso deja un vacío que
+   * se lee como pantalla rota.
    *
    * Sí, esto anima `height`, que en listas está prohibido por disparar layout
-   * en cada frame. Acá es UN elemento chico durante 220ms, y la alternativa
-   * —dejar el salto— es peor. La regla protege el 60fps de cosas grandes; un
-   * modal solo no la necesita.
+   * en cada frame. Acá es UN elemento chico durante 220ms y la alternativa es
+   * el salto. La regla protege el 60fps de cosas grandes.
    */
-  const cambiarSel = (p: Patient | null) => {
-    const caja = document.querySelector('.modal-card') as HTMLElement | null;
-    altoPrevio.current = caja?.getBoundingClientRect().height ?? null;
-    setSel(p);
-  };
-
   useLayoutEffect(() => {
-    const desde = altoPrevio.current;
-    altoPrevio.current = null;
-    if (desde == null) return;
     const caja = document.querySelector('.modal-card') as HTMLElement | null;
     if (!caja) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const hasta = caja.getBoundingClientRect().height;
+    // Se cancela la anterior antes de medir: si no, se leería un alto
+    // intermedio de la animación en curso y la siguiente arrancaría torcida.
+    animAlto.current?.cancel();
+    const ahora = caja.getBoundingClientRect().height;
+    const antes = altoPrevio.current;
+    altoPrevio.current = ahora;
+    if (antes == null) return;
     // Diferencias mínimas no se animan: sería movimiento sin motivo.
-    if (Math.abs(hasta - desde) < 6) return;
-    caja.animate(
-      [{ height: `${desde}px` }, { height: `${hasta}px` }],
+    if (Math.abs(ahora - antes) < 6) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    animAlto.current = caja.animate(
+      [{ height: `${antes}px` }, { height: `${ahora}px` }],
       { duration: 220, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
     );
-  }, [sel]);
+  });
+
 
   /**
    * El modal se encoge y viaja hasta el campo donde va a caer el nombre.
@@ -232,7 +213,7 @@ export function BuscarTurnoModal({
    * direcciones del navegador.
    */
   const volver = () => {
-    cambiarSel(null);
+    setSel(null);
     // En el siguiente frame: mientras hay un paciente elegido el input no está
     // montado, así que la ref todavía no apunta a nada.
     requestAnimationFrame(() => {
@@ -240,6 +221,10 @@ export function BuscarTurnoModal({
       inputRef.current?.select();
     });
   };
+
+  // Solo se enfoca el campo. El estado NO se resetea acá: AgendaPage monta este
+  // componente recién al abrirlo, así que cada consulta arranca limpia por
+  // construcción. Resetear en un efecto además dispararía un render en cascada.
 
   // Solo se enfoca el campo. El estado NO se resetea acá: AgendaPage monta este
   // componente recién al abrirlo, así que cada consulta arranca limpia por
@@ -302,13 +287,13 @@ export function BuscarTurnoModal({
     [padron, now],
   );
 
-  const { data: turnos = [], isLoading: cargandoTurnos } = useQuery({
+  const { data: turnosData } = useQuery({
     queryKey: ['appointments', 'paciente', sel?._id],
     queryFn: () => appointmentsApi.findAll({ patientId: sel!._id }),
     enabled: !!sel,
   });
 
-  const { data: pendientes = [] } = useQuery({
+  const { data: pendientesData } = useQuery({
     queryKey: ['works', sel?._id, 'pending'],
     queryFn: () => worksApi.findAll(sel!._id, { status: 'pending', limit: 4 }),
     enabled: !!sel,
@@ -320,6 +305,8 @@ export function BuscarTurnoModal({
     enabled: !!sel,
   });
 
+  const pendientes = pendientesData ?? [];
+
   // El backend no filtra por futuro/pasado, así que se parte acá. Un paciente
   // tiene decenas de turnos como mucho: no justifica un endpoint nuevo.
   const { proximos, ultimo } = useMemo(() => {
@@ -330,7 +317,7 @@ export function BuscarTurnoModal({
       now.getDate(),
     ).getTime();
     const en = (t: Appointment) => new Date(t.startsAt).getTime();
-    const orden = [...turnos].sort((a, b) => en(a) - en(b));
+    const orden = [...(turnosData ?? [])].sort((a, b) => en(a) - en(b));
     const futuros = orden.filter(t => en(t) >= ahora);
     const hoyPasados = orden.filter(t => en(t) >= inicioDeHoy && en(t) < ahora);
     const anteriores = orden.filter(t => en(t) < inicioDeHoy);
@@ -353,7 +340,7 @@ export function BuscarTurnoModal({
       : (anteriores[anteriores.length - 1] ?? null);
 
     return { proximos, ultimo };
-  }, [turnos, now]);
+  }, [turnosData, now]);
 
   /**
    * Ir a un turno en la agenda.
@@ -408,6 +395,30 @@ export function BuscarTurnoModal({
     }
   };
 
+  /**
+   * La tarjeta espera a los TRES datos y recién ahí se muestra entera.
+   *
+   * Antes cada bloque aparecía apenas volvía lo suyo, así que la primera vez
+   * —con la caché fría— la tarjeta se armaba de a pedazos: el turno, después
+   * los pendientes, después el saldo. Con la caché caliente todo llegaba junto
+   * y se veía bien, y esa diferencia era justo lo que se notaba.
+   *
+   * Las tres consultas salen en paralelo: se espera a la más lenta, no a la
+   * suma. Y mientras tanto hay esqueleto, así que no es tiempo muerto.
+   */
+  //
+   // Se mide por "el dato TODAVÍA no existe" y no por `isLoading`. En el render
+   // en que se elige al paciente las consultas recién se están disparando, así
+   // que `isLoading` sigue en false: por un frame la tarjeta se pintaba con las
+   // listas vacías y mostraba "No tiene turnos agendados" antes de empezar a
+   // esperar. Con `undefined` la espera arranca desde el primer frame.
+  const cargandoFicha =
+    !!sel &&
+    (turnosData === undefined ||
+      pendientesData === undefined ||
+      resumen === undefined);
+
+
   const nombre = sel ? `${sel.name} ${sel.lastName}`.trim() : '';
   // Con el paciente elegido el subtítulo no es adorno: en el padrón hay varios
   // apellidos repetidos (tres "Acosta" seguidos en la lista), así que la edad y
@@ -436,6 +447,20 @@ export function BuscarTurnoModal({
       footer={
         sel ? (
           <>
+            {/* Volver va en el footer, con las demás acciones y del mismo
+                tamaño. Estuvo antes dentro del cuerpo (zona sin acciones, la
+                gente cerraba el modal y lo reabría) y en el encabezado (rompía
+                la simetría del título y seguía fuera del campo donde se mira).
+                Acá está donde el ojo ya va, y `margin-right: auto` lo separa
+                de las dos acciones sobre el paciente. */}
+            <button
+              type="button"
+              className="btn btn--secondary"
+              onClick={volver}
+              style={{ marginRight: 'auto' }}
+            >
+              <Icon name="chevronLeft" size={14} /> Buscar otro
+            </button>
             <button
               type="button"
               className="btn btn--secondary"
@@ -476,7 +501,7 @@ export function BuscarTurnoModal({
           </label>
 
           <div className="bt-list bt-list--in">
-            {!busca && (cargandoPadron) && <Fantasmas />}
+            {!busca && (cargandoPadron) && <FilasFantasma />}
             {!busca && !cargandoPadron && sugeridos.length > 0 && (
               <span className="bt-lbl">
                 Con turno próximo <span className="bt-lbl__n">{sugeridos.length}</span>
@@ -496,7 +521,7 @@ export function BuscarTurnoModal({
                   key={p._id}
                   type="button"
                   className="bt-item"
-                  onClick={() => cambiarSel(p)}
+                  onClick={() => setSel(p)}
                 >
                   <Avatar name={p.name} lastName={p.lastName} id={p._id} size="sm" />
                   <span className="bt-item__txt">
@@ -518,7 +543,7 @@ export function BuscarTurnoModal({
                   </span>
                 </button>
               ))}
-            {busca && isFetching && pacientes.length === 0 && <Fantasmas />}
+            {busca && isFetching && pacientes.length === 0 && <FilasFantasma />}
             {busca && !isFetching && pacientes.length === 0 && (
               <p className="bt-empty">
                 <Icon name="search" size={20} />
@@ -533,7 +558,7 @@ export function BuscarTurnoModal({
                   key={p._id}
                   type="button"
                   className="bt-item"
-                  onClick={() => cambiarSel(p)}
+                  onClick={() => setSel(p)}
                 >
                   <Avatar name={p.name} lastName={p.lastName} id={p._id} size="sm" />
                   <span className="bt-item__txt">
@@ -553,19 +578,13 @@ export function BuscarTurnoModal({
         </>
       ) : (
         <div className="bt-card" ref={cardRef}>
-          {/* Con borde y flecha: antes era texto plano con un ícono de
-              "deshacer" y no se leía como algo que se puede tocar. */}
-          <button type="button" className="bt-back" onClick={volver}>
-            <Icon name="chevronLeft" size={13} /> Buscar otro
-          </button>
-
-          {cargandoTurnos ? (
+          {cargandoFicha ? (
             // Del mismo alto que el bloque real, así la tarjeta no da el salto
             // al llegar los datos. Mismo criterio que en la lista de búsqueda.
             <div className="bt-next bt-next--skel" aria-hidden>
-              <div className="bt-skel__l1" style={{ width: '22%' }} />
-              <div className="bt-skel__l1" style={{ width: '64%', height: 15 }} />
-              <div className="bt-skel__l1" style={{ width: '30%' }} />
+              <div className="skel__l1" style={{ width: '22%' }} />
+              <div className="skel__l1" style={{ width: '64%', height: 15 }} />
+              <div className="skel__l1" style={{ width: '30%' }} />
             </div>
           ) : proximos.length > 0 ? (
             <>

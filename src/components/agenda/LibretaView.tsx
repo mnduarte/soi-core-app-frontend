@@ -13,6 +13,7 @@ import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { useFlip } from '../../hooks/useFlip';
 import { Icon } from '../common/Icon';
+import { FilasFantasma } from '../common/FilasFantasma';
 import { Avatar } from '../common/Avatar';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { StatusBadge, FichaPendingBadge } from '../common/StatusBadge';
@@ -223,11 +224,22 @@ export function LibretaView({
 
   // La lista de pacientes se abre al enfocar (aunque esté vacío): muestra
   // algunos y filtra en vivo a medida que se escribe.
-  const { data: searchResults = [] } = useQuery({
+  const { data: searchData } = useQuery({
     queryKey: ['patients', 'libreta-search', patientName],
     queryFn: () => patientsApi.findAll(patientName.trim() || undefined),
     enabled: searchOpen && !patientId,
   });
+
+  // Con `useMemo`: `searchData ?? []` a secas devolvía un array nuevo en cada
+  // render y hacía que los dos memos que dependen de él se recalcularan
+  // siempre, o sea que la dependencia no servía para nada.
+  const searchResults = useMemo(() => searchData ?? [], [searchData]);
+  // Se mide por "el dato todavía no existe" y no por `isLoading`: en el render
+  // en que se abre el desplegable la consulta recién se dispara, así que
+  // `isLoading` sigue en false y por un frame se pintaba "Sin coincidencias"
+  // —la respuesta equivocada— antes de empezar a esperar.
+  const buscandoPacientes = searchOpen && !patientId && searchData === undefined;
+
 
   // Sin nada escrito, la lista NO va alfabética: el backend ordena por apellido
   // y con `slice(0, 4)` salían siempre los mismos cuatro (los que empiezan con
@@ -553,7 +565,14 @@ export function LibretaView({
                     setSearchOpen(true);
                   }}
                   onFocus={() => setSearchOpen(true)}
-                  onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+                  // Cierra al instante, sin el `setTimeout(…, 150)` que tenía.
+                  // Ese retraso existía para que un click en la lista alcanzara
+                  // a registrarse antes de que el blur la cerrara, pero todas
+                  // las opciones usan `onMouseDown` con `preventDefault`: el
+                  // input nunca pierde el foco al tocarlas, así que ya no
+                  // protegía nada. Solo dejaba la lista de pacientes encima
+                  // 150ms mientras el panel de trabajo ya se había abierto.
+                  onBlur={() => setSearchOpen(false)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -615,12 +634,13 @@ export function LibretaView({
                       overflowY: 'auto',
                     }}
                   >
-                    {searchResults.length === 0 && !patientName.trim() && (
+                    {buscandoPacientes && <FilasFantasma filas={4} />}
+                    {!buscandoPacientes && searchResults.length === 0 && !patientName.trim() && (
                       <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-tertiary)' }}>
                         Sin coincidencias.
                       </div>
                     )}
-                    {sugeridosPacientes.map(p => (
+                    {!buscandoPacientes && sugeridosPacientes.map(p => (
                       <div
                         key={p._id}
                         onMouseDown={e => {

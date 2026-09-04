@@ -2358,24 +2358,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
      por separado). Sin esto crecía de a tirones. */
   min-height: 188px;
 }
-/* Con borde: como texto plano no se leía como algo tocable. */
-.bt-back {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 11px 5px 8px;
-  background: #fff;
-  border: 1px solid var(--border-input);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.bt-back:hover { background: var(--bg-muted); color: var(--text-primary); }
+
 
 /* Fantasma del bloque de "próximo turno": mismo alto que el real. */
 .bt-next--skel { gap: 7px; justify-content: center; }
@@ -2516,27 +2499,27 @@ table.tbl { width: 100%; border-collapse: collapse; }
   to   { opacity: 1; transform: none; }
 }
 
-.bt-skel { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
-.bt-skel__row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; }
-.bt-skel__av,
-.bt-skel__l1,
-.bt-skel__l2 {
+.skel { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
+.skel__row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; }
+.skel__av,
+.skel__l1,
+.skel__l2 {
   background: var(--bg-muted);
   border-radius: 6px;
 }
-.bt-skel__av { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; }
-.bt-skel__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.bt-skel__l1 { height: 10px; }
-.bt-skel__l2 { height: 8px; width: 34%; opacity: 0.65; }
+.skel__av { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; }
+.skel__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.skel__l1 { height: 10px; }
+.skel__l2 { height: 8px; width: 34%; opacity: 0.65; }
 
 /* El brillo va sobre `transform`, no sobre `background-position`: así corre en
    el compositor y no repinta en cada frame. */
-.bt-skel__av,
-.bt-skel__l1,
-.bt-skel__l2 { position: relative; overflow: hidden; }
-.bt-skel__av::after,
-.bt-skel__l1::after,
-.bt-skel__l2::after {
+.skel__av,
+.skel__l1,
+.skel__l2 { position: relative; overflow: hidden; }
+.skel__av::after,
+.skel__l1::after,
+.skel__l2::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -2558,9 +2541,9 @@ table.tbl { width: 100%; border-collapse: collapse; }
 @media (prefers-reduced-motion: reduce) {
   .bt-list--in,
   .bt-card { animation: none; }
-  .bt-skel__av::after,
-  .bt-skel__l1::after,
-  .bt-skel__l2::after { animation: none; }
+  .skel__av::after,
+  .skel__l1::after,
+  .skel__l2::after { animation: none; }
 }
 
 /* Tabla de pacientes: anchos fijos para que filtrar no recalcule las columnas.
@@ -2747,3 +2730,33 @@ table.tbl { width: 100%; border-collapse: collapse; }
   color: var(--text-tertiary);
   font-style: italic;
 }
+
+/* Piezas de la tarjeta que pueden llegar TARDE.
+   Se arma con tres consultas separadas (turnos, pendientes, saldo): la primera
+   vez, con la caché fría, cada bloque aparecía de golpe apenas volvía lo suyo.
+   La segunda vez ya estaba todo cacheado y entraba junto con la tarjeta, con
+   su fundido — por eso se sentía fluido solo a partir del segundo intento.
+   Cada bloque se funde al montarse, así que da igual cuándo llegue. */
+.bt-next,
+.bt-none,
+.bt-more,
+.bt-pend,
+.bt-money,
+.bt-remind,
+.bt-last {
+  animation: btIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* El esqueleto no: es lo que se está yendo, y fundirlo al entrar haría que la
+   espera arranque con un parpadeo. */
+.bt-next--skel { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .bt-next,
+  .bt-none,
+  .bt-more,
+  .bt-pend,
+  .bt-money,
+  .bt-remind,
+  .bt-last { animation: none; }
+}
+
+

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { changesApi, type ClinicChanges } from '../api/changes';
+import { changesApi, type ChangesResponse, type ClinicChanges } from '../api/changes';
 import { useAuthStore } from '../store/auth.store';
 
 // Sync cross-device (Opción 2 — heartbeat de versiones).
@@ -31,7 +31,8 @@ const POLL_MS = 10_000;
 export function useClinicChanges() {
   const qc = useQueryClient();
   const accessToken = useAuthStore(s => s.accessToken);
-  const prev = useRef<ClinicChanges | null>(null);
+  const isImpersonating = useAuthStore(s => s.isImpersonating);
+  const prev = useRef<ChangesResponse | null>(null);
 
   const { data } = useQuery({
     queryKey: ['clinic-changes'],
@@ -47,6 +48,27 @@ export function useClinicChanges() {
     staleTime: 0,
   });
 
+  // Cuenta sin acceso: se cierra la sesión sola.
+  //
+  // El backend ya lo cortaba, pero recién en el `refresh` — o sea al vencer el
+  // access token, hasta 15 minutos después. En el medio el consultorio seguía
+  // navegando una cuenta que el backoffice ya muestra "sin acceso". Acá baja a
+  // un latido (~10s) y no cuesta una request extra: el nivel ya venía en la
+  // respuesta, solo que nadie lo miraba para esto.
+  //
+  // Es un aviso anticipado, NO el que manda: quien corta de verdad sigue
+  // siendo el backend (`refresh` y el interceptor de escrituras). Si esto
+  // fallara, lo peor que pasa es que tarde los 15 minutos de antes.
+  useEffect(() => {
+    // Durante una sesión de soporte no: el operador entra a impersonar
+    // justamente para mirar la cuenta bloqueada, y esto lo patearía afuera.
+    if (isImpersonating) return;
+    if (data?.subscription?.level !== 'blocked') return;
+    useAuthStore.getState().clearAuth();
+    localStorage.removeItem('refreshToken');
+    window.location.replace('/login?reason=expired');
+  }, [data, isImpersonating]);
+
   useEffect(() => {
     if (!data) return;
     const before = prev.current;
@@ -55,11 +77,13 @@ export function useClinicChanges() {
     // (los datos de la página ya vienen frescos del load inicial).
     if (!before) return;
 
-    for (const key of Object.keys(data) as (keyof ClinicChanges)[]) {
-      if (data[key] > (before[key] ?? 0)) {
-        for (const queryKey of RESOURCE_QUERY_KEYS[key]) {
-          qc.invalidateQueries({ queryKey });
-        }
+    for (const key of Object.keys(data.resources) as (keyof ClinicChanges)[]) {
+      // Un recurso nuevo en el backend que el front todavía no conoce no debe
+      // romper el bucle: se ignora hasta que se le asignen queryKeys acá.
+      const keys = RESOURCE_QUERY_KEYS[key];
+      if (!keys) continue;
+      if (data.resources[key] > (before.resources[key] ?? 0)) {
+        for (const queryKey of keys) qc.invalidateQueries({ queryKey });
       }
     }
   }, [data, qc]);

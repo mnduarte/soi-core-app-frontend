@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/auth.store';
+import { useUIStore } from '../store/ui.store';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -32,6 +33,34 @@ apiClient.interceptors.response.use(
     // refresh + retry and the request hangs. (session-status DOES want the
     // refresh, so it's excluded from this guard.)
     const url: string = original?.url ?? '';
+
+    // Cuenta en mora: el backend rechaza TODA escritura con este código. Se
+    // avisa acá y no en cada pantalla porque los ~22 `onError` que hay tienen
+    // textos fijos ("No se pudo crear el paciente", "No se pudo guardar") que
+    // se leen como una falla del sistema: el Dr. reintentaría, cambiaría el
+    // dato, o llamaría por soporte por algo que en realidad es falta de pago.
+    // El cartel de arriba ya lo dice, pero recién en el momento en que aprieta
+    // Guardar se entiende que una cosa es consecuencia de la otra.
+    const errData = err.response?.data as
+      | { message?: { code?: string; message?: string } | string }
+      | undefined;
+    const payload = errData?.message;
+    if (
+      err.response?.status === 403 &&
+      typeof payload === 'object' &&
+      payload?.code === 'ACCOUNT_READONLY'
+    ) {
+      // Texto corto a propósito: el toast dura 3,5s y el mensaje completo del
+      // backend (155 caracteres) se va antes de que termine de leerse. El
+      // detalle y el "cómo lo soluciono" ya están en el cartel de arriba, que
+      // queda fijo; acá solo hace falta que no lo lea como un error del
+      // sistema. Por eso NO se usa `payload.message`.
+      useUIStore
+        .getState()
+        .showToast('No se guardó: la cuenta está en solo lectura por falta de pago.', 'error');
+      return Promise.reject(err);
+    }
+
     const isAuthFlow = url.includes('/auth/') && !url.includes('/auth/session-status');
     if (err.response?.status !== 401 || original._retry || isAuthFlow) {
       return Promise.reject(err);

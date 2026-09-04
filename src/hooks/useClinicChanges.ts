@@ -16,7 +16,10 @@ import { useAuthStore } from '../store/auth.store';
 // Mapa recurso → queryKeys a invalidar. Las keys son prefijos: invalidar
 // ['patient'] alcanza a ['patient', id], ['works'] a ['works', id, ...], etc.
 const RESOURCE_QUERY_KEYS: Record<keyof ClinicChanges, string[][]> = {
-  appointments: [['appointments']],
+  // Pacientes va también: la lista trae `nextVisitAt`/`nextCount`, que se
+  // calculan desde los turnos. Si no, un turno agendado en otro dispositivo
+  // dejaba la columna "Próximo turno" y el buscador mostrando datos viejos.
+  appointments: [['appointments'], ['patients']],
   dayNotes: [['day-notes']],
   patients: [['patients'], ['patient']],
   works: [['works']],

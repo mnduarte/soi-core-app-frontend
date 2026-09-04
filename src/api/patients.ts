@@ -23,7 +23,13 @@ export interface Patient {
   // Campos CALCULADOS por el backend en el listado (no se persisten):
   // última visita, cantidad de turnos y saldo (trabajos hechos − pagos).
   // saldo > 0 = el paciente debe. Solo vienen en findAll.
+  /** Alta de la ficha. Lo manda el backend; sirve para ordenar por actividad. */
+  createdAt?: string;
   lastVisitAt?: string | null;
+  /** Turno futuro más cercano. null = no tiene ninguno agendado. */
+  nextVisitAt?: string | null;
+  /** Cuántos turnos futuros tiene en total (la columna muestra el primero). */
+  nextCount?: number;
   appointmentsCount?: number;
   balance?: number;
 }

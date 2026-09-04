@@ -63,6 +63,14 @@ interface LibretaViewProps {
   selectedDate: Date;
   now: Date;
   isMobile: boolean;
+  /**
+   * Paciente traído desde el buscador de turnos: se carga en la fila de anotar
+   * sin crear nada. `n` cambia en cada elección para que volver a elegir al
+   * mismo paciente dispare el efecto de nuevo.
+   */
+  prefill?: { id: string; name: string; n: number } | null;
+  /** Turno al que se llegó desde el buscador: se resalta y se trae a la vista. */
+  resaltado?: string | null;
   onOpenPatient: (id: string, trabajo?: string) => void;
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
@@ -81,6 +89,8 @@ export function LibretaView({
   selectedDate,
   now,
   isMobile,
+  prefill,
+  resaltado,
   onOpenPatient,
   onResolve,
   onReschedule,
@@ -98,6 +108,33 @@ export function LibretaView({
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState('');
   const [trabajo, setTrabajo] = useState('');
+
+  // Llega un paciente desde el buscador: queda cargado y listo para anotar. No
+  // se agenda nada — elegir el día y la hora sigue siendo del doctor.
+  //
+  // Se ajusta DURANTE el render y no en un efecto (patrón "adjusting state when
+  // props change" de la doc de React). Con un efecto, la fila se pintaba una vez
+  // vacía y otra con el nombre: un parpadeo justo en el campo que el doctor está
+  // por tocar, y un render en cascada por cada elección.
+  const [prefillVisto, setPrefillVisto] = useState<number | null>(null);
+  const [nombrePuesto, setNombrePuesto] = useState(false);
+  if (prefill && prefill.n !== prefillVisto) {
+    setPrefillVisto(prefill.n);
+    setPatientId(prefill.id);
+    setPatientName(prefill.name);
+    setNombrePuesto(true);
+  }
+
+  // El nombre llegó desde el buscador, no lo escribió nadie: sin una señal, el
+  // modal se cierra y el campo aparece lleno como si siempre hubiera estado
+  // así. El destello dura lo que dura y se apaga solo; usa `lb-pop`, el mismo
+  // modismo que ya marca "esto acaba de cambiar" en el resto de la libreta.
+  useEffect(() => {
+    if (!nombrePuesto) return;
+    nameRef.current?.focus();
+    const t = setTimeout(() => setNombrePuesto(false), 700);
+    return () => clearTimeout(t);
+  }, [nombrePuesto]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [slotOpen, setSlotOpen] = useState(false);
   const [trabOpen, setTrabOpen] = useState(false);
@@ -165,13 +202,17 @@ export function LibretaView({
   const [createLinkTarget, setCreateLinkTarget] = useState<Appointment | null>(null);
   const remindMut = useMutation({
     mutationFn: (apptId: string) => appointmentsApi.markReminderSent(apptId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['appointments'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['patients'] });
+    },
   });
   const linkMut = useMutation({
     mutationFn: ({ apptId, patientId }: { apptId: string; patientId: string }) =>
       appointmentsApi.update(apptId, { patientId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['patients'] });
       setLinkPatientTarget(null);
       setLinkSelected(null);
       showToast('Paciente vinculado ✓');
@@ -187,6 +228,32 @@ export function LibretaView({
     queryFn: () => patientsApi.findAll(patientName.trim() || undefined),
     enabled: searchOpen && !patientId,
   });
+
+  // Sin nada escrito, la lista NO va alfabética: el backend ordena por apellido
+  // y con `slice(0, 4)` salían siempre los mismos cuatro (los que empiezan con
+  // A), que no le sirven a nadie. Se ordena por actividad reciente —lo más
+  // nuevo entre la última visita y el alta— porque a quien más se agenda es al
+  // que acaba de ser atendido y está sacando el próximo turno, o al que se
+  // acaba de dar de alta.
+  const sugeridosPacientes = useMemo(() => {
+    if (patientName.trim()) return searchResults.slice(0, 8);
+    const cuando = (p: Patient) =>
+      Math.max(
+        p.lastVisitAt ? new Date(p.lastVisitAt).getTime() : 0,
+        p.createdAt ? new Date(p.createdAt).getTime() : 0,
+      );
+    return [...searchResults].sort((a, b) => cuando(b) - cuando(a)).slice(0, 8);
+  }, [searchResults, patientName]);
+
+  // ¿Lo escrito es exactamente un paciente que ya existe? Si sí, no se ofrece
+  // crearlo: sería un duplicado del que está justo arriba en la lista.
+  const hayExacto = useMemo(() => {
+    const q = patientName.trim().toLowerCase();
+    if (!q) return false;
+    return searchResults.some(
+      p => `${p.name} ${p.lastName}`.trim().toLowerCase() === q,
+    );
+  }, [searchResults, patientName]);
 
   // Horarios ya ocupados del día → para marcar slots y detectar sobreturno.
   const takenSet = useMemo(() => {
@@ -252,6 +319,7 @@ export function LibretaView({
         allowOverlap: isSobreturno,
       });
       qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['patients'] });
 
       const firstName = ((finalPatientId && patientMap.get(finalPatientId)?.name) || name).split(' ')[0];
       showToast(
@@ -271,7 +339,27 @@ export function LibretaView({
     }
   };
 
-  const addChip = (c: string) => setTrabajo(t => (t.trim() ? `${t.trim()} ${c}` : c));
+  // Al elegir un trabajo el panel se cierra: tapaba las filas del día y había
+  // que tocar afuera para sacarlo. Se puede seguir combinando varios ("op
+  // limp") —el texto se acumula, no se reemplaza— tocando de nuevo el campo,
+  // que vuelve a abrirlo. Un toque de más solo en el caso menos frecuente.
+  const addChip = (c: string) => {
+    setTrabajo(t => (t.trim() ? `${t.trim()} ${c}` : c));
+    setTrabOpen(false);
+  };
+
+  // La fila resaltada se trae a la vista. Va con un respiro de 220ms: es lo
+  // que tarda la transición de día, y sin esperar el scroll apuntaría a donde
+  // la fila estaba antes de que el día terminara de entrar.
+  useEffect(() => {
+    if (!resaltado) return;
+    const t = setTimeout(() => {
+      document
+        .querySelector(`[data-flip="${resaltado}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 220);
+    return () => clearTimeout(t);
+  }, [resaltado]);
 
   const startSobreturno = (t: string) => {
     setTime(t);
@@ -455,7 +543,7 @@ export function LibretaView({
                 />
                 <input
                   ref={nameRef}
-                  className="input"
+                  className={`input ${patientId ? 'lb-linked' : ''} ${nombrePuesto ? 'lb-landed' : ''}`}
                   placeholder="Paciente…"
                   data-quick-add-patient
                   value={patientName}
@@ -477,14 +565,36 @@ export function LibretaView({
                     }
                     if (e.key === 'Escape') setSearchOpen(false);
                   }}
-                  style={{ width: '100%', paddingLeft: 32 }}
+                  style={{ width: '100%', paddingLeft: 32, paddingRight: 38 }}
                 />
-                {patientId && (
-                  <Icon
-                    name="check"
-                    size={14}
-                    style={{ position: 'absolute', right: 10, top: 12, color: 'var(--success)' }}
-                  />
+                {/* La X reemplaza al ✓ en este lugar porque son cosas
+                    distintas: el ✓ era una confirmación (se lee una vez), la X
+                    es una acción y en tablet necesita un blanco de verdad. La
+                    confirmación pasa a decirse con color —ver `lb-linked`—, que
+                    no consume el único slot tocable del campo.
+                    Borra SOLO el paciente: la hora y el trabajo quedan, porque
+                    el error habitual es equivocarse de persona y no querer
+                    volver a cargar todo lo demás. */}
+                {(patientId || patientName.trim()) && (
+                  <button
+                    type="button"
+                    className="lb-clear"
+                    title="Quitar el paciente"
+                    aria-label="Quitar el paciente"
+                    // Sin esto, tocar el botón hace que el input pierda el
+                    // foco, y su `onBlur` cierra el desplegable 150ms después
+                    // —justo después de que lo abrimos—. Prevenir el mousedown
+                    // evita el blur y la lista queda abierta.
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => {
+                      setPatientId(null);
+                      setPatientName('');
+                      setSearchOpen(true);
+                      nameRef.current?.focus();
+                    }}
+                  >
+                    <Icon name="x" size={13} />
+                  </button>
                 )}
                 {searchOpen && !patientId && (
                   <div
@@ -505,35 +615,12 @@ export function LibretaView({
                       overflowY: 'auto',
                     }}
                   >
-                    {searchResults.length === 0 && patientName.trim() && (
-                      <div
-                        onMouseDown={e => {
-                          e.preventDefault();
-                          quickCreateMut.mutate(patientName.trim());
-                        }}
-                        style={{
-                          padding: '10px 12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          cursor: quickCreateMut.isPending ? 'wait' : 'pointer',
-                          fontSize: 12,
-                          fontWeight: 500,
-                          color: 'var(--brand-primary-600)',
-                          background: 'var(--brand-primary-50)',
-                          opacity: quickCreateMut.isPending ? 0.6 : 1,
-                        }}
-                      >
-                        <Icon name="plus" size={14} />
-                        {quickCreateMut.isPending ? 'Creando...' : `Crear: ${patientName.trim()}`}
-                      </div>
-                    )}
                     {searchResults.length === 0 && !patientName.trim() && (
                       <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-tertiary)' }}>
                         Sin coincidencias.
                       </div>
                     )}
-                    {searchResults.slice(0, patientName.trim() ? 8 : 4).map(p => (
+                    {sugeridosPacientes.map(p => (
                       <div
                         key={p._id}
                         onMouseDown={e => {
@@ -559,12 +646,41 @@ export function LibretaView({
                         )}
                       </div>
                     ))}
-                    {patientName.trim().length >= 1 && (
+                    {/* Crear ficha nueva.
+                        Va SIEMPRE que haya texto sin coincidencia exacta, no
+                        solo cuando la búsqueda vuelve vacía: escribir "Bruno
+                        Castro r" matchea parcialmente con "Bruno Castrooo" y
+                        antes eso escondía la opción, dejando sin forma de dar
+                        de alta a alguien con apellido parecido.
+                        Va ABAJO de las coincidencias a propósito: primero
+                        buscar entre los que ya existen, crear como último
+                        recurso. Al revés se llena de fichas duplicadas.
+                        Antes acá había un texto que decía "Enter para anotar
+                        sin ficha": no se podía tocar, y Enter no hacía eso. */}
+                    {patientName.trim() && !hayExacto && (
                       <div
-                        onMouseDown={e => { e.preventDefault(); setSearchOpen(false); }}
-                        style={{ padding: '9px 12px', fontSize: 12, color: 'var(--text-tertiary)', background: 'var(--bg-muted)' }}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          if (!quickCreateMut.isPending) quickCreateMut.mutate(patientName.trim());
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          cursor: quickCreateMut.isPending ? 'wait' : 'pointer',
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          color: 'var(--brand-primary-600)',
+                          background: 'var(--brand-primary-50)',
+                          borderTop: '1px solid var(--border-subtle)',
+                          opacity: quickCreateMut.isPending ? 0.6 : 1,
+                        }}
                       >
-                        Enter para anotar <b style={{ color: 'var(--text-secondary)' }}>«{patientName.trim()}»</b> sin ficha
+                        <Icon name="plus" size={14} />
+                        {quickCreateMut.isPending
+                          ? 'Creando…'
+                          : `Crear ficha: «${patientName.trim()}»`}
                       </div>
                     )}
                   </div>
@@ -579,6 +695,10 @@ export function LibretaView({
                   value={trabajo}
                   onChange={e => setTrabajo(e.target.value)}
                   onFocus={() => setTrabOpen(true)}
+                  // Además de onFocus: si el campo YA tiene el foco, enfocar no
+                  // vuelve a dispararse y el panel no se podría reabrir para
+                  // sumar un segundo trabajo.
+                  onClick={() => setTrabOpen(true)}
                   onKeyDown={e => e.key === 'Enter' && anotar()}
                   style={{ width: '100%' }}
                 />
@@ -675,7 +795,7 @@ export function LibretaView({
                     <div
                       key={a._id}
                       data-flip={a._id}
-                      className={`lb-row ${a._id === outApptId ? 'lb-rowout' : ''}`}
+                      className={`lb-row ${a._id === outApptId ? 'lb-rowout' : ''} ${a._id === resaltado ? 'lb-found' : ''}`}
                       style={{
                         // Sin `transparent` explícito: un fondo inline le gana a
                         // .lb-flip, y la fila que se mueve necesita ser opaca

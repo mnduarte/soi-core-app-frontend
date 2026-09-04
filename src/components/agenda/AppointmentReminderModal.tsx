@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, FormField } from '../common/Modal';
 import { Icon } from '../common/Icon';
 import { toWhatsAppNumber } from '../../lib/phone';
+import { buildMsg } from '../../lib/reminder';
 
 interface Props {
   open: boolean;
@@ -13,12 +14,6 @@ interface Props {
   clinicName?: string;
   alreadySent?: boolean;
   onSent: () => void; // marca el turno como recordado
-}
-
-// Sin emojis a propósito: WhatsApp Desktop los recibe rotos (�) cuando vienen
-// pre-cargados por link. El texto queda limpio en todos los dispositivos.
-function buildMsg(firstName: string, clinic: string, dateLabel: string, time: string): string {
-  return `Hola ${firstName}, te escribimos de ${clinic}. Te recordamos tu turno el ${dateLabel} a las ${time} hs. Si no podés venir, avisanos así lo reprogramamos. ¡Te esperamos!`;
 }
 
 export function AppointmentReminderModal({

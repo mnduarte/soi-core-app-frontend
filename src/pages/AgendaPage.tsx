@@ -16,6 +16,7 @@ import { ResolveMenu } from '../components/common/ResolveMenu';
 import { NewClinicalEntryModal } from '../components/patient/NewClinicalEntryModal';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { LibretaView } from '../components/agenda/LibretaView';
+import { BuscarTurnoModal } from '../components/agenda/BuscarTurnoModal';
 import { useIsMobile } from '../hooks/useIsMobile';
 import {
   hhmm,
@@ -145,6 +146,7 @@ export default function AgendaPage() {
       appointmentsApi.updateStatus(id, status),
     onSuccess: updated => {
       qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['patients'] });
       const p = updated.patientId ? patientMap.get(updated.patientId) : undefined;
       const name = p ? `${p.name} ${p.lastName}` : updated.patientName ?? 'paciente';
       showToast(toastForStatus(name, updated.status));
@@ -160,7 +162,8 @@ export default function AgendaPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => appointmentsApi.hardRemove(id),
     onSuccess: () => showToast('Turno borrado'),
-    onError: () => { qc.invalidateQueries({ queryKey: ['appointments'] }); showToast('No se pudo borrar el turno', 'error'); },
+    onError: () => { qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['patients'] }); showToast('No se pudo borrar el turno', 'error'); },
   });
 
   // Turno que se está yendo: se marca, se lo deja desvanecerse y recién ahí
@@ -193,6 +196,7 @@ export default function AgendaPage() {
     } catch {
       showToast('No se pudo guardar el trabajo', 'error');
       qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['patients'] });
     }
   };
 
@@ -236,16 +240,23 @@ export default function AgendaPage() {
         : appts.filter(a => sameDay(new Date(a.startsAt), selectedDate)),
     [appts, view, selectedDate],
   );
+  // Sobre `appts` —el período que se está viendo— y no sobre `dayList`, que es
+  // solo el día seleccionado. La fila de números se muestra únicamente en
+  // Semana y Mes, así que contaba una cosa mientras el encabezado de al lado
+  // contaba otra: "Turnos de la semana · 3" arriba y "Turnos 1" abajo.
+  // En Libreta no cambia nada: ahí `dayList` y `appts` son lo mismo.
   const unresolved = useMemo(
-    () => dayList.filter(a => needsResolution(a, now)),
-    [dayList, now],
+    () => appts.filter(a => needsResolution(a, now)),
+    [appts, now],
   );
   const stats = useMemo(() => {
-    const completed = dayList.filter(a => a.status === 'COMPLETED').length;
-    const confirmed = dayList.filter(a => a.status === 'CONFIRMED' || a.status === 'SCHEDULED').length;
-    const pending = dayList.filter(a => a.status === 'IN_PROGRESS').length;
-    return { total: dayList.length, completed, confirmed, pending };
-  }, [dayList]);
+    const completed = appts.filter(a => a.status === 'COMPLETED').length;
+    const confirmed = appts.filter(
+      a => a.status === 'CONFIRMED' || a.status === 'SCHEDULED',
+    ).length;
+    const pending = appts.filter(a => a.status === 'IN_PROGRESS').length;
+    return { total: appts.length, completed, confirmed, pending };
+  }, [appts]);
 
   // Las vistas están ordenadas de más chica a más grande (día → semana → mes).
   // Ir hacia una más amplia desliza para un lado; volver, para el otro.
@@ -266,6 +277,34 @@ export default function AgendaPage() {
     : view === 'month' ? selectedDate.getFullYear() === hoy.getFullYear() && selectedDate.getMonth() === hoy.getMonth()
     : sameDay(selectedDate, hoy);
   const hoyLabel = view === 'week' ? 'Esta semana' : view === 'month' ? 'Este mes' : 'Hoy';
+
+  // Buscador de turnos por paciente. `prefill` no crea nada: lleva el paciente
+  // elegido a la fila de anotar para no tener que reescribir el apellido con la
+  // persona esperando en el teléfono. El `n` hace que elegir dos veces al mismo
+  // paciente vuelva a disparar el efecto.
+  const [buscarOpen, setBuscarOpen] = useState(false);
+  const [prefill, setPrefill] = useState<{ id: string; name: string; n: number } | null>(null);
+  // Turno a resaltar tras llegar desde el buscador. Se apaga solo: es un
+  // "mirá acá", no un estado de selección que haya que deshacer.
+  const [resaltado, setResaltado] = useState<string | null>(null);
+
+  // Atajo de teclado: con el teléfono en la mano, escribir es más rápido que
+  // apuntar. Se ignora si el foco está en un campo, para no robarle la barra a
+  // quien está tipeando el nombre de un paciente.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const escribiendo =
+        !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (escribiendo) return;
+      if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        setBuscarOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const viewSeg = (
     <div className="seg">
@@ -356,7 +395,52 @@ export default function AgendaPage() {
         </div>
 
         {viewSeg}
+
+        {/* Va acá y no en la fila de anotar a propósito: es otra franja, así
+            que no compite con el campo de paciente/trabajo.
+            Con etiqueta y no solo la lupa: un ícono suelto al lado de un
+            selector de vistas se lee como decoración y nadie lo toca. El texto
+            dice el resultado ("buscar turno"), no el mecanismo. */}
+        <button
+          className="lb-find"
+          onClick={() => setBuscarOpen(true)}
+          title="¿Cuándo tiene turno un paciente?  ( / )"
+          aria-label="Buscar el turno de un paciente"
+        >
+          <Icon name="search" size={15} />
+          {!isMobile && <span>Buscar turno</span>}
+        </button>
       </div>
+
+      {/* Montado solo mientras está abierto: así cada consulta arranca en
+          blanco sin tener que limpiar estado a mano. */}
+      {buscarOpen && (
+      <BuscarTurnoModal
+        open
+        now={now}
+        onClose={() => setBuscarOpen(false)}
+        onVerFicha={id => {
+          setBuscarOpen(false);
+          navigate(`/ficha-rapida/${id}`);
+        }}
+        onAgendar={p => {
+          setBuscarOpen(false);
+          setPrefill({ id: p._id, name: `${p.name} ${p.lastName}`.trim(), n: Date.now() });
+        }}
+        onIrAlTurno={a => {
+          // NO se cierra el modal acá: lo cierra el propio vuelo, cuando
+          // termina. Cerrarlo antes borraría la tarjeta que está viajando.
+          // Siempre a la libreta: en Semana o Mes la fila no existe como tal y
+          // no habría nada que resaltar.
+          if (view !== 'libreta') goToView('libreta');
+          goToDate(new Date(a.startsAt));
+          setResaltado(a._id);
+          // El resaltado se apaga solo. Dura lo suficiente para encontrar la
+          // fila después de que el día termine de entrar.
+          setTimeout(() => setResaltado(null), 2600);
+        }}
+      />
+      )}
 
       {/* Stats — ocultos en la vista Libreta (tiene su propio encabezado). En
           mobile entran en una sola línea (labels abreviados, sin wrap). */}
@@ -426,6 +510,8 @@ export default function AgendaPage() {
           outApptId={outApptId}
           now={now}
           isMobile={isMobile}
+          prefill={prefill}
+          resaltado={resaltado}
           onOpenPatient={(id, trabajo) =>
             navigate(`/ficha-rapida/${id}${trabajo ? `?trabajo=${encodeURIComponent(trabajo)}` : ''}`)
           }

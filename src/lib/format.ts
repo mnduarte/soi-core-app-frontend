@@ -66,6 +66,23 @@ export const relativeDay = (iso?: string | null): string => {
   return `hace ${Math.round(days / 30)} meses`;
 };
 
+// El espejo de `relativeDay`, hacia adelante: "hoy" / "mañana" / "en 5 días".
+// `now` entra por parámetro para que los componentes que ya tienen un reloj
+// propio (la agenda late cada minuto) no queden desfasados con lo de al lado.
+export const relativeSoon = (iso?: string | null, now: Date = new Date()): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(d) - startOf(now)) / 86400000);
+  if (days < 0) return relativeDay(iso);
+  if (days === 0) return 'hoy';
+  if (days === 1) return 'mañana';
+  if (days < 14) return `en ${days} días`;
+  if (days < 60) return `en ${Math.round(days / 7)} sem.`;
+  return `en ${Math.round(days / 30)} meses`;
+};
+
 export const initialsOf = (first: string, last?: string): string => {
   const f = (first ?? '').trim();
   const l = (last ?? '').trim();

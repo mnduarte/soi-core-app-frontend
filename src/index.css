@@ -2257,3 +2257,493 @@ table.tbl { width: 100%; border-collapse: collapse; }
   }
 }
 @media (prefers-reduced-motion: reduce) { .lb-twpanel { animation: none; } }
+
+/* =============================================================================
+   Buscador de turnos por paciente (agenda)
+   "¿Cuándo tengo turno?" preguntado por teléfono. Ver BuscarTurnoModal.tsx.
+   ========================================================================== */
+.bt-list {
+  margin-top: 10px;
+  /* Alto FIJO, no mínimo.
+     Con `min-height` el modal seguía creciendo según cuántos resultados
+     hubiera: escribir una letra más y pasar de 3 coincidencias a ninguna lo
+     hacía saltar de tamaño en cada tecla. Un buscador se usa tipeando, así que
+     eso pasaba todo el tiempo.
+     Con alto fijo la caja no se mueve nunca: sobra espacio con pocos
+     resultados y scrollea cuando hay muchos, pero el modal es siempre el
+     mismo y el cursor no se corre de lugar mientras escribís. */
+  height: 268px;
+  overflow-y: auto;
+  /* La lista scrollea: un panel absoluto acá quedaría recortado. */
+  isolation: isolate;
+}
+.bt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* Ocupa el alto fijo de la lista: así el mensaje queda centrado en la caja
+     en lugar de pegado arriba con un vacío abajo. */
+  height: 100%;
+  gap: 6px;
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: center;
+}
+.bt-empty svg { color: var(--text-placeholder); margin-bottom: 2px; }
+.bt-empty span {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+.bt-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 10px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms;
+}
+.bt-item:last-child { border-bottom: 0; }
+.bt-item:hover { background: var(--bg-hover); }
+
+/* Cuándo viene, alineado a la derecha: en columna se compara entre filas. */
+.bt-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  line-height: 1.3;
+}
+.bt-when__rel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-primary);
+}
+.bt-when__h {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+/* Los items de flex arrancan en min-width:auto y desbordan con nombres largos. */
+.bt-item__txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.bt-item__name {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bt-item__sub { font-size: 12px; color: var(--text-tertiary); }
+
+.bt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Mismo fundido que la lista: el modal cambia de contenido entero (buscador
+     -> ficha del turno) y sin transición se lee como un corte de plano. Es el
+     caso donde animar SÍ corresponde: lo provocó el usuario al tocar la fila, y
+     hay un cambio de estado real que conviene acusar. */
+  animation: btIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* Alto reservado: la tarjeta arranca con su tamaño final y no salta cuando
+     llegan los turnos, los pendientes y el saldo (tres consultas que vuelven
+     por separado). Sin esto crecía de a tirones. */
+  min-height: 188px;
+}
+/* Con borde: como texto plano no se leía como algo tocable. */
+.bt-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px 5px 8px;
+  background: #fff;
+  border: 1px solid var(--border-input);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bt-back:hover { background: var(--bg-muted); color: var(--text-primary); }
+
+/* Fantasma del bloque de "próximo turno": mismo alto que el real. */
+.bt-next--skel { gap: 7px; justify-content: center; }
+
+/* El próximo turno es LA respuesta: se tiene que leer de una. */
+.bt-next {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+.bt-next__when {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-primary);
+}
+.bt-next__date { font-size: 18px; line-height: 1.25; }
+.bt-next__time { font-size: 15px; font-weight: 600; }
+.bt-next__work { margin-top: 4px; font-size: 12.5px; color: var(--text-secondary); }
+
+.bt-more, .bt-pend { display: flex; flex-direction: column; gap: 3px; }
+.bt-more__lbl, .bt-pend__lbl {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.bt-more__row, .bt-pend__row { font-size: 13px; color: var(--text-secondary); }
+/* Los turnos siguientes también llevan a la agenda. Como botón pero discretos:
+   el que manda sigue siendo el bloque grande de arriba. */
+.bt-more__row--go {
+  align-self: flex-start;
+  padding: 3px 7px;
+  margin-left: -7px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.bt-more__row--go:hover {
+  background: var(--brand-primary-50);
+  color: var(--brand-primary);
+}
+
+.bt-none {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--bg-muted);
+  border: 1px dashed var(--border-subtle);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.bt-none strong { font-size: 14.5px; color: var(--text-primary); }
+
+.bt-last { font-size: 12px; color: var(--text-tertiary); }
+
+.bt-money {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* En pantallas táctiles el objetivo mínimo son 44px, sin cambiar el layout. */
+@media (pointer: coarse) {
+  .bt-item { position: relative; }
+  .bt-item::after {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+  }
+}
+
+/* Botón del buscador de turnos, en la barra de la agenda. Tinte de marca —como
+   los íconos del sidebar— para que se lea como una acción y no como adorno. */
+.lb-find {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--brand-primary-100);
+  border-radius: 9px;
+  background: var(--brand-primary-50);
+  color: var(--brand-primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lb-find:hover { background: var(--brand-primary-100); }
+.lb-find svg { flex-shrink: 0; }
+
+/* Encabezado de la lista sugerida ("Con turno próximo"). */
+.bt-lbl__n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: var(--brand-primary-50);
+  color: var(--brand-primary);
+  font-size: 10.5px;
+}
+.bt-lbl {
+  display: block;
+  padding: 2px 6px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+
+/* Filas fantasma del buscador de turnos. */
+.bt-list--in { animation: btIn 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes btIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.bt-skel { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
+.bt-skel__row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; }
+.bt-skel__av,
+.bt-skel__l1,
+.bt-skel__l2 {
+  background: var(--bg-muted);
+  border-radius: 6px;
+}
+.bt-skel__av { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; }
+.bt-skel__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.bt-skel__l1 { height: 10px; }
+.bt-skel__l2 { height: 8px; width: 34%; opacity: 0.65; }
+
+/* El brillo va sobre `transform`, no sobre `background-position`: así corre en
+   el compositor y no repinta en cada frame. */
+.bt-skel__av,
+.bt-skel__l1,
+.bt-skel__l2 { position: relative; overflow: hidden; }
+.bt-skel__av::after,
+.bt-skel__l1::after,
+.bt-skel__l2::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: btShimmer 1150ms linear infinite;
+}
+@keyframes btShimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* Hay gente a la que el movimiento le produce mareo: el esqueleto se queda
+   quieto y sigue cumpliendo su función, que es reservar el espacio. */
+@media (prefers-reduced-motion: reduce) {
+  .bt-list--in,
+  .bt-card { animation: none; }
+  .bt-skel__av::after,
+  .bt-skel__l1::after,
+  .bt-skel__l2::after { animation: none; }
+}
+
+/* Tabla de pacientes: anchos fijos para que filtrar no recalcule las columnas.
+   Scopeado con `--fix` porque `.tbl` también la usan Pagos y la ficha, donde
+   el ancho automático está bien. */
+.tbl--fix { table-layout: fixed; }
+.tbl--fix td,
+.tbl--fix th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Nota: acá hubo un intento con `content-visibility: auto` sobre las filas. No
+   sirve: la contención de CSS no se aplica a los elementos internos de tabla
+   (`display: table-row`), así que era un no-op. Las 379 filas se construían
+   igual. La solución real es no construirlas: ver el render incremental en
+   PatientsPage. */
+
+/* El paciente llegó desde el buscador de turnos: el campo avisa que se llenó
+   solo. Un destello del borde y del fondo —no un movimiento— porque el campo
+   está justo donde tiene que estar y correrlo obligaría a volver a encontrarlo.
+   Se apaga en 700ms sin que nadie lo apague. */
+.lb-landed {
+  animation: landed 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes landed {
+  0%   { border-color: var(--brand-primary); background: var(--brand-primary-50); }
+  60%  { border-color: var(--brand-primary); background: var(--brand-primary-50); }
+  100% { border-color: var(--border-input); background: #fff; }
+}
+@media (prefers-reduced-motion: reduce) { .lb-landed { animation: none; } }
+
+/* Paciente vinculado a una ficha, distinto de un nombre suelto: el turno se
+   engancha a su historia. Antes lo decía un ✓ a la derecha, que ocupaba el
+   único lugar tocable del campo. Ahora lo dice el campo mismo —barra verde y
+   nombre en tinta plena— y ese lugar queda para la acción de quitarlo. */
+.lb-linked {
+  /* La barra va como `box-shadow` interior y NO como `border-left`: al enfocar,
+     `.input:focus` reescribe `border` entero y se llevaba el verde puesto justo
+     cuando el campo está activo, que es cuando más se mira. El box-shadow
+     sobrevive porque es otra propiedad. */
+  box-shadow: inset 3px 0 0 var(--success);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+/* Con foco conviven los dos: la barra verde (vinculado) y el anillo de marca
+   (activo). Son dos cosas distintas y las dos importan al mismo tiempo. */
+.lb-linked:focus {
+  box-shadow: inset 3px 0 0 var(--success), 0 0 0 3px var(--brand-primary-100);
+}
+
+/* Quitar lo escrito en el campo de paciente.
+   Va en cajita con borde —el mismo idioma que los íconos de acción de cada
+   fila (`.lb-act__ic`)— porque suelto no se distinguía del texto: parecía
+   decoración y nadie lo tocaba. En reposo es gris, no rojo: es una acción menor
+   y no tiene que competir con "Anotar". El rojo aparece recién al apuntarle,
+   que es cuando conviene avisar que borra. */
+.lb-clear {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-input);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.lb-clear:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+@media (pointer: coarse) {
+  .lb-clear::after { content: ''; position: absolute; inset: -11px; }
+}
+
+/* El bloque grande de la tarjeta es además el camino a la agenda. Como botón,
+   pero sin parecer uno: el dato tiene que seguir leyéndose primero. */
+.bt-next--go {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bt-next--go:hover {
+  background: var(--brand-primary-50);
+  border-color: var(--brand-primary-100);
+}
+/* Siempre visible, no solo al apuntar.
+   Con `opacity: 0` el texto seguía ocupando su renglón: el bloque se veía con
+   un hueco abajo que no se entendía, y en táctil —donde no hay hover— nadie se
+   enteraba de que se podía tocar. Visible y apagado resuelve las dos cosas sin
+   reservar espacio muerto. */
+.bt-next__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  transition: color 140ms;
+}
+.bt-next__go::after { content: '→'; }
+.bt-next--go:hover .bt-next__go,
+.bt-next--go:focus-visible .bt-next__go { color: var(--brand-primary); }
+
+/* Fila a la que se llegó desde el buscador. El fondo se enciende y se apaga
+   solo: dice "es esta" sin dejar un estado seleccionado que después haya que
+   limpiar. Solo color —nada de mover la fila—, que el ojo ya está viajando
+   hasta acá por el scroll. */
+.lb-found { animation: found 2.4s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes found {
+  0%   { background: var(--brand-primary-100); }
+  15%  { background: var(--brand-primary-100); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-found { animation: none; box-shadow: inset 3px 0 0 var(--brand-primary); }
+}
+
+/* Recordarle el turno al paciente.
+   Bloque propio, separado por una línea: mezclado con el turno de arriba y el
+   "Último" de abajo se leía como una fila más de texto y no como acciones.
+   Copiar está SIEMPRE, no solo cuando falta el teléfono: muchos avisan por otro
+   canal y reescribir el mensaje a mano era el camino que quedaba. */
+.bt-remind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.bt-remind__lbl {
+  width: 100%;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.bt-remind__wa,
+.bt-remind__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Verde pleno: es la acción que más se usa y tiene que verse de una. */
+.bt-remind__wa {
+  border: 1px solid var(--success);
+  background: var(--success);
+  color: #fff;
+}
+.bt-remind__wa:hover { filter: brightness(0.94); }
+.bt-remind__copy {
+  border: 1px solid var(--border-input);
+  background: #fff;
+  color: var(--text-secondary);
+}
+.bt-remind__copy:hover { background: var(--bg-muted); color: var(--text-primary); }
+/* Sin teléfono no se esconde el problema: se dice, y al lado queda el camino
+   que sí sirve (copiar). */
+.bt-remind__no {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}

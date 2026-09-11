@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { useFlip } from '../hooks/useFlip';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { patientsApi, type Patient } from '../api/patients';
@@ -9,6 +8,9 @@ import { clinicsApi } from '../api/clinics';
 import { useUIStore } from '../store/ui.store';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { Icon } from '../components/common/Icon';
+import { VisorFotos, type FotoVisor } from '../components/common/VisorFotos';
+import { FichaEsqueleto } from '../components/patient/FichaEsqueleto';
+import { Desplegable } from '../components/common/Desplegable';
 import { Avatar } from '../components/common/Avatar';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { OdontogramCard } from '../components/patient/OdontogramCard';
@@ -16,7 +18,6 @@ import { GalleryContainer } from '../components/gallery/GalleryContainer';
 import { CustomTreatmentsModal } from '../components/common/CustomTreatmentsModal';
 import { SectionHeader } from '../components/common/SectionHeader';
 import { DatePicker } from '../components/common/DatePicker';
-import { Select } from '../components/common/Select';
 import { galleryApi, photoTypeLabel, type GalleryPhoto } from '../api/gallery';
 import { fmtMoney, patientAge } from '../lib/format';
 import { toWhatsAppNumber } from '../lib/phone';
@@ -53,6 +54,16 @@ function num(s: string): number {
 // coincidir con la animación `rowOut` de index.css.
 const ROW_OUT_MS = 120;
 
+// Lo que tarda un desplegable en contraerse (`Desplegable`, 140ms) más un
+// margen. Se usa para NO refrescar datos mientras eso pasa: un refetch
+// vuelve a dibujar la ficha entera, y esa animación corre en el hilo
+// principal, así que se queda sin frames y se ve a los tirones. Los datos
+// llegan 160ms más tarde y nadie lo nota; los saltos sí se notan.
+const COLAPSO_MS = 160;
+
+// Correlativo para los ids provisorios de las filas optimistas.
+let secuenciaTemp = 0;
+
 export default function FichaRapidaPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -62,7 +73,7 @@ export default function FichaRapidaPage() {
   const openModal = useUIStore(s => s.openModal);
 
   // ---- paciente seleccionado ----
-  const { data: patient } = useQuery({
+  const { data: patient, isPending: patientPending } = useQuery({
     queryKey: ['patient', id],
     queryFn: () => patientsApi.findById(id!),
     enabled: Boolean(id),
@@ -94,11 +105,19 @@ export default function FichaRapidaPage() {
 
   // Inline mostramos solo los N más recientes de cada historial; PAGE = tamaño
   // de página de los modales ("Cargar más").
-  const CAP = 5;
   // Se traen mas de los que se van a ver: la cantidad visible depende del alto
   // disponible en pantalla, asi que conviene tenerlos ya en memoria.
   const HECHOS_FETCH = 25;
   const PAGE = 20;
+  /**
+   * Cuántos trabajos se muestran en la ficha sin filtrar.
+   *
+   * La ficha es "qué pasó últimamente y qué falta", no el archivo del paciente:
+   * pasados los veinte, seguir escupiendo filas hace scrollear para encontrar
+   * algo que se busca mejor por fecha o por nombre. Se traen 40 igual —el doble—
+   * para saber si hay más sin pedir otra consulta.
+   */
+  const INLINE_MAX = 20;
 
   // ---- datos: trabajos (works) + pagos (transactions) ----
   // Pendientes = plan de tratamiento (pocos, se traen enteros). Hechos recientes
@@ -109,11 +128,36 @@ export default function FichaRapidaPage() {
     queryFn: () => worksApi.findAll(id!, { status: 'pending' }),
     enabled: Boolean(id),
   });
+  // UNA sola lista: sin `status` el backend devuelve todo ordenado por
+  // createdAt desc. Antes eran dos consultas y dos secciones (Plan / Hechos), y
+  // marcar un trabajo como hecho lo hacía saltar de una a la otra — el salto que
+  // el FLIP venía a explicar. Con una lista sola no hay salto que explicar.
   const { data: hechosRecent = [] } = useQuery({
     queryKey: ['works', id, 'done', 'recent'],
     queryFn: () => worksApi.findAll(id!, { status: 'done', limit: HECHOS_FETCH }),
     enabled: Boolean(id),
   });
+  const { data: todosLosTrabajos = [], isPending: worksPending } = useQuery({
+    queryKey: ['works', id, 'todos'],
+    queryFn: () => worksApi.findAll(id!, { limit: 40 }),
+    enabled: Boolean(id),
+  });
+  /**
+   * Entre elegir un paciente y ver su ficha hay unas décimas de red. Antes en
+   * esas décimas quedaba el buscador vacío en pantalla y después aparecía todo
+   * de golpe: se leía como que el toque no había registrado.
+   *
+   * Se espera al paciente Y a la lista de trabajos y se muestran juntos. Que
+   * entre primero el encabezado y después la tabla serían dos movimientos
+   * encadenados, que se sienten más lentos que uno solo.
+   *
+   * `isPending` es "todavía no hay nada", no "está refrescando": una
+   * invalidación después de agregar un trabajo conserva los datos y no vuelve
+   * a mostrar el esqueleto. Y si el paciente ya está en caché —volver a uno que
+   * se miró recién— esto es falso desde el primer frame: no hay parpadeo.
+   */
+  const cargandoFicha = Boolean(id) && (patientPending || worksPending);
+
   const { data: summary } = useQuery({
     queryKey: ['works', id, 'summary'],
     queryFn: () => worksApi.summary(id!),
@@ -196,36 +240,82 @@ export default function FichaRapidaPage() {
   // ---- alta de trabajo ----
   const [twDesc, setTwDesc] = useState('');
   const [twAmount, setTwAmount] = useState('');
-  const [twDone, setTwDone] = useState(false);
-  const [twBusy, setTwBusy] = useState(false);
   const addItemMut = useMutation({
     mutationFn: (dto: { description: string; price?: number; status?: WorkStatus }) =>
       worksApi.create({ patientId: id!, ...dto }),
   });
   const addTrabajo = async () => {
-    if (!patient || twBusy) return;
+    if (!patient) return;
     const d = twDesc.trim();
     if (!d) { showToast('Escribí el trabajo', 'error'); return; }
-    setTwBusy(true);
     setWorkPanel(null);
+    const precio = num(twAmount);
+
+    // La fila aparece YA, sin esperar al servidor.
+    //
+    // Antes se hacía `await` y recién después se dibujaba: medio segundo en el
+    // que no pasaba nada y el botón parecía trabado. Y no había nada que
+    // esperar —el texto y el precio los acaba de escribir el Dr.—, así que el
+    // viaje de red no aportaba información, solo demora.
+    //
+    // El id provisorio se reemplaza por el real cuando vuelve la respuesta. Si
+    // falla, la fila se saca y el formulario recupera lo escrito: nadie pierde
+    // lo que tipeó por un problema de conexión.
+    // Contador de módulo y no `Date.now()`: el lint marca cualquier función
+    // impura dentro del componente, aunque acá esté en un manejador de evento
+    // y no en el render. Un correlativo alcanza —solo tiene que ser único
+    // mientras la fila espera la respuesta.
+    const idTemp = `tmp-${++secuenciaTemp}`;
+    const optimista = {
+      _id: idTemp,
+      patientId: id!,
+      description: d,
+      price: precio,
+      status: PENDING,
+      createdAt: new Date().toISOString(),
+    } as Work;
+    qc.setQueryData<Work[]>(['works', id, 'todos'], (old = []) => [optimista, ...old]);
+    qc.setQueryData<Work[]>(['works', id, 'pending'], (old = []) => [optimista, ...old]);
+    setTwDesc(''); setTwAmount('');
+    setNewWorkId(idTemp);
+
+    // El destello verde de la fila nueva dura 800ms (`rowInFlash`). El servidor
+    // suele contestar antes, y al cambiar el id provisorio por el real la fila
+    // se remonta —el `key` de React sale del id—, así que la animación se
+    // cortaba a la mitad: el verde desaparecía de golpe en vez de apagarse.
+    //
+    // Esta promesa arranca a contar ACÁ, junto con la animación. Esperarla
+    // después de la respuesta consume solo lo que falte: si el servidor tardó
+    // más de 800ms, ya está cumplida y no agrega ni un milisegundo.
+    const destelloListo = new Promise(r => setTimeout(r, 850));
     try {
-      const creado = await addItemMut.mutateAsync({ description: d, price: num(twAmount), status: twDone ? DONE : PENDING });
-      const eraHecho = twDone, precio = num(twAmount);
-      setTwDesc(''); setTwAmount(''); setTwDone(false);
-      invalidateWorks();
-      // Si lo cargó ya hecho y tiene precio, preguntamos por el cobro igual que
-      // al tildar el circulito. Este es el camino que más usa (la mayoría de los
-      // trabajos hechos se cargan directamente con "Ya lo hice"), así que sin
-      // esto la pregunta casi nunca aparecería.
-      if (creado?._id) setNewWorkId(creado._id);
-      if (eraHecho && precio > 0) {
-        setAskCobro(prev => [...prev, { id: creado._id, unsaved: false }]);
-      } else {
-        showToast(eraHecho ? '¡Hecho! ✓ Trabajo agregado' : 'Trabajo agregado', 'success');
-      }
+      const creado = await addItemMut.mutateAsync({ description: d, price: precio, status: PENDING });
+      showToast('Trabajo agregado', 'success');
+      await destelloListo;
+      // Se cambia el provisorio por el de verdad, en su lugar: reemplazar la
+      // lista entera haría parpadear la fila que ya está a la vista.
+      const reemplazar = (old: Work[] = []) =>
+        old.map(w => (w._id === idTemp ? { ...w, ...creado } : w));
+      qc.setQueryData<Work[]>(['works', id, 'todos'], reemplazar);
+      qc.setQueryData<Work[]>(['works', id, 'pending'], reemplazar);
+      // Ojo: NO se vuelve a marcar la fila como nueva ni se invalida la lista.
+      //
+      // El id provisorio pasa a ser el real, y como el `key` de React sale del
+      // id, la fila se remonta. Si además se la marcaba como nueva, la
+      // animación de entrada corría por segunda vez y se veía como un
+      // pestañeo: aparecía, y medio segundo después volvía a aparecer.
+      //
+      // Invalidar tampoco hace falta: la caché ya tiene el dato del servidor,
+      // recién lo escribimos arriba. Solo se refresca el resumen, que es lo
+      // único que el alta cambia y no está en estas listas (el "falta cobrar").
+      qc.invalidateQueries({ queryKey: ['works', id, 'summary'] });
     } catch {
+      const sacar = (old: Work[] = []) => old.filter(w => w._id !== idTemp);
+      qc.setQueryData<Work[]>(['works', id, 'todos'], sacar);
+      qc.setQueryData<Work[]>(['works', id, 'pending'], sacar);
+      setTwDesc(d); setTwAmount(precio ? String(precio) : '');
       showToast('No se pudo agregar', 'error');
-    } finally { setTwBusy(false); }
+    }
   };
 
   // ---- edición / toggle / borrado de trabajo ----
@@ -254,6 +344,7 @@ export default function FichaRapidaPage() {
   const confirmarHecho = async (it: Work, monto?: number, cobrar = false) => {
     const yaGuardado = esPregunta(it._id)?.unsaved === false;
     setAskCobro(prev => prev.filter(a => a.id !== it._id));
+    volverDeLaFranja(it._id);
     try {
       if (!yaGuardado) {
         // La red viaja EN PARALELO con la animación. Antes esperábamos la
@@ -263,15 +354,23 @@ export default function FichaRapidaPage() {
           .mutateAsync({ workId: it._id, dto: { status: DONE } })
           .then(() => true, () => false);
 
-        // Si "Hechos" está abierto, la fila no desaparece: FLIP la hace viajar
-        // hasta su lugar nuevo. Si está cerrado, sí se va, y ahí sí va el fade.
-        if (!showDone) { setOutWorkId(it._id); await new Promise(r => setTimeout(r, ROW_OUT_MS)); }
+        // La fila NO se mueve ni desaparece: con la lista unificada se queda
+        // donde está y solo cambia de estado. Antes saltaba de "Plan" a
+        // "Hechos" —o se desvanecía si esa sección estaba cerrada— y había que
+        // animar el viaje para que se entendiera a dónde se había ido.
         const movido: Work = { ...it, status: DONE, completedAt: new Date().toISOString() };
         qc.setQueryData<Work[]>(['works', id, 'pending'], (old = []) => old.filter(w => w._id !== it._id));
         qc.setQueryData<Work[]>(['works', id, 'done', 'recent'], (old = []) => [movido, ...old]);
-        setOutWorkId(null);
-        if (showDone) { setFlashWorkId(it._id); setTimeout(() => setFlashWorkId(null), 900); }
-        else setNewWorkId(it._id);
+        qc.setQueryData<Work[]>(['works', id, 'todos'], (old = []) =>
+          old.map(w => (w._id === it._id ? movido : w)),
+        );
+        // Igual que al desmarcar: el buscador del historial también tiene que
+        // enterarse, y sin moverse de lugar.
+        qc.setQueriesData<Work[]>({ queryKey: ['works', id, 'historial'] }, (old = []) =>
+          (old ?? []).map(w => (w._id === it._id ? movido : w)),
+        );
+        setFlashWorkId(it._id);
+        setTimeout(() => setFlashWorkId(null), 900);
 
         if (!(await req)) { showToast('No se pudo guardar', 'error'); invalidateWorks(); return; }
       }
@@ -297,22 +396,93 @@ export default function FichaRapidaPage() {
       return;
     }
 
-    // DESMARCAR: esto sí es un cambio directo, no hay nada que preguntar.
-    // El destino (pendientes) siempre está a la vista, así que la fila sube
-    // sola con FLIP: no hace falta desvanecerla ni esperar a la red.
+    // DESMARCAR: pregunta primero, igual que marcar pregunta "¿lo pagó?".
+    // Marcar de más es barato —se descarta la pregunta y no se escribió nada—;
+    // desmarcar de más es caro: hay que encontrar el trabajo otra vez, volver a
+    // marcarlo y pasar de nuevo por el cobro. Los dos gestos son el mismo
+    // círculo, así que el que cuesta caro es el que tiene que confirmarse.
+    setAskDesmarcar(it._id);
+  };
+
+  const confirmarDesmarcar = async (it: Work) => {
+    setAskDesmarcar(null);
     const req = updateItemMut
       .mutateAsync({ workId: it._id, dto: { status: PENDING } })
       .then(() => true, () => false);
     const movido: Work = { ...it, status: PENDING, completedAt: undefined };
     qc.setQueryData<Work[]>(['works', id, 'pending'], (old = []) => [movido, ...old]);
     qc.setQueryData<Work[]>(['works', id, 'done', 'recent'], (old = []) => old.filter(w => w._id !== it._id));
+    // La lista que se renderiza es `todos`, y este handler no la tocaba: la
+    // fila se quedaba como estaba hasta que volvía el servidor y recién ahí
+    // cambiaba de golpe. Medio segundo pareciendo colgada.
+    qc.setQueryData<Work[]>(['works', id, 'todos'], (old = []) =>
+      old.map(w => (w._id === it._id ? movido : w)),
+    );
+    // El historial del modal tiene su propia clave (con los filtros adentro), así
+    // que no lo alcanzan las de arriba: sin esto, destildar desde el buscador
+    // dejaba la fila mostrando el tilde verde hasta que algo la refrescara, y
+    // ahí cambiaba de golpe. Se parcha EN SU LUGAR: el trabajo no se va de la
+    // lista ni cambia de posición, solo cambia de estado — que es justo lo que
+    // pasó. Aunque el filtro sea "Hechos": esconderlo al instante te sacaría de
+    // los ojos lo que acabás de hacer, y deshacerlo sería buscarlo de nuevo.
+    qc.setQueriesData<Work[]>({ queryKey: ['works', id, 'historial'] }, (old = []) =>
+      (old ?? []).map(w => (w._id === it._id ? movido : w)),
+    );
     setFlashWorkId(it._id); setTimeout(() => setFlashWorkId(null), 900);
-    if (await req) { invalidateWorks(); showToast('Volvió a pendiente', 'success'); }
-    else { showToast('No se pudo actualizar', 'error'); invalidateWorks(); }
+    if (await req) {
+      // Solo el resumen: las listas ya quedaron bien arriba y refetchearlas
+      // provoca una segunda pasada de layout.
+      qc.invalidateQueries({ queryKey: ['works', id, 'summary'] });
+      showToast('Volvió a pendiente', 'success');
+    } else { showToast('No se pudo actualizar', 'error'); invalidateWorks(); }
   };
+  // Salir del modo edición. La fila vuelve con un fundido corto: al confirmar
+  // o cancelar reaparecen el precio y los cuatro botones de golpe, y ese cambio
+  // de contenido sin transición se lee como un salto.
+  /**
+   * La franja verde de la pregunta se va y en su lugar vuelve la fila de
+   * siempre. Es el mismo cambio que salir de "Editar" —el mismo trabajo, otra
+   * forma— así que lleva el mismo fundido y no un gesto propio.
+   */
+  const volverDeLaFranja = (workId: string) => {
+    setVolviendo(workId);
+    setTimeout(() => setVolviendo(null), 260);
+  };
+
+  /**
+   * Cerrar el cobro en línea. Existe por lo mismo que `salirDeEdicion`: los dos
+   * botones apagaban el modo y la fila volvía a su forma de golpe, sin nada que
+   * dijera que era la MISMA fila la que quedaba. Con el fundido hay continuidad;
+   * el destello verde que llega después es otra cosa (que se cobró), y llega
+   * cuando responde el servidor.
+   */
+  const salirDeCobro = (workId: string) => {
+    setCobroItem(null);
+    setCobroPanel(false);
+    volverDeLaFranja(workId);
+  };
+
+  const salirDeEdicion = (workId: string) => {
+    // Salida INMEDIATA, con el fundido de la fila.
+    //
+    // Se probó cerrar primero el panel y desmontar después, para que el panel
+    // se contrajera en vez de irse con su contenedor. Se ve peor: son ~190ms
+    // con los inputs todavía puestos y nada más cambiando, y esa pausa se lee
+    // como que el botón quedó tildado. Un cambio instantáneo con fundido se
+    // siente más rápido que dos gestos encadenados, aunque técnicamente haya
+    // un salto de alto.
+    setEditItem(null);
+    setEditPanel(null);
+    setVolviendo(workId);
+    setTimeout(() => setVolviendo(null), 260);
+  };
+
   const startEditItem = (it: Work) => {
     setEditItem(it._id);
-    setEditPanel(null);
+    // Abierto de entrada. Antes quedaba en null y el panel recién se abría
+    // cuando el input recibía el foco —un render y un evento después—, y esa
+    // ida y vuelta se sentía como que el efecto tardaba.
+    setEditPanel('trabajo');
     setEiDesc(it.description);
     setEiAmount(it.price ? String(it.price) : '');
   };
@@ -320,13 +490,29 @@ export default function FichaRapidaPage() {
     if (!editItem) return;
     const d = eiDesc.trim();
     if (!d) { showToast('El trabajo no puede quedar vacío', 'error'); return; }
+    const workId = editItem;
+    const precio = num(eiAmount);
+
+    // La fila vuelve YA con los datos nuevos. Antes se esperaba la respuesta
+    // para cerrar la edición: medio segundo con los inputs puestos y sin señal
+    // de que el guardado estaba en curso.
+    const aplicar = (old: Work[] = []) =>
+      old.map(w => (w._id === workId ? { ...w, description: d, price: precio } : w));
+    qc.setQueryData<Work[]>(['works', id, 'todos'], aplicar);
+    qc.setQueryData<Work[]>(['works', id, 'pending'], aplicar);
+    qc.setQueryData<Work[]>(['works', id, 'done', 'recent'], aplicar);
+    salirDeEdicion(workId);
+
     try {
-      await updateItemMut.mutateAsync({ workId: editItem, dto: { description: d, price: num(eiAmount) } });
-      setEditItem(null);
-      setEditPanel(null);
-      invalidateWorks();
+      await updateItemMut.mutateAsync({ workId, dto: { description: d, price: precio } });
+      // Solo el resumen: el precio puede cambiar el "falta cobrar", pero las
+      // listas ya quedaron bien arriba.
+      qc.invalidateQueries({ queryKey: ['works', id, 'summary'] });
       showToast('Trabajo actualizado', 'success');
-    } catch { showToast('No se pudo guardar', 'error'); }
+    } catch {
+      invalidateWorks();
+      showToast('No se pudo guardar', 'error');
+    }
   };
   const removeItemMut = useMutation({
     mutationFn: (workId: string) => worksApi.remove(workId),
@@ -342,7 +528,13 @@ export default function FichaRapidaPage() {
   // ya había pagado) y a veces no (se cargó mal). Por eso decide el Dr.
   const pedirBorrarTrabajo = async (it: Work) => {
     setAlsoDelPagos(false);
-    setDelItemPagos([]);
+    // Se ARRANCA con los pagos que ya están en pantalla (los mismos que muestra
+    // la fila en "2 pagos $20.000"), no con la lista vacía. Con vacía el
+    // diálogo abría diciendo "se saca del plan" y, cuando volvía el servidor,
+    // le crecía adentro el aviso de la plata y el checkbox: el modal cambiaba
+    // de tamaño de golpe justo cuando lo estabas leyendo. La consulta sigue,
+    // pero ahora solo confirma lo que ya se está mostrando.
+    setDelItemPagos(pagos.filter(t => String(t.workId) === it._id));
     setDelItem(it);
     if ((it.paid ?? 0) > 0) {
       try { setDelItemPagos(await transactionsApi.byWork(id!, it._id)); } catch { /* el confirm igual sirve */ }
@@ -353,17 +545,47 @@ export default function FichaRapidaPage() {
     if (!delItem) return;
     const it = delItem, pagos = delItemPagos, borrarPagos = alsoDelPagos;
     setDelItem(null);
+
+    // La fila empieza a irse YA, sin esperar al servidor. Antes se hacía
+    // `await` primero y la animación arrancaba recién con la respuesta: entre
+    // el "Borrar" y el movimiento había medio segundo en el que la pantalla
+    // parecía trabada, con el diálogo ya cerrado y la fila todavía ahí.
+    setOutWorkId(it._id);
+    const salidaLista = new Promise(r => setTimeout(r, ROW_OUT_MS));
+
     try {
-      await removeItemMut.mutateAsync(it._id);
+      const req = removeItemMut.mutateAsync(it._id);
+      await salidaLista;
+      // Sacada de la caché una vez terminada la animación de salida: quitarla
+      // antes cortaría el encogimiento a la mitad.
+      const sacar = (old: Work[] = []) => old.filter(w => w._id !== it._id);
+      qc.setQueryData<Work[]>(['works', id, 'todos'], sacar);
+      qc.setQueryData<Work[]>(['works', id, 'pending'], sacar);
+      qc.setQueryData<Work[]>(['works', id, 'done', 'recent'], sacar);
+      setOutWorkId(null);
+
+      await req;
       if (borrarPagos) { for (const pg of pagos) await transactionsApi.remove(pg._id); }
-      invalidateWorks(); invalidateTx();
+      // NO se invalidan las listas: la caché ya quedó bien al sacar la fila a
+      // mano. Refetchearlas provocaba una segunda pasada de layout y el FLIP
+      // volvía a medir sobre posiciones ya acomodadas — de ahí el residuo de
+      // una fila cayendo desde arriba después de que el borrado terminó.
+      // Se refresca solo lo que el borrado cambia y no vive en estas listas.
+      qc.invalidateQueries({ queryKey: ['works', id, 'summary'] });
+      if (borrarPagos) invalidateTx();
       showToast(
         borrarPagos && pagos.length
           ? `Trabajo y ${pagos.length === 1 ? 'su pago' : `sus ${pagos.length} pagos`} borrados`
           : 'Trabajo borrado',
         'success',
       );
-    } catch { showToast('No se pudo borrar', 'error'); }
+    } catch {
+      // Falló: la fila vuelve. Es preferible verla reaparecer a creer que se
+      // borró algo que sigue estando.
+      setOutWorkId(null);
+      invalidateWorks();
+      showToast('No se pudo borrar', 'error');
+    }
   };
 
   // ---- cobro rapido desde la fila del trabajo ----
@@ -388,7 +610,7 @@ export default function FichaRapidaPage() {
   // Sin confirmación no hay escritura: si se va de la ficha con la pregunta
   // abierta, el trabajo queda como estaba (pendiente). Nada se guarda a medias.
 
-  const [askPanel, setAskPanel] = useState(false); // popover de montos rápidos
+  const [askPanel, setAskPanel] = useState(false); // panel de montos rápidos
   const [askMontoId, setAskMontoId] = useState<string | null>(null);
   const askRef = useRef<HTMLDivElement>(null);
   // Se cierra al tocar cualquier otro lado, aunque no se haya elegido monto —
@@ -410,6 +632,27 @@ export default function FichaRapidaPage() {
   // 10 cobra de más (adelanto o deuda vieja): con un botón de monto fijo esos
   // casos no entraban.
   const [askMonto, setAskMonto] = useState<string | null>(null);
+  /**
+   * Pasa la fila a "¿cuánto pagó?".
+   *
+   * NO abre acá el panel de montos, aunque sea lo obvio: de eso se encarga el
+   * `onFocus` del campo, que llega en el commit siguiente. Medido —la animación
+   * de 140ms tardaba 303— el motivo es que una animación de `height` corre en
+   * el hilo principal, y abriendo el panel en este mismo lote arrancaba justo
+   * en el frame donde React está rehaciendo la fila entera: nacía frenada. Así
+   * el trabajo pesado pasa primero y el desplegable anima con el hilo libre.
+   * Es lo que hace "Editar" sin habérselo propuesto, y por eso ahí se ve bien.
+   */
+  const abrirOtroMonto = (workId: string, falta: number) => {
+    setAskMontoId(workId);
+    setAskMonto(String(falta));
+  };
+  /** Vuelve a "¿lo pagó?" — el mismo camino para cancelar y para confirmar. */
+  const cerrarOtroMonto = () => {
+    setAskMonto(null);
+    setAskMontoId(null);
+    setAskPanel(false);
+  };
   // Fila en modo "cobrar": monto precargado y editable (para pagos parciales).
   const [cobroItem, setCobroItem] = useState<string | null>(null);
   const [cobroAmount, setCobroAmount] = useState('');
@@ -448,7 +691,7 @@ export default function FichaRapidaPage() {
           amount: cuota,
           workId: w._id,
           description: w.description,
-          paymentMethod: 'CASH',
+          paymentMethod: pgMethod,
           date: new Date(`${todayYMD()}T12:00:00`).toISOString(),
         });
         // Reparto en cascada: cada trabajo se lleva lo suyo y lo que queda pasa
@@ -477,10 +720,14 @@ export default function FichaRapidaPage() {
         amount: resta,
         workId: it._id,
         description: it.description,
-        paymentMethod: 'CASH',
+        paymentMethod: pgMethod,
         date: new Date(`${todayYMD()}T12:00:00`).toISOString(),
       });
       invalidateWorks(); invalidateTx();
+      // Destello del botón: pasa de "Cobrar $X" a "Pagado" y sin esto el cambio
+      // era seco, igual que los demás cambios de estado de la fila.
+      setFlashWorkId(it._id);
+      setTimeout(() => setFlashWorkId(null), 900);
       showToast(`Cobrado ${fmtMoney(resta)} - ${it.description}`, 'success');
     } catch { showToast('No se pudo registrar el pago', 'error'); }
     finally { setCobroBusy(null); }
@@ -501,28 +748,65 @@ export default function FichaRapidaPage() {
   const confirmDescobrar = async () => {
     if (!uncollect) return;
     const { work, pagos } = uncollect; setUncollect(null);
+
+    // Los pagos se sacan de la caché YA, sin esperar al servidor. Antes se
+    // hacía `await` primero: quedaba medio segundo con el diálogo cerrado y la
+    // fila igual —parecía tildada— y al volver la respuesta el bloque de pagos
+    // desaparecía de golpe. Sacándolos ahora, el Desplegable los contrae con su
+    // animación como cualquier otro cierre.
+    const ids = new Set(pagos.map(pg => pg._id));
+    const total = pagos.reduce((a, pg) => a + pg.amount, 0);
+    qc.setQueryData<Transaction[]>(['transactions', id], (old = []) =>
+      old.filter(t => !ids.has(t._id)),
+    );
+    // Y el trabajo vuelve a figurar impago: si no, el botón seguiría diciendo
+    // "Pagado" hasta que llegara la respuesta.
+    const sinPagar = (old: Work[] = []) =>
+      old.map(w => (w._id === work._id ? { ...w, paid: Math.max(0, (w.paid ?? 0) - total) } : w));
+    qc.setQueryData<Work[]>(['works', id, 'todos'], sinPagar);
+    qc.setQueryData<Work[]>(['works', id, 'pending'], sinPagar);
+    qc.setQueryData<Work[]>(['works', id, 'done', 'recent'], sinPagar);
+    // El historial del modal también: tiene su propia clave (lleva los filtros
+    // adentro) y quedaba afuera de esta enumeración. Como acá NO se invalidan
+    // las listas de trabajos —a propósito, para no provocar un doble
+    // movimiento—, nada lo corregía después: el trabajo seguía diciendo
+    // "Pagado" ahí adentro, justo donde se lo acababa de destildar, mientras en
+    // el resto de la ficha ya figuraba impago.
+    qc.setQueriesData<Work[]>({ queryKey: ['works', id, 'historial'] }, old => sinPagar(old ?? []));
+    setFlashWorkId(work._id);
+    setTimeout(() => setFlashWorkId(null), 900);
+
     try {
       for (const pg of pagos) await transactionsApi.remove(pg._id);
-      invalidateWorks(); invalidateTx();
+      qc.invalidateQueries({ queryKey: ['works', id, 'summary'] });
+      // Y se revalidan los pagos. La actualización optimista de arriba es para
+      // que se vea al instante; ESTA es la que garantiza que sea cierto. Sin
+      // ella, si la remoción optimista no acierta —un id que no coincide, un
+      // pago que no venía en la lista— el chip queda mostrando un pago que ya
+      // no existe y nada lo corrige nunca. Pasó.
+      //
+      // No provoca el doble movimiento que sí causaba invalidar la lista de
+      // trabajos: vuelve el mismo contenido que ya está en pantalla.
+      invalidateTx();
       showToast(`Se borraron los pagos de ${work.description}`, 'success');
-    } catch { showToast('No se pudo deshacer', 'error'); }
+    } catch {
+      // Falló: vuelve todo. Es preferible ver reaparecer el pago a creer que se
+      // borró algo que sigue estando.
+      invalidateWorks(); invalidateTx();
+      showToast('No se pudo deshacer', 'error');
+    }
   };
 
   // ---- alta de pago ----
-  const [pgAmount, setPgAmount] = useState('');
   const [pgMethod, setPgMethod] = useState<PaymentMethod>('CASH');
-  const [pgDate, setPgDate] = useState(todayYMD());
   // Trabajo al que se imputa el pago cargado desde esta columna ('' = a cuenta).
   // Existe para el paciente que pasa solo a dejar una cuota: no hay ningún
   // trabajo que marcar hecho, así que la franja "¿te lo pagó?" nunca aparece.
-  const [pgWorkId, setPgWorkId] = useState('');
   // Último monto que precargamos NOSOTROS al elegir un trabajo. Sirve para
   // distinguir "el campo tiene lo que puso el sistema" de "el campo tiene lo
   // que tipeó el Dr.": si cambia de trabajo, el primero se pisa y el segundo
   // se respeta. Sin esto, elegir un trabajo después de haber escrito un monto
   // le borraba la cifra sin avisar.
-  const pgAutoAmount = useRef('');
-  const [pgBusy, setPgBusy] = useState(false);
   // Pago recién creado: su fila entra animada (crece desde arriba empujando al
   // resto) y queda resaltada un instante. Sirve de confirmación visual de que
   // el pago entró — sobre todo cuando se carga desde la fila del trabajo, que
@@ -531,6 +815,16 @@ export default function FichaRapidaPage() {
   // datos, así que para poder animar la salida primero marcamos la fila, la
   // dejamos encogerse, y recién después pegamos el borrado al servidor.
   const [outPagoId, setOutPagoId] = useState<string | null>(null);
+  /**
+   * Trabajo cuyo chip "pagó $X" y cuyo "falta $Y" están por dejar de existir.
+   *
+   * Esos dos dependen de `it.paid`, que llega del servidor: al borrar el último
+   * pago se iban de golpe cuando volvía el refetch, varias décimas después de
+   * que el pago ya se había ido. Tres desapariciones a destiempo para un solo
+   * acto. Marcándolo se desvanecen JUNTO con la línea del pago, y cuando los
+   * datos nuevos llegan ya están invisibles.
+   */
+  const [sinPagosPronto, setSinPagosPronto] = useState<string | null>(null);
   // Pago (viejo, sin trabajo) al que se le está eligiendo un trabajo. Los 130+
   // pagos que ya existían quedaron sin vincular — no se podía adivinar a qué
   // trabajo correspondía cada uno —, así que se pueden asociar a mano.
@@ -547,32 +841,6 @@ export default function FichaRapidaPage() {
     return () => clearTimeout(t);
   }, [newWorkId]);
   const addPagoMut = useMutation({ mutationFn: transactionsApi.addMovement });
-  const addPago = async () => {
-    if (!patient || pgBusy) return;
-    const amt = num(pgAmount);
-    if (amt <= 0) { showToast('Ingresá un monto', 'error'); return; }
-    setPgBusy(true);
-    setPagoPanel(false);
-    try {
-      await addPagoMut.mutateAsync({
-        patientId: patient._id,
-        type: 'PAYMENT',
-        amount: amt,
-        workId: pgWorkId || undefined,
-        description: pgWorkId
-          ? trabajosCobrables.find(w => w._id === pgWorkId)?.description
-          : undefined,
-        paymentMethod: pgMethod,
-        date: new Date(`${pgDate}T12:00:00`).toISOString(),
-      });
-      setPgAmount(''); setPgDate(todayYMD()); setPgWorkId(''); pgAutoAmount.current = '';
-      invalidateWorks();
-      invalidateTx();
-      showToast(`¡Pago de ${fmtMoney(amt)} registrado!`, 'success');
-    } catch {
-      showToast('No se pudo registrar', 'error');
-    } finally { setPgBusy(false); }
-  };
 
   // ---- edición / borrado de pago ----
   const [editPago, setEditPago] = useState<string | null>(null);
@@ -589,10 +857,13 @@ export default function FichaRapidaPage() {
   }, [epPanel, customAmountsOpen]);
   const [epMethod, setEpMethod] = useState<PaymentMethod>('CASH');
   const [epDate, setEpDate] = useState(todayYMD());
-  const updatePagoMut = useMutation({
-    mutationFn: (v: { id: string; dto: Parameters<typeof transactionsApi.updateMovement>[1] }) =>
-      transactionsApi.updateMovement(v.id, v.dto),
-  });
+  // Sin `useMutation`: no se mira su estado y cada cambio redibuja la ficha
+  // entera, justo cuando la fila está volviendo a su forma. Igual que en el
+  // borrado de un pago.
+  const guardarPagoEnServidor = (
+    id: string,
+    dto: Parameters<typeof transactionsApi.updateMovement>[1],
+  ) => transactionsApi.updateMovement(id, dto);
   const startEditPago = (t: Transaction) => {
     setEditPago(t._id);
     setEpAmount(String(t.amount));
@@ -601,21 +872,39 @@ export default function FichaRapidaPage() {
   };
   const saveEditPago = async () => {
     if (!editPago) return;
-    const pagoEditado = pagos.find(p => p._id === editPago);
+    const pagoId = editPago;
+    const pagoEditado = pagos.find(p => p._id === pagoId);
     const amt = num(epAmount);
     if (amt <= 0) { showToast('Ingresá un monto', 'error'); return; }
+    const fecha = new Date(`${epDate}T12:00:00`).toISOString();
+
+    // La fila vuelve a su forma YA, con los valores nuevos puestos a mano en la
+    // caché; la red viaja en paralelo. Antes se esperaba la respuesta con los
+    // inputs todavía abiertos: medio segundo en el que tocar "Guardar" no
+    // producía nada, y eso se lee como que el botón quedó tildado.
+    salirDeEdicionPago(pagoId);
+    qc.setQueryData<Transaction[]>(['transactions', id], (old = []) =>
+      old.map(x => (x._id === pagoId ? { ...x, amount: amt, paymentMethod: epMethod, date: fecha } : x)),
+    );
+
     try {
-      await updatePagoMut.mutateAsync({
-        id: editPago,
-        dto: { amount: amt, paymentMethod: epMethod, date: new Date(`${epDate}T12:00:00`).toISOString() },
-      });
-      setEditPago(null);
+      await guardarPagoEnServidor(pagoId, { amount: amt, paymentMethod: epMethod, date: fecha });
+      // La verdad la sigue teniendo el servidor: el trabajo recalcula cuánto
+      // lleva pagado y eso no se puede adivinar acá.
       invalidateTx();
       if (pagoEditado?.workId) invalidateWorks();
       showToast('Pago actualizado', 'success');
-    } catch { showToast('No se pudo guardar', 'error'); }
+    } catch {
+      showToast('No se pudo guardar', 'error');
+      invalidateTx();
+    }
   };
-  const delPagoMut = useMutation({ mutationFn: (txId: string) => transactionsApi.remove(txId) });
+  // Sin `useMutation` a propósito: no se usa su estado en ningún lado y cada
+  // cambio (pendiente → listo) vuelve a dibujar la ficha entera. Esos dos
+  // renders caían JUSTO mientras el desglose se contrae, y una animación de
+  // alto corre en el hilo principal: se quedaba sin frames y se veía pesada.
+  // El manejo optimista de la caché ya lo hace `confirmDelPago` a mano.
+  const borrarPagoEnServidor = (txId: string) => transactionsApi.remove(txId);
   const [delPago, setDelPago] = useState<Transaction | null>(null);
   const vincularPago = async (t: Transaction, workId: string) => {
     const w = trabajosCobrables.find(x => x._id === workId);
@@ -642,12 +931,27 @@ export default function FichaRapidaPage() {
     // (ya no estaba desvanecida, pero los datos todavía la incluían) hasta que
     // llegaba el refetch. Sacarla del cache a mano cierra esa ventana.
     setOutPagoId(t._id);
-    const req = delPagoMut.mutateAsync(t._id).then(() => true, () => false);
+    // ¿Era el último pago de ese trabajo? El mapa de esta pasada todavía tiene
+    // el pago que se está borrando, así que "uno solo" significa "el último".
+    // Se cuenta desde `pagos` y no desde `pagosPorTrabajo`: ese mapa se declara
+    // más abajo y usarlo acá le hace perder la memoización al compilador de
+    // React (lo mismo da, es la misma lista agrupada).
+    if (t.workId && pagos.filter(x => String(x.workId) === String(t.workId)).length <= 1) {
+      setSinPagosPronto(String(t.workId));
+      // Se limpia bien después: el chip tiene que quedarse invisible hasta que
+      // lleguen los datos nuevos y lo saquen de verdad. Si se limpiara antes,
+      // reaparecería un instante.
+      setTimeout(() => setSinPagosPronto(null), 1500);
+    }
+    const req = borrarPagoEnServidor(t._id).then(() => true, () => false);
     await new Promise(r => setTimeout(r, ROW_OUT_MS));
     qc.setQueryData<Transaction[]>(['transactions', id], (old = []) =>
       old.filter(x => x._id !== t._id),
     );
     setOutPagoId(null);
+    // Desde acá el desglose se está contrayendo. Nada de refrescos hasta que
+    // termine (ver COLAPSO_MS).
+    const contraccionLista = new Promise(r => setTimeout(r, COLAPSO_MS));
 
     if (!(await req)) {
       // No se borró: se vuelve a pedir la lista y el pago reaparece, ahora sí
@@ -662,6 +966,7 @@ export default function FichaRapidaPage() {
       await galleryApi.updatePhoto(patient!._id, item.sessionId, item.photo._id, { transactionId: '' });
     }
     if (photos.length) qc.invalidateQueries({ queryKey: ['gallery-sessions', id] });
+    await contraccionLista;
     invalidateTx();
     // Si el pago estaba imputado a un trabajo, ese trabajo vuelve a tener
     // saldo: hay que refrescar works o sigue mostrando "Pagado" de más.
@@ -687,6 +992,9 @@ export default function FichaRapidaPage() {
     queryFn: () =>
       transactionsApi.search(id!, { ...pagoFilter, type: 'PAYMENT', limit: pagoLimit }),
     enabled: pagosModalOpen && !!id,
+    // Mismo criterio que el historial de trabajos.
+    staleTime: 0,
+    refetchOnMount: 'always',
     // Igual que Hechos: no colapsar a "Buscando…" al cambiar el filtro.
     placeholderData: keepPreviousData,
   });
@@ -712,22 +1020,58 @@ export default function FichaRapidaPage() {
   const [hechosFrom, setHechosFrom] = useState('');
   const [hechosTo, setHechosTo] = useState('');
   const [hechosLimit, setHechosLimit] = useState(PAGE);
+  /**
+   * Estado por el que filtra el historial. Los mismos tres ejes que los chips
+   * de la lista, para no tener dos vocabularios para lo mismo.
+   *
+   * "Hechos" y "Por hacer" los resuelve el servidor (`status`). "Falta cobrar"
+   * NO es un estado guardado sino una cuenta —precio mayor que lo pagado—, así
+   * que se pide `done` y se filtra acá con lo que vino. Consecuencia honesta:
+   * con historiales muy largos, "Falta cobrar" mira la página traída y no toda
+   * la base; "Cargar más" va sumando. Con los datos reales (el paciente más
+   * cargado tiene 7 trabajos) eso no se toca nunca, y resolverlo bien pide un
+   * endpoint nuevo.
+   */
+  const [hechosEstado, setHechosEstado] = useState<'todos' | 'hechos' | 'hacer' | 'cobrar'>('todos');
   const { data: hechosSearchRaw = [], isFetching: hechosSearching } = useQuery({
-    queryKey: ['works', id, 'done', 'search', hechosFilter, hechosFrom, hechosTo, hechosLimit],
+    // Sin `status`: busca en TODO el historial. Antes solo en los hechos,
+    // porque la lista de la ficha estaba partida en dos y este modal era el
+    // "ver todos" de la mitad de abajo. Con una sola lista, buscar la mitad
+    // sería una trampa: escribís "ajuste" y no aparece el que está pendiente.
+    queryKey: ['works', id, 'historial', hechosFilter, hechosFrom, hechosTo, hechosEstado, hechosLimit],
     queryFn: () =>
       worksApi.findAll(id!, {
-        status: 'done',
         q: hechosFilter || undefined,
         from: hechosFrom || undefined,
         to: hechosTo || undefined,
+        // "Falta cobrar" son hechos con saldo: al servidor se le piden los
+        // hechos y el saldo se calcula acá.
+        status:
+          hechosEstado === 'hacer' ? 'pending'
+          : hechosEstado === 'todos' ? undefined
+          : 'done',
         limit: hechosLimit,
       }),
     enabled: hechosModalOpen && !!id,
+    // Los buscadores NO se sirven de la copia guardada: la app tiene 30
+    // segundos de "datos frescos" por defecto, y acá eso alcanza para abrir el
+    // historial y ver un trabajo como "Pagado" cuando el pago se borró hace un
+    // rato. En una lista que se abre para revisar plata, un número viejo es
+    // peor que esperar 200ms. Se pide de nuevo cada vez que se abre.
+    staleTime: 0,
+    refetchOnMount: 'always',
     // Mantener las filas previas durante un refetch (cambio de fecha/búsqueda):
     // si no, el cuerpo colapsa a "Buscando…" y el modal se achica y re-centra,
     // pareciendo que se cierra y reabre.
     placeholderData: keepPreviousData,
   });
+  const hechosSearch = useMemo(
+    () =>
+      hechosEstado === 'cobrar'
+        ? hechosSearchRaw.filter(w => (w.price ?? 0) > (w.paid ?? 0))
+        : hechosSearchRaw,
+    [hechosSearchRaw, hechosEstado],
+  );
   const hechosHasMore = hechosSearchRaw.length >= hechosLimit;
   const hechosFilterActive = !!hechosFilter.trim() || !!hechosFrom || !!hechosTo;
   // `value` opcional: los chips de "trabajos frecuentes" commitean su texto
@@ -764,17 +1108,106 @@ export default function FichaRapidaPage() {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [hechosPanelOpen]);
-  const [zoomPhoto, setZoomPhoto] = useState<
-    { url: string; category?: string; title?: string; description?: string } | null
-  >(null);
+  /**
+   * Visor de fotos. Guarda la LISTA y en cuál se está parado, no una foto
+   * suelta: abrir una miniatura y no poder pasar a la de al lado obligaba a
+   * cerrar y volver a abrir por cada una. El pase, el teclado y el
+   * deslizamiento viven en `VisorFotos`, que comparte con la galería.
+   */
+  const [zoom, setZoom] = useState<{ fotos: FotoVisor[]; i: number } | null>(null);
+  /** Abre el visor con TODAS las fotos del grupo, parado en la que se tocó. */
+  const abrirZoom = (
+    lista: { photo: { _id: string; url: string; type?: string }; title?: string; description?: string }[],
+    idx: number,
+  ) =>
+    setZoom({
+      fotos: lista.map(({ photo, title, description }) => ({
+        url: photo.url,
+        category: photo.type,
+        title,
+        description,
+      })),
+      i: idx,
+    });
 
-  const addChip = (t: string) => setTwDesc(p => (p.trim() ? `${p.trim()} ${t}` : t));
+  // Qué campo se acaba de llenar solo (desde un chip). Sirve para el destello:
+  // escribiendo no se anima nada —el valor lo estás poniendo vos y ya lo estás
+  // mirando— pero cuando aparece de golpe por tocar una sugerencia conviene
+  // avisar dónde cayó. Mismo modismo que el campo de paciente de la agenda.
+  // Qué trabajos tienen el desglose de pagos abierto. Por trabajo y no uno
+  // solo a la vez: comparar dos tratamientos largos es un caso real.
+  // Trabajo hecho al que se le está preguntando si de verdad no se hizo.
+  const [askDesmarcar, setAskDesmarcar] = useState<string | null>(null);
+  // Fila que acaba de volver de la pregunta. La pregunta entra con su fundido,
+  // pero al cancelar la fila normal aparecía en seco: el mismo gesto se sentía
+  // suave para un lado y cortado para el otro.
+  const [volviendo, setVolviendo] = useState<string | null>(null);
+  const cancelarDesmarcar = (workId: string) => {
+    setAskDesmarcar(null);
+    setVolviendo(workId);
+    setTimeout(() => setVolviendo(null), 260);
+  };
+
+  /** Cerrar la edición de un pago, con el fundido de la fila que vuelve. */
+  const salirDeEdicionPago = (pagoId: string) => {
+    setEditPago(null);
+    setEpPanel(false);
+    setVolviendo(pagoId);
+    setTimeout(() => setVolviendo(null), 260);
+  };
+
+  /**
+   * Deja UNA sola operación abierta en la lista.
+   *
+   * Se llama al empezar cualquier otra: editar un trabajo, cobrar, editar un
+   * pago, marcar o desmarcar, agregar. Antes se podía dejar una fila en
+   * edición, tocar "Cobrar" en otra y quedaban las dos abiertas — dos
+   * formularios con plata a medio escribir y ninguna pista de cuál se iba a
+   * guardar. Nada de esto había escrito todavía, así que cerrar es volver la
+   * fila a como estaba, sin perder nada. Cada una se cierra por su camino
+   * normal, con su fundido, para que se vea CUÁL se cerró.
+   *
+   * Lo que NO se cierra: la franja verde de "¿lo pagó?". Esa no es un
+   * formulario a medias, es una pregunta pendiente —el trabajo se marcó hecho y
+   * todavía no se guardó—; hacerla desaparecer sola sería tragarse el gesto y
+   * dejar el trabajo pendiente sin avisar. Además se pueden marcar varios
+   * seguidos y responder después, que es como se usa. De esa franja sí se
+   * cierra el "¿cuánto pagó?": ahí sí hay un importe a medio escribir, y
+   * cerrarlo devuelve la pregunta a sus opciones, sin perderla.
+   */
+  const cerrarOperaciones = () => {
+    if (editItem) salirDeEdicion(editItem);
+    if (cobroItem) salirDeCobro(cobroItem);
+    if (editPago) salirDeEdicionPago(editPago);
+    if (askDesmarcar) cancelarDesmarcar(askDesmarcar);
+    if (askMontoId) cerrarOtroMonto();
+  };
+  const [pagosAbiertos, setPagosAbiertos] = useState<Record<string, boolean>>({});
+  // El alto del desglose cambia de golpe y del movimiento se encarga el FLIP:
+  // traslada las filas de abajo con `transform`, que corre en el compositor.
+  // Antes esto tenía su propia transición de alto y las dos animaciones se
+  // pisaban —de ahí el rebote y las fotos yendo y viniendo—.
+  //
+  // El contenido no se monta ni se desmonta: `Desplegable` lo mantiene siempre
+  // y le anima el alto, así el bloque se CONTRAE en vez de desaparecer.
+  const togglePagos = (workId: string) =>
+    setPagosAbiertos(p => ({ ...p, [workId]: !p[workId] }));
+  const [campoLleno, setCampoLleno] = useState<'trabajo' | 'monto' | null>(null);
+  useEffect(() => {
+    if (!campoLleno) return;
+    const t = setTimeout(() => setCampoLleno(null), 700);
+    return () => clearTimeout(t);
+  }, [campoLleno]);
+
+  const addChip = (t: string) => {
+    setTwDesc(p => (p.trim() ? `${p.trim()} ${t}` : t));
+    setCampoLleno('trabajo');
+  };
 
   // Layout: dos columnas (Trabajos | Pagos) en pantallas anchas; apiladas si no.
   const stack = useIsMobile(1000);
   // En celular las dos columnas se reemplazan por pestañas segmentadas
   // (Trabajos · N | Pagos · N); en tablet/desktop se muestran las dos hojas.
-  const [mobileTab, setMobileTab] = useState<'trabajos' | 'pagos'>('trabajos');
 
   // Panel de chips que se abre al enfocar los inputs (ahorra espacio vertical
   // vs. tenerlos siempre visibles). Es contextual: al enfocar "Trabajo" muestra
@@ -798,49 +1231,78 @@ export default function FichaRapidaPage() {
   }, [pagoPanel]);
 
   // Los trabajos ya hechos se colapsan (para no saturar cuando se acumulan).
-  // Desplegado por defecto: con el cobro desde la fila, los trabajos recién
-  // hechos son justo los que hay que cobrar — tenerlos escondidos obligaba a
-  // desplegar cada vez. Se muestran los CAP más recientes + "Ver todos".
-  const [showDone, setShowDone] = useState(true);
-
-  // Cuantas filas de "hechos" entran sin que la lista scrollee. El objetivo es
-  // llenar el alto de la pantalla: los pendientes tienen prioridad (van todos) y
-  // los hechos ocupan lo que sobra. Se recalcula al cambiar el tamano de la
-  // ventana. En celular no se mide: ahi la pagina scrollea de arriba a abajo.
   const [flashWorkId, setFlashWorkId] = useState<string | null>(null);
   const [flashPagoId, setFlashPagoId] = useState<string | null>(null);
   const worksListRef = useRef<HTMLDivElement>(null);
-  useFlip(worksListRef);
-  const [fitHechos, setFitHechos] = useState(CAP);
-  useLayoutEffect(() => {
-    if (stack) { setFitHechos(CAP); return; }
-    const el = worksListRef.current;
-    if (!el) return;
-    const ROW = 46;     // alto tipico de una fila
-    const HEADER = 40;  // franja "Hechos (N)"
-    const FOOTER = 44;  // link "Ver los N trabajos hechos"
-    const calc = () => {
-      const libre = el.clientHeight - pendientes.length * ROW - HEADER - FOOTER;
-      setFitHechos(Math.max(1, Math.floor(libre / ROW)));
-    };
-    calc();
-    // Con debounce a propósito: al marcar un trabajo aparece la franja
-    // "¿te lo pagó?", eso cambia el alto de la lista y dispara el observer.
-    // Sin la espera, el recálculo agregaba o quitaba filas EN MEDIO de la
-    // animación — la lista se re-armaba mientras la fila se encogía y se veía
-    // a los saltos. Ahora se recalcula una sola vez, ya terminado el
-    // movimiento.
-    let t: ReturnType<typeof setTimeout>;
-    const ro = new ResizeObserver(() => {
-      clearTimeout(t);
-      t = setTimeout(calc, 220);
-    });
-    ro.observe(el);
-    return () => { clearTimeout(t); ro.disconnect(); };
-  }, [stack, pendientes.length, patient?._id]);
+  // Sin FLIP en esta lista.
+  //
+  // Se peleaba con el desplegable de pagos: al cambiar el alto de una fila
+  // tomaba a las de abajo como un reordenamiento y las arrastraba encima de la
+  // animación que ya estaba corriendo. Se intentó pausarlo mientras dura el
+  // despliegue y no alcanzó —al reanudar veía el desplazamiento acumulado y lo
+  // animaba de nuevo—.
+  //
+  // Y hoy aporta poco: con hechos y pendientes en UNA lista, marcar un trabajo
+  // ya no lo manda de una sección a otra, que era el reordenamiento que este
+  // hook venía a explicar. Lo que queda —alta y borrado— ya tiene su propia
+  // entrada y salida.
 
-  // Los hechos que realmente se dibujan: los que entran en el alto disponible.
-  const hechosVisibles = hechosRecent.slice(0, stack ? CAP : fitHechos);
+  /**
+   * Los dos filtros de la lista, uno por cada eje del modelo: falta HACERLO y
+   * falta COBRARLO. Antes había uno solo llamado "Pendientes", y esa palabra en
+   * esta pantalla puede significar cualquiera de los dos — que es exactamente
+   * lo que no puede pasar donde una cosa es trabajo y la otra es plata.
+   *
+   * Los contadores van siempre a la vista aunque no se filtre: la lista está
+   * mezclada por fecha de carga, así que lo que falta hacer o cobrar puede
+   * quedar enterrado entre lo demás, y esos dos números son los que el Dr. mira
+   * con el paciente en el sillón.
+   */
+  const [filtro, setFiltro] = useState<'todos' | 'hacer' | 'cobrar'>('todos');
+  /**
+   * Cambiar de filtro reemplaza el contenido de la lista: entra otro conjunto
+   * de trabajos, no se reordenan los mismos. El fundido corto dice "esto se
+   * reemplazó" sin prometer que alguna fila viajó de un lado al otro.
+   *
+   * Se anima el contenedor con la Web Animations API en vez de remontarlo con
+   * una `key`: remontar redibuja todas las filas y en Pacientes eso colgaba la
+   * pantalla casi un segundo. Es el mismo camino que se usa allá y en la
+   * galería.
+   */
+  const aplicarFiltro = (f: 'todos' | 'hacer' | 'cobrar') => {
+    setFiltro(f);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    worksListRef.current?.animate(
+      [
+        { opacity: 0, transform: 'translateY(6px)' },
+        { opacity: 1, transform: 'none' },
+      ],
+      { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+    );
+  };
+  /**
+   * Hechos con plata sin cobrar. "Sin cobrar nada" y "cobrado a medias" van
+   * juntos a propósito: los dos responden la misma pregunta —a quién hay que
+   * cobrarle— y no se actúa distinto según cuál sea. Separarlos serían dos
+   * filtros para una sola decisión.
+   *
+   * Solo los HECHOS, igual que el total de arriba: un trabajo por hacer todavía
+   * no se debe.
+   */
+  const porCobrar = useMemo(
+    () => todosLosTrabajos.filter(w => w.status === DONE && (w.price ?? 0) > (w.paid ?? 0)),
+    [todosLosTrabajos],
+  );
+  // Para "por hacer" se usa la consulta de pendientes, que los trae TODOS, y no
+  // un filtro sobre la lista general: esa viene cortada en 40, así que un
+  // paciente con mucho historial se habría quedado sin ver los pendientes más
+  // viejos — justo los que hay que mirar.
+  const trabajosVisibles =
+    filtro === 'hacer' ? pendientes
+    : filtro === 'cobrar' ? porCobrar
+    // Filtrando NO se corta: "por hacer" y "falta cobrar" son listas de cosas
+    // por resolver y esconder la número 21 sería esconder trabajo.
+    : todosLosTrabajos.slice(0, INLINE_MAX);
 
   // Trabajos a los que todavía se les puede imputar plata (tienen precio y algo
   // sin cobrar). Alimentan el selector del formulario de Pagos.
@@ -855,36 +1317,26 @@ export default function FichaRapidaPage() {
   // probable), después los tratamientos largos que sigue pagando en cuotas. NO
   // se filtran los pendientes: los brackets y los retenedores viven meses en
   // "por hacer" mientras se pagan, y son justo los que se imputan de a partes.
-  const cobrablesHechos = trabajosCobrables.filter(w => w.status === DONE);
-  const cobrablesPlan = trabajosCobrables.filter(w => w.status !== DONE);
-
-  // Misma idea para la columna de Pagos, asi las dos crecen parejo.
-  const pagosListRef = useRef<HTMLDivElement>(null);
-  // `insert` para que un pago nuevo abra su hueco empujando a los de abajo. Va
-  // en la LISTA y no en cada `setNewPagoId(...)`: así lo agarra venga de donde
-  // venga —del formulario, de cobrar un trabajo, de una tanda— sin que cada
-  // lugar tenga que acordarse de avisar. Los pagos se ordenan por fecha, así
-  // que uno con fecha vieja nace en el medio.
-  useFlip(pagosListRef, { insert: true });
-  const [fitPagos, setFitPagos] = useState(CAP);
-  useLayoutEffect(() => {
-    if (stack) { setFitPagos(CAP); return; }
-    const el = pagosListRef.current;
-    if (!el) return;
-    const ROW = 46, FOOTER = 44;
-    const calc = () => setFitPagos(Math.max(1, Math.floor((el.clientHeight - FOOTER) / ROW)));
-    calc();
-    let t: ReturnType<typeof setTimeout>;
-    const ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(calc, 220); });
-    ro.observe(el);
-    return () => { clearTimeout(t); ro.disconnect(); };
-    // `patient?._id` es imprescindible: en el primer render la tarjeta todavía
-    // no existe (no cargó el paciente), el ref está en null y el efecto sale
-    // sin medir. Sin esta dependencia no se volvía a ejecutar nunca y la lista
-    // quedaba clavada en el valor inicial.
-  }, [stack, patient?._id]);
 
   // ---- fila de un trabajo (se reusa en pendientes y en hechos) ----
+  // Los pagos de cada trabajo, para mostrarlos DENTRO de su fila. Antes vivían
+  // en una columna aparte y había que cruzarlos a ojo con el trabajo.
+  const pagosPorTrabajo = useMemo(() => {
+    const m = new Map<string, Transaction[]>();
+    for (const t of pagos) {
+      if (!t.workId) continue;
+      const k = String(t.workId);
+      m.set(k, [...(m.get(k) ?? []), t]);
+    }
+    return m;
+  }, [pagos]);
+
+  // Pagos sin trabajo asignado. Casi todos son de junio a agosto, de cuando el
+  // modelo de trabajos todavía se estaba asentando: son 153 y siguen contando
+  // en el saldo, así que necesitan verse en algún lado o el número no cerraría
+  // con nada.
+  const pagosACuenta = useMemo(() => pagos.filter(t => !t.workId), [pagos]);
+
   const renderWorkRow = (it: Work, dense = false) => {
     const done = it.status === DONE;
     const editing = editItem === it._id;
@@ -898,15 +1350,45 @@ export default function FichaRapidaPage() {
     // La fila se transforma en la pregunta de cobro, en su lugar. El trabajo no
     // se mueve hasta que se responde: así no perdés de vista lo que estás
     // resolviendo, y "deshacer" cancela sin haber escrito nada.
+    // Confirmación de desmarcado, en la misma fila y más chica que la del
+    // cobro: es una pregunta de sí o no, sin monto que editar. Dice el nombre
+    // del trabajo y, si ya tiene plata cobrada, la avisa — desmarcar no borra
+    // los pagos, pero conviene saber que quedan colgando de algo sin hacer.
+    if (askDesmarcar === it._id) {
+      return (
+        <div key={it._id} data-flip={it._id} className="lb-askrow lb-askrow--min">
+          <div className="lb-askrow__q">
+            <Icon name="undo" size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+            <span className="lb-askrow__txt">
+              <b>{it.description}</b> — ¿no se hizo?
+              {paid > 0 && (
+                <span className="fr-desm__ojo"> tiene {fmtMoney(paid)} cobrados</span>
+              )}
+            </span>
+          </div>
+          <div className="lb-askrow__acts">
+            <button className="btn btn--secondary btn--sm" onClick={() => confirmarDesmarcar(it)}>
+              Sí, volver a pendiente
+            </button>
+            <button className="btn btn--ghost btn--sm" onClick={() => cancelarDesmarcar(it._id)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     const preg = esPregunta(it._id);
     if (preg && !editing) {
       const falta = price - paid;
       const editandoMonto = askMonto !== null && askMontoId === it._id;
-      const cerrarPanel = () => { setAskMonto(null); setAskMontoId(null); setAskPanel(false); };
+      const cerrarPanel = () => cerrarOtroMonto();
       return (
-        <div key={it._id} data-flip={it._id} className="lb-askrow">
-          {/* Dos renglones: la pregunta arriba y las respuestas abajo. En una
-              sola línea no entraban y el texto se partía letra por letra. */}
+        // `askRef` en la franja entera y no solo en el campo: los montos están
+        // abajo, en el flujo. Si el ref siguiera en el campo, el `mousedown`
+        // sobre un chip contaría como "afuera", cerraría el panel y desmontaría
+        // el botón ANTES de que llegara su click — el monto no se elegía nunca.
+        <div key={it._id} data-flip={it._id} ref={askRef} className="lb-askrow">
           <div className="lb-askrow__q">
             <Icon name="check" size={15} style={{ color: 'var(--success)', flexShrink: 0 }} />
             <span className="lb-askrow__txt">
@@ -915,82 +1397,132 @@ export default function FichaRapidaPage() {
             </span>
             {/* Descartar vive acá, lejos de las respuestas, para que no se lea
                 como una cuarta opción. Solo si todavía no se guardó nada. */}
-            {preg.unsaved && !editandoMonto && (
-              <button className="lb-askrow__x" title="Descartar: dejarlo como estaba"
-                onClick={() => setAskCobro(prev => prev.filter(a => a.id !== it._id))}>
-                <Icon name="x" size={14} />
+            {!editandoMonto && preg.unsaved && (
+              <button className="btn btn--ghost btn--sm lb-askrow__x" title="Dejar el trabajo como estaba"
+                onClick={() => { setAskCobro(prev => prev.filter(a => a.id !== it._id)); volverDeLaFranja(it._id); }}>
+                Cancelar
               </button>
             )}
           </div>
-          {editandoMonto ? (
-            <span ref={askRef} className="lb-askrow__acts lb-askrow__acts--edit">
-              <span className="lb-askrow__field">
-                <Icon name="edit" size={13} className="lb-askrow__pencil" />
-                <span className="lb-askrow__peso">$</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  autoFocus
-                  value={askMonto ? Number(askMonto).toLocaleString('es-AR') : ''}
-                  onChange={e => setAskMonto(e.target.value.replace(/[^\d]/g, ''))}
-                  onFocus={() => setAskPanel(true)}
-                  onClick={() => setAskPanel(true)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { const m = num(askMonto ?? ''); cerrarPanel(); confirmarHecho(it, m, true); }
-                    if (e.key === 'Escape') cerrarPanel();
-                  }}
-                  style={{ width: '100%', height: 32, paddingLeft: 36, fontSize: 13 }}
-                />
-                {askPanel && (
-                  <div style={{ ...popover, top: 'calc(100% + 5px)', left: 0, right: 'auto', width: 250 }}>
-                    <div style={popTitle}>Montos</div>
-                    <div style={chipsWrap}>
-                      {quickAmounts.map(v => (
-                        <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
-                          onMouseDown={e => e.preventDefault()}
-                          onClick={() => { setAskMonto(String(v)); setAskPanel(false); }}>
-                          {fmtMoney(v)}
-                        </button>
-                      ))}
-                      {/* Misma lista y mismo editor que el resto de la ficha:
-                          los montos son del consultorio, no de cada panel. */}
-                      <button type="button" onMouseDown={e => e.preventDefault()}
-                        onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
-                        <Icon name="settings" size={12} /> Editar
+
+          {/* RENGLÓN 2 — la respuesta. Las opciones y el campo con sus botones
+              ocupan el mismo lugar y miden lo mismo (`min-height`), así que
+              cambiar de una a otra no mueve nada: solo se reemplaza, y eso se
+              cuenta con un fundido corto. */}
+          <div
+            /* `key` por respuesta: sin ella React reusa el mismo div y solo
+               cambia los hijos, así que la animación depende de que la clase
+               pase de "ninguna" a "esta" — y si se va y se vuelve rápido, no
+               vuelve a correr. Remontando, el fundido arranca siempre. */
+            key={editandoMonto ? 'monto' : 'opciones'}
+            className={`lb-askrow__acts lb-swap ${editandoMonto ? 'lb-askrow__acts--monto' : ''}`}
+          >
+            {editandoMonto ? (
+              <>
+                {/* Mismo ancho que el campo de precio al editar un trabajo: es
+                    el mismo dato. Estirado a toda la fila parecía otra cosa. */}
+                <span className="fr-monto">
+                  <span className="fr-monto__peso">$</span>
+                  <input
+                    className="input"
+                    inputMode="numeric"
+                    autoFocus
+                    value={askMonto ? Number(askMonto).toLocaleString('es-AR') : ''}
+                    onChange={e => setAskMonto(e.target.value.replace(/[^\d]/g, ''))}
+                    onFocus={() => setAskPanel(true)}
+                    onClick={() => setAskPanel(true)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { const m = num(askMonto ?? ''); cerrarPanel(); confirmarHecho(it, m, true); }
+                      if (e.key === 'Escape') cerrarPanel();
+                    }}
+                    style={{ width: '100%', height: 32, paddingLeft: 18, fontSize: 13 }}
+                  />
+                </span>
+                {/* Con palabras, no con íconos: un ✓ y una ✕ al lado de un
+                    importe no dicen qué guardan ni qué descartan, y en una fila
+                    con plata la ✕ se puede leer como "borrar". Es el mismo par
+                    en los cuatro formularios de la ficha. */}
+                <button className="btn btn--primary btn--sm"
+                  onClick={() => { const m = num(askMonto ?? ''); cerrarPanel(); confirmarHecho(it, m, true); }}>
+                  <Icon name="check" size={13} /> Cobrar
+                </button>
+                <button className="btn btn--ghost btn--sm" onClick={cerrarPanel}>Cancelar</button>
+              </>
+            ) : (
+              <>
+                {/* Las dos opciones a la vista, no un botón que alterna: con uno
+                    solo hay que tocarlo para descubrir qué hay del otro lado, y
+                    el que no lo sabe no se entera de que puede cambiarlo.
+                    Arranca en Efectivo — de 212 pagos reales, 212 fueron en
+                    efectivo, aunque eso es en parte porque antes el medio estaba
+                    fijo en el código y nunca se preguntó. */}
+                <button
+                  type="button"
+                  className={`lb-medio ${pgMethod === 'TRANSFER' ? 'is-transf' : ''}`}
+                  onClick={() => setPgMethod(m => (m === 'CASH' ? 'TRANSFER' : 'CASH'))}
+                  title="Tocá para cambiar el medio de pago"
+                >
+                  <Icon name="undo" size={11} />
+                  {pgMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}
+                </button>
+                <button className="btn btn--primary btn--sm" onClick={() => confirmarHecho(it, undefined, true)}>
+                  Pagó {fmtMoney(falta)}
+                </button>
+                <button className="btn btn--ghost btn--sm" onClick={() => abrirOtroMonto(it._id, falta)}>
+                  Otro monto
+                </button>
+                <button className="btn btn--secondary btn--sm" onClick={() => confirmarHecho(it)}>
+                  Todavía no
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* RENGLÓN 3 — los montos. Es LO ÚNICO que cambia de alto, así que es
+              lo único animado: el Desplegable lo abre empujando la lista y lo
+              cierra de vuelta. Sin `animarAlMontar`: la franja nace con las
+              opciones puestas y este bloque nace cerrado. */}
+          {/* Nace CON los montos adentro y ya abierto (`animarAlMontar`), igual
+              que el panel de "Editar": si el bloque existiera vacío desde antes,
+              el contenido llegaría un frame después y el desplegable arrancaría
+              dos veces. El contenido NO se desmonta al elegir un monto —solo se
+              cierra— así que el espacio se contrae con los chips todavía
+              adentro y no vacío. */}
+          {editandoMonto && (
+          <Desplegable abierto={askPanel} clave="montos" animarAlMontar>
+            <div className="lb-askrow__cuerpo">
+                <div className="lb-editpanel">
+                  <div style={popTitle}>Montos</div>
+                  <div className="lb-chips" style={chipsWrap}>
+                    {quickAmounts.map(v => (
+                      <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => { setAskMonto(String(v)); setAskPanel(false); }}>
+                        {fmtMoney(v)}
                       </button>
-                    </div>
+                    ))}
+                    {/* Misma lista y mismo editor que el resto de la ficha:
+                        los montos son del consultorio, no de cada panel. */}
+                    <button type="button" onMouseDown={e => e.preventDefault()}
+                      onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
+                      <Icon name="settings" size={12} /> Editar
+                    </button>
                   </div>
-                )}
-              </span>
-              <button className="btn btn--primary btn--sm" onClick={() => { const m = num(askMonto ?? ''); cerrarPanel(); confirmarHecho(it, m, true); }}>
-                <Icon name="check" size={13} />
-              </button>
-              <button className="btn btn--ghost btn--icon btn--sm" onClick={cerrarPanel}><Icon name="x" size={14} /></button>
-            </span>
-          ) : (
-            <div className="lb-askrow__acts">
-              <button className="btn btn--primary btn--sm" onClick={() => confirmarHecho(it, undefined, true)}>
-                Pagó {fmtMoney(falta)}
-              </button>
-              <button className="btn btn--ghost btn--sm" onClick={() => { setAskMontoId(it._id); setAskMonto(String(falta)); setAskPanel(true); }}>
-                Otro monto
-              </button>
-              <button className="btn btn--secondary btn--sm" onClick={() => confirmarHecho(it)}>
-                Todavía no
-              </button>
+                </div>
             </div>
+          </Desplegable>
           )}
         </div>
       );
     }
 
     return (
-      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : cobroItem === it._id ? cobroRef : undefined} className={`fr-row fw-row ${editing || cobroItem === it._id ? 'fr-row--edit' : ''} ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : cobroItem === it._id ? cobroRef : undefined} className={`fr-row fw-row ${editing || cobroItem === it._id ? 'fr-row--edit' : ''} ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''} ${it._id === volviendo ? 'fr-row--vuelve' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {/* El circulito solo no dice qué hace, y en tablet no hay tooltip que lo
             aclare. Los pendientes llevan la etiqueta al lado; los hechos no la
             necesitan (el tilde verde + el tachado + "hecho DD/MM" ya se leen). */}
         <button
-          onClick={() => toggleDone(it)}
+          onClick={() => { cerrarOperaciones(); toggleDone(it); }}
           title={done ? 'Marcar como pendiente' : 'Marcar como hecho'}
           style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
@@ -999,44 +1531,67 @@ export default function FichaRapidaPage() {
           }}
         >
           <span
+            className={`fr-check ${it._id === flashWorkId ? 'fr-check--pop' : ''}`}
             style={{
               width: 22, height: 22, borderRadius: 999, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               border: done ? 'none' : '2px solid var(--border-input)',
+              /* Verde. Se probó en gris para que el verde fuera solo de plata,
+                 pero el tilde perdía fuerza y la fila se veía apagada. La
+                 ambigüedad que preocupaba —"todo verde"— la resuelve el rojo:
+                 cuando falta plata aparece `falta $X` al lado, así que un
+                 verde sin rojo significa hecho Y cobrado. El color que hay que
+                 buscar con la vista es el rojo, no el verde. */
               background: done ? 'var(--success)' : '#fff', color: 'white',
             }}
           >
             {done && <Icon name="check" size={13} />}
           </span>
-          {!dense && (
-            <span className="lb-act__lbl">{done ? 'Desmarcar' : 'Hecho'}</span>
-          )}
+          {/* Etiqueta SOLO en los pendientes.
+              En los hechos sobra —el tilde, el tachado y "hecho DD/MM" ya lo
+              dicen tres veces— y encima anunciaba la acción de deshacer, que es
+              la que menos conviene invitar: desmarcar sin querer obliga a
+              buscar el trabajo y volver a marcarlo. Sigue disponible tocando el
+              círculo, con su tooltip; simplemente no se ofrece. */}
+          {!dense && !done && <span className="lb-act__lbl">Hecho</span>}
         </button>
         {editing ? (
           <>
             <input className="input" value={eiDesc} onChange={e => setEiDesc(e.target.value)}
               onFocus={() => setEditPanel('trabajo')} onClick={() => setEditPanel('trabajo')}
               onKeyDown={e => e.key === 'Enter' && saveEditItem()} style={{ flex: 1, minWidth: 120, height: 32 }} autoFocus />
-            <div style={{ position: 'relative', width: 100 }}>
-              <span style={{ position: 'absolute', left: 9, top: 7, color: 'var(--text-tertiary)', fontSize: 12 }}>$</span>
+            <div className="fr-monto">
+              <span className="fr-monto__peso">$</span>
               <input className="input" inputMode="numeric" value={eiAmount} onChange={e => setEiAmount(e.target.value.replace(/[^\d]/g, ''))}
                 onFocus={() => setEditPanel('monto')} onClick={() => setEditPanel('monto')}
                 onKeyDown={e => e.key === 'Enter' && saveEditItem()} style={{ width: '100%', height: 32, paddingLeft: 18 }} />
             </div>
-            <button className="btn btn--primary btn--sm" onClick={saveEditItem}><Icon name="check" size={13} /></button>
-            <button className="btn btn--ghost btn--icon btn--sm" onClick={() => { setEditItem(null); setEditPanel(null); }}><Icon name="x" size={14} /></button>
-            {/* `data-flip` propio: el hook lo ve como un nodo nuevo y se saltea
-                la animación en esa pasada, así las filas de abajo no quedan
-                dibujadas encima del panel mientras se abre. */}
-            {editPanel && (
-              <div data-flip={`panel-${it._id}`} className="lb-editpanel">
+            <button className="btn btn--primary btn--sm" onClick={saveEditItem}><Icon name="check" size={13} /> Guardar</button>
+            <button className="btn btn--ghost btn--sm" onClick={() => salirDeEdicion(it._id)}>Cancelar</button>
+            {/* Dentro de un Desplegable: antes aparecía de golpe y la fila
+                pegaba un salto, y al cambiar de "trabajos" a "montos" el panel
+                cambia de alto —son distintas cantidades de chips— y también
+                saltaba. El Desplegable sigue las dos cosas: abrir/cerrar y el
+                cambio de contenido. */}
+            <div style={{ flex: '0 0 100%', width: '100%' }}>
+            <Desplegable abierto={!!editPanel} clave={editPanel ?? ''} animarAlMontar>
+              {editPanel && (
+              /* `key` por panel: sin ella React reusa el mismo elemento al
+                 pasar de "trabajos" a "montos" y el fundido de `panelIn` no
+                 vuelve a correr —el contenido se reemplazaba de golpe—. Con la
+                 key se remonta y entra fundido; el alto ya lo acompaña el
+                 Desplegable. */
+              <div key={editPanel} className="lb-editpanel">
                 <div style={popTitle}>{editPanel === 'trabajo' ? 'Trabajos frecuentes' : 'Montos'}</div>
-                <div style={chipsWrap}>
+                <div className="lb-chips" style={chipsWrap}>
                   {editPanel === 'trabajo' ? (
                     <>
+                      {/* El chip REEMPLAZA la descripción, no la suma: acá se
+                          está corrigiendo un trabajo que ya existe y concatenar
+                          dejaba "blanqueamiento ajuste". */}
                       {treatments.map(t => (
                         <button key={t} type="button" className="lb-chip" onMouseDown={e => e.preventDefault()}
-                          onClick={() => { setEiDesc(p => (p.trim() ? `${p.trim()} ${t}` : t)); setEditPanel(null); }}>{t}</button>
+                          onClick={() => { setEiDesc(t); setEditPanel(null); }}>{t}</button>
                       ))}
                       <button type="button" className="lb-chip lb-chip--add" onMouseDown={e => e.preventDefault()}
                         onClick={() => setCustomTreatOpen(true)}><Icon name="settings" size={12} /> Editar</button>
@@ -1053,7 +1608,9 @@ export default function FichaRapidaPage() {
                   )}
                 </div>
               </div>
-            )}
+              )}
+            </Desplegable>
+            </div>
           </>
         ) : (
           <>
@@ -1072,26 +1629,28 @@ export default function FichaRapidaPage() {
               {(((done && it.completedAt) || parcial || (!done && cobrado))) && (
                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 8px', marginTop: 3 }}>
                   {done && it.completedAt && (
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
                       hecho {fmtDate(it.completedAt)}
                     </span>
                   )}
                   {/* Cuanto lleva pagado, para los que se pagan en cuotas */}
-                  {parcial && <span className="lb-paidprog">pagó {fmtMoney(paid)}</span>}
-                  {/* Pendiente ya cobrado por completo (una seña que cubre todo):
-                      el botón de cobrar no está en esta lista, así que el estado
-                      tiene que verse igual. */}
-                  {!done && cobrado && <span className="lb-paidprog">✓ pagado</span>}
+                  {parcial && <span className={`lb-paidprog ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>pagó {fmtMoney(paid)}</span>}
+                  {/* Acá había un chip "✓ pagado" para los pendientes ya
+                      cobrados. Existía porque los pendientes NO tenían botón de
+                      cobro y era la única forma de ver el estado. Ahora lo
+                      tienen y dice "Pagado", así que el chip repetía la misma
+                      palabra dos veces en la misma fila. */}
                 </div>
               )}
+
               {itemPhotos.length > 0 && (
                 /* flexBasis 100% → las miniaturas siempre arrancan renglón propio */
                 <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', flexBasis: '100%' }}>
-                  {itemPhotos.map(({ photo, title, description }) => (
+                  {itemPhotos.map(({ photo }, idx) => (
                     <img
                       key={photo._id}
                       src={photo.thumbnailUrl || photo.url}
-                      onClick={() => setZoomPhoto({ url: photo.url, category: photo.type, title, description })}
+                      onClick={() => abrirZoom(itemPhotos, idx)}
                       title={`${photoTypeLabel(photo.type)} — foto del trabajo`}
                       style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border-subtle)', cursor: 'zoom-in', display: 'block' }}
                     />
@@ -1104,21 +1663,41 @@ export default function FichaRapidaPage() {
                 ve igual que siempre. En celular pasa a ocupar su propio renglón:
                 no entra todo a lo ancho y el scroll horizontal en una lista es
                 lo peor que le podés dar a alguien con el dedo en la pantalla. */}
-            <span className="mono fr-price" style={{ fontSize: 13.5, fontWeight: 600, flexShrink: 0, color: it.price ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{it.price ? fmtMoney(it.price) : '—'}</span>
+            {/* La plata es un ATRIBUTO del trabajo, no una acción: va pegada a
+                la descripción y no contra el borde derecho. Así el hueco del
+                medio —que aparecía con descripciones cortas— se achica solo y
+                las acciones quedan solas en el margen.
+                El saldo pendiente va debajo del precio y no adentro del botón:
+                es información, no el rótulo de lo que hace. */}
+            <span className="fr-plata">
+              <span className="mono fr-price" style={{ color: it.price ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{it.price ? fmtMoney(it.price) : '—'}</span>
+              {/* El rojo aparece SIEMPRE que haya plata sin cobrar, no solo con
+                  un pago parcial. La fila ya se apoyaba en eso —"un verde sin
+                  rojo significa hecho Y cobrado"— pero un trabajo hecho y sin
+                  cobrar nada no mostraba nada, así que se leía igual que uno
+                  cobrado. Sin monto en ese caso: el precio está al lado y sería
+                  el mismo número dos veces.
+                  Los pendientes siguen sin marca: todavía no se deben. */}
+              {!cobrado && (parcial || (done && price > 0)) && (
+                <span className={`fr-falta ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>
+                  {paid > 0 ? `falta ${fmtMoney(price - paid)}` : 'sin cobrar'}
+                </span>
+              )}
+            </span>
             <span className="fr-money">
-            {!done ? (
-              /* Pendiente: se MUESTRA el estado de cobro (una seña se ve como
-                 "pagó $X de $Y" junto a la descripción) pero no se ofrece la
-                 acción — para eso está el selector del formulario de Pagos. */
-              null
-            ) : cobroItem === it._id ? (
+            {/* Los PENDIENTES también se cobran. Antes no se ofrecía acá y el
+               comentario decía "para eso está el formulario de Pagos" — que ya
+               no existe, así que cobrar una seña se había vuelto imposible.
+               Y es un caso común: brackets y retenedores se pagan por
+               adelantado y viven meses en "por hacer" mientras se pagan. */}
+            {cobroItem === it._id ? (
               /* Monto precargado y EDITABLE: si paga todo se confirma de una, y
                  si deja una parte (cuota de brackets) se corrige el número —
                  ese pago queda atado al trabajo y alimenta el "pagó $X de $Y". */
               <>
-              <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                <span style={{ position: 'relative', width: 92 }}>
-                  <span style={{ position: 'absolute', left: 8, top: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>$</span>
+              <span className="fr-cobro-linea">
+                <span className="fr-monto">
+                  <span className="fr-monto__peso">$</span>
                   <input
                     className="input"
                     inputMode="numeric"
@@ -1128,27 +1707,30 @@ export default function FichaRapidaPage() {
                     onFocus={() => setCobroPanel(true)}
                     onClick={() => setCobroPanel(true)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') { const m = num(cobroAmount); setCobroPanel(false); setCobroItem(null); marcarCobrado(it, m); }
-                      if (e.key === 'Escape') { setCobroPanel(false); setCobroItem(null); }
+                      if (e.key === 'Enter') { const m = num(cobroAmount); salirDeCobro(it._id); marcarCobrado(it, m); }
+                      if (e.key === 'Escape') salirDeCobro(it._id);
                     }}
-                    style={{ width: '100%', height: 30, paddingLeft: 17, fontSize: 12.5 }}
+                    style={{ width: '100%', height: 32, paddingLeft: 18, fontSize: 13 }}
                   />
                 </span>
                 <button
                   className="btn btn--primary btn--sm"
-                  style={{ height: 30, padding: '0 9px' }}
-                  onClick={() => { const m = num(cobroAmount); setCobroItem(null); marcarCobrado(it, m); }}
+                  onClick={() => { const m = num(cobroAmount); salirDeCobro(it._id); marcarCobrado(it, m); }}
                 >
-                  <Icon name="check" size={13} />
+                  <Icon name="check" size={13} /> Cobrar
                 </button>
-                <button className="btn btn--ghost btn--icon btn--sm" onClick={() => { setCobroItem(null); setCobroPanel(false); }}>
-                  <Icon name="x" size={14} />
-                </button>
+                <button className="btn btn--ghost btn--sm" onClick={() => salirDeCobro(it._id)}>Cancelar</button>
               </span>
-                {cobroPanel && (
+                {/* El alto lo lleva el Desplegable, igual que en "Editar": suelto,
+                    el panel aparecía de golpe y empujaba la lista de un salto. */}
+                <div style={{ flex: '0 0 100%', width: '100%' }}>
+                {/* El contenido va SIEMPRE montado: si se desmontara al cerrar,
+                    los montos desaparecerían primero y el espacio se cerraría
+                    después, vacío. Lo abre y lo cierra `abierto`. */}
+                <Desplegable abierto={cobroPanel} clave="montos" animarAlMontar>
                   <div className="lb-editpanel">
                     <div style={popTitle}>Montos</div>
-                    <div style={chipsWrap}>
+                    <div className="lb-chips" style={chipsWrap}>
                       {quickAmounts.map(v => (
                         <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
                           onMouseDown={e => e.preventDefault()}
@@ -1162,14 +1744,16 @@ export default function FichaRapidaPage() {
                       </button>
                     </div>
                   </div>
-                )}
+                </Desplegable>
+                </div>
               </>
             ) : (
               <button
-                className={`lb-cobro ${cobrado ? 'is-on' : ''} ${it._id === flashWorkId ? 'lb-pop' : ''} ${!cobrado && parcial ? 'lb-cobro--2l' : ''}`}
+                className={`lb-cobro ${cobrado ? 'is-on' : ''} ${it._id === flashWorkId ? 'lb-pop' : ''}`}
                 disabled={cobroBusy === it._id}
                 title={cobrado ? 'Ya cobrado - tocá para deshacer' : `Cobrar (podés editar el monto)`}
                 onClick={() => {
+                  cerrarOperaciones();
                   if (cobrado) { pedirDescobrar(it); return; }
                   setCobroAmount(String(price - paid));
                   setCobroItem(it._id);
@@ -1182,36 +1766,157 @@ export default function FichaRapidaPage() {
                   <Icon name={cobrado ? 'check' : 'cash'} size={12} />
                   {cobrado ? 'Pagado' : 'Cobrar'}
                 </span>
-                {!cobrado && parcial && (
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.1 }}>
-                    {fmtMoney(price - paid)}
-                  </span>
-                )}
               </button>
             )}
+            {/* Mismo formato que las acciones de la agenda (`lb-act`): ícono en
+                cajita con su leyenda abajo. Tres lápices y tachos sin rótulo
+                obligan a acordarse cuál es cuál; con la palabra debajo se lee.
+                Y de paso el objetivo táctil pasa de 28 a 32px de lado.
+
+                Mientras se está cobrando no van: la fila tiene una sola
+                pregunta abierta —cuánto— y sus dos botones para responderla.
+                Fotos, Editar y Borrar ahí son ruido, y encima llevan afuera a
+                mitad de una operación con plata. Al editar ya pasaba: es la
+                misma idea. */}
+            {cobroItem !== it._id && (
             <span className="fr-acts">
-              <button className="btn btn--ghost btn--icon btn--sm" title="Fotos del trabajo" onClick={() => openModal('uploadPhotos', { patientId: id, treatmentItemId: it._id })} style={{ color: itemPhotos.length ? 'var(--brand-primary-600)' : undefined }}><Icon name="image" size={14} /></button>
-              <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditItem(it)}><Icon name="edit" size={14} /></button>
-              <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => pedirBorrarTrabajo(it)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
+              <button className="lb-act" title="Fotos del trabajo" onClick={() => openModal('uploadPhotos', { patientId: id, treatmentItemId: it._id })}>
+                <span className="lb-act__ic" style={{ color: itemPhotos.length ? 'var(--brand-primary-600)' : undefined }}><Icon name="image" size={16} /></span>
+                <span className="lb-act__lbl">{itemPhotos.length ? `Fotos ${itemPhotos.length}` : 'Fotos'}</span>
+              </button>
+              <button className="lb-act" title="Editar" onClick={() => { cerrarOperaciones(); startEditItem(it); }}>
+                <span className="lb-act__ic"><Icon name="edit" size={16} /></span>
+                <span className="lb-act__lbl">Editar</span>
+              </button>
+              <button className="lb-act" title="Borrar" onClick={() => { cerrarOperaciones(); pedirBorrarTrabajo(it); }}>
+                <span className="lb-act__ic" style={{ color: 'var(--danger)' }}><Icon name="trash" size={16} /></span>
+                <span className="lb-act__lbl">Borrar</span>
+              </button>
             </span>
+            )}
             </span>
+            {/* El desglose de pagos, a lo ANCHO DE LA FILA.
+                Vivía adentro de la columna de la descripción, que comparte el
+                renglón con el precio y las acciones: en el teléfono eso son
+                unos 200px, y ahí el formulario para corregir un pago se apilaba
+                de a un campo por renglón. Como hijo directo de la fila ocupa
+                todo el ancho y entra en dos. En escritorio se ve igual que
+                antes —sigue siendo el renglón de abajo—, solo que ahora las
+                líneas de cada pago tienen el ancho completo en vez del de una
+                columna. */}
+              {/* Los pagos de ESTE trabajo, colapsados en una línea.
+                  Desplegados siempre ocupaban tres renglones por trabajo y la
+                  lista se volvía larguísima; y con los datos reales ningún
+                  trabajo tuvo más de 2 pagos, así que el detalle es el caso
+                  raro. La línea dice lo que importa —cuántos y cuánto— y el
+                  desglose está a un toque.
+
+                  Va TAMBIÉN en el buscador del historial. Estaba excluido del
+                  modo compacto, y eso tenía sentido cuando el desglose venía
+                  desplegado y sumaba tres renglones por trabajo; colapsado es
+                  una línea. Y es justo donde más se necesita: el historial es
+                  la pantalla a la que se entra a revisar qué se cobró de un
+                  trabajo viejo.
+
+                  DOS desplegables HERMANOS, no uno adentro del otro. Anidados
+                  no funcionaba: al borrar un pago los dos cambiaban de alto por
+                  el mismo motivo y cada uno arrancaba su animación; el de
+                  afuera, además, mide su contenido con un observador que le
+                  avisa DESPUÉS del layout, así que iba siempre un frame atrás y
+                  terminaba corrigiendo de un tirón. Se intentó coordinarlos
+                  (que el de afuera acompañe sin animar) y funcionaba a veces:
+                  depende de en qué orden el navegador entrega los avisos de los
+                  dos observadores, y eso no está definido. Como hermanos el
+                  problema no existe: el resumen cambia de texto pero no de
+                  alto, así que borrar un pago del medio mueve UN solo bloque, y
+                  cuando se va el último los dos se cierran a la vez —misma
+                  duración, misma curva— y se lee como un solo movimiento. */}
+              {(() => {
+                const pagosW = pagosPorTrabajo.get(it._id) ?? [];
+                const hay = pagosW.length > 0;
+                return (
+                  /* El envoltorio es el que la fila acomoda. Sin él, el elemento
+                     que quedaba suelto en el flex era la caja del Desplegable
+                     —el `.fr-wpays` de adentro no le llega—, así que no bajaba
+                     de renglón y aplastaba la descripción contra el precio. */
+                  <div className="fr-wpays-wrap">
+                    <Desplegable abierto={hay}>
+                      <div className="fr-wpays">
+                        <button
+                          type="button"
+                          className="fr-wpays__sum"
+                          onClick={() => togglePagos(it._id)}
+                        >
+                          <Icon name={pagosAbiertos[it._id] ? 'chevronDown' : 'chevronRight'} size={12} />
+                          {pagosW.length}{' '}
+                          {pagosW.length === 1 ? 'pago' : 'pagos'}
+                          <b>{fmtMoney(pagosW.reduce((a, t) => a + t.amount, 0))}</b>
+                        </button>
+                      </div>
+                    </Desplegable>
+                    {/* Líneas simples, no la fila completa de un pago: acá
+                        adentro el tag del trabajo (AJUSTE) es el mismo de la
+                        fila que lo contiene, y las cajas de cada pago
+                        multiplicaban el alto. Queda lo que cambia entre uno y
+                        otro —fecha, medio, monto— y las acciones en chico. */}
+                    <Desplegable abierto={hay && !!pagosAbiertos[it._id]}>
+                      <div className="fr-wpays__det">
+                        {pagosW.map(t => (
+                          // El mismo desvanecido que la fila de la lista de
+                          // Pagos: sin esto, al borrar no pasaba NADA durante
+                          // los 120ms de la salida y después la línea
+                          // desaparecía de golpe — la espera se leía como que el
+                          // botón no había registrado.
+                          <div
+                            key={t._id}
+                            ref={editPago === t._id ? epRef : undefined}
+                            className={`fr-pline ${editPago === t._id ? 'fr-pline--edit' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''} ${t._id === volviendo ? 'fr-row--vuelve' : ''}`}
+                          >
+                          {editPago === t._id ? formEdicionPago(t) : (
+                          <>
+                            <span className="mono fr-pline__d">{fmtDate(isoDateOf(t))}</span>
+                            <span className="fr-pline__m">{methodLabel(t.paymentMethod)}</span>
+                            <span className="mono fr-pline__a">{fmtMoney(t.amount)}</span>
+                            <button className="fr-pline__b" title="Editar" onClick={() => { cerrarOperaciones(); startEditPago(t); }}>
+                              <Icon name="edit" size={12} />
+                            </button>
+                            <button className="fr-pline__b fr-pline__b--del" title="Borrar" onClick={() => { cerrarOperaciones(); setDelPago(t); }}>
+                              <Icon name="trash" size={12} />
+                            </button>
+                          </>
+                          )}
+                          </div>
+                        ))}
+                      </div>
+                    </Desplegable>
+                  </div>
+                );
+              })()}
           </>
         )}
       </div>
     );
   };
 
-  // ---- fila de un pago ----
-  const renderPagoRow = (t: Transaction, dense = false) => {
-    const editing = editPago === t._id;
-    const ph = photosByTx.get(t._id) ?? [];
-    return (
-      <div key={t._id} data-flip={t._id} ref={editing ? epRef : undefined} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === flashPagoId ? 'lb-rowflash' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
-        {editing ? (
-          <>
+  /**
+   * El formulario para corregir un pago: fecha, monto, medio.
+   *
+   * Vive suelto porque un pago se ve en DOS lugares —la fila de "sin trabajo
+   * asignado" y la línea del desglose de un trabajo— y hasta ahora solo el
+   * primero sabía dibujarlo. Desde el desglose, el lápiz ponía el pago en modo
+   * edición y no pasaba nada visible: el formulario estaba en la otra fila, que
+   * para un pago asignado a un trabajo ni siquiera se muestra.
+   *
+   * Se editan los tres campos, no solo el monto. La fecha la pone el cobro en
+   * "hoy" sin preguntar, así que si el pago se registra al día siguiente esta
+   * es la única forma de corregirla — dejándola afuera quedaba un dato
+   * imposible de arreglar.
+   */
+  const formEdicionPago = (t: Transaction) => (
+    <>
             <div style={{ width: 132 }}><DatePicker value={epDate} onChange={setEpDate} /></div>
-            <div style={{ position: 'relative', width: 100 }}>
-              <span style={{ position: 'absolute', left: 9, top: 7, color: 'var(--text-tertiary)', fontSize: 12 }}>$</span>
+            <div className="fr-monto">
+              <span className="fr-monto__peso">$</span>
               <input className="input" inputMode="numeric" value={epAmount}
                 onChange={e => setEpAmount(e.target.value.replace(/[^\d]/g, ''))}
                 onFocus={() => setEpPanel(true)} onClick={() => setEpPanel(true)}
@@ -1223,12 +1928,23 @@ export default function FichaRapidaPage() {
                 <button key={m} type="button" className={`seg__btn ${epMethod === m ? 'is-active' : ''}`} onClick={() => setEpMethod(m)}>{m === 'CASH' ? 'Efec.' : 'Transf.'}</button>
               ))}
             </div>
-            <button className="btn btn--primary btn--sm" onClick={saveEditPago}><Icon name="check" size={13} /></button>
-            <button className="btn btn--ghost btn--icon btn--sm" onClick={() => { setEditPago(null); setEpPanel(false); }}><Icon name="x" size={14} /></button>
-                {epPanel && (
+            {/* Los dos juntos en un grupo que no se parte: sueltos, cuando la
+                línea no daba a lo ancho, "Cancelar" caía solo al renglón de
+                abajo y parecía otra cosa. */}
+            <span className="fp-edit__acts">
+              <button className="btn btn--primary btn--sm" onClick={saveEditPago}><Icon name="check" size={13} /> Guardar</button>
+              <button className="btn btn--ghost btn--sm" onClick={() => salirDeEdicionPago(t._id)}>Cancelar</button>
+            </span>
+                {/* El alto lo lleva el Desplegable, igual que en "Editar": suelto,
+                    el panel aparecía de golpe y empujaba la lista de un salto. */}
+                <div style={{ flex: '0 0 100%', width: '100%' }}>
+                {/* El contenido va SIEMPRE montado: si se desmontara al cerrar,
+                    los montos desaparecerían primero y el espacio se cerraría
+                    después, vacío. Lo abre y lo cierra `abierto`. */}
+                <Desplegable abierto={epPanel} clave="montos" animarAlMontar>
                   <div className="lb-editpanel">
                     <div style={popTitle}>Montos</div>
-                    <div style={chipsWrap}>
+                    <div className="lb-chips" style={chipsWrap}>
                       {quickAmounts.map(v => (
                         <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
                           onMouseDown={e => e.preventDefault()}
@@ -1242,7 +1958,20 @@ export default function FichaRapidaPage() {
                       </button>
                     </div>
                   </div>
-                )}
+                </Desplegable>
+                </div>
+    </>
+  );
+
+  // ---- fila de un pago ----
+  const renderPagoRow = (t: Transaction, dense = false) => {
+    const editing = editPago === t._id;
+    const ph = photosByTx.get(t._id) ?? [];
+    return (
+      <div key={t._id} data-flip={t._id} ref={editing ? epRef : undefined} className={`fr-row fp-row ${editing ? 'fr-row--edit' : ''} ${t._id === flashPagoId ? 'lb-rowflash' : ''} ${t._id === outPagoId ? 'lb-rowout' : ''} ${t._id === volviendo ? 'fr-row--vuelve' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+        {editing ? (
+          <>
+            {formEdicionPago(t)}
           </>
         ) : (
           <>
@@ -1270,14 +1999,14 @@ export default function FichaRapidaPage() {
             <span className="mono fp-date">{fmtDate(isoDateOf(t))}</span>
             <span className="fp-method">{methodLabel(t.paymentMethod)}</span>
             <span className="fp-acts">
-              <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => startEditPago(t)}><Icon name="edit" size={14} /></button>
-              <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => setDelPago(t)} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
+              <button className="btn btn--ghost btn--icon btn--sm" title="Editar" onClick={() => { cerrarOperaciones(); startEditPago(t); }}><Icon name="edit" size={14} /></button>
+              <button className="btn btn--ghost btn--icon btn--sm" title="Borrar" onClick={() => { cerrarOperaciones(); setDelPago(t); }} style={{ color: 'var(--danger)' }}><Icon name="trash" size={14} /></button>
             </span>
             {ph.length > 0 && (
               <div className="fp-photos">
-                {ph.map(({ photo, title, description }) => (
+                {ph.map(({ photo }, idx) => (
                   <img key={photo._id} src={photo.thumbnailUrl || photo.url}
-                    onClick={() => setZoomPhoto({ url: photo.url, category: photo.type, title, description })}
+                    onClick={() => abrirZoom(ph, idx)}
                     title={`${photoTypeLabel(photo.type)} — foto vinculada`}
                     style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border-subtle)', cursor: 'zoom-in', display: 'block' }} />
                 ))}
@@ -1294,6 +2023,11 @@ export default function FichaRapidaPage() {
   // Por seguridad no exponemos realizado/pagado/por-hacer ni el saldo a favor
   // (pagó de más → se muestra igual que "al día", sin revelar el monto).
   const debe = falta > 0;
+  // Tercer estado: pagó de más. Aparece cuando se cobra algo que todavía no
+  // está hecho (una seña) o cuando se deshace un trabajo ya cobrado. Antes
+  // `falta` negativo caía en "Al día — no debe nada" y la seña quedaba
+  // invisible: la plata estaba en el saldo pero no se veía en ningún lado.
+  const aFavor = falta < 0;
 
   return (
     <div
@@ -1312,8 +2046,19 @@ export default function FichaRapidaPage() {
         kicker="Ficha clínica"
         title={<>Trabajos, pagos y <em>cuánto falta cobrar</em></>}
       />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 14, width: '100%', flex: stack ? undefined : 1, minHeight: 0 }}>
+      {/* El `key` remonta al cruzar el límite —esqueleto → datos, o de un
+          paciente a otro— y con eso corre el fundido de `.ficha-in`. Escribiendo
+          en el buscador la clave no cambia, así que el input no se remonta ni
+          pierde el foco. */}
+      <div
+        key={cargandoFicha ? 'esqueleto' : (id ?? 'buscar')}
+        className="ficha-in"
+        style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? 14 : 24, display: 'flex', flexDirection: 'column', gap: 14, width: '100%', flex: stack ? undefined : 1, minHeight: 0 }}
+      >
+        {cargandoFicha && <FichaEsqueleto isMobile={isMobile} />}
+
         {/* ---------- PACIENTE ---------- */}
+        {!cargandoFicha && (
         <div className="card" style={{ overflow: 'visible' }}>
           <div style={{ padding: patient ? 0 : 16 }}>
             {!patient && <div style={label}>Paciente</div>}
@@ -1416,8 +2161,12 @@ export default function FichaRapidaPage() {
             )}
           </div>
         </div>
+        )}
 
-        {patient && (
+        {/* `!cargandoFicha` además de `patient`: el paciente puede llegar antes que
+            la lista de trabajos, y media ficha con la tabla vacía es peor que el
+            esqueleto entero. */}
+        {patient && !cargandoFicha && (
           <>
             {/* ---------- BANNER-AVISO (una sola cosa: deuda o "al día") ---------- */}
             {/* Por seguridad NO exponemos realizado/pagado/por-hacer ni el saldo a
@@ -1427,53 +2176,38 @@ export default function FichaRapidaPage() {
                 bloque de "quién es y cómo viene", y ahorra un alto que en el
                 teléfono se paga caro. */}
             <div
-              key={debe ? 'debe' : 'aldia'}
-              className={`lb-estado ${debe ? 'lb-estado--debe' : ''} lb-estado--anexo`}
+              key={debe ? 'debe' : aFavor ? 'afavor' : 'aldia'}
+              className={`lb-estado ${debe ? 'lb-estado--debe' : ''} ${aFavor ? 'lb-estado--afavor' : ''} lb-estado--anexo`}
               style={{ animation: 'dialogPop 0.22s cubic-bezier(0.16,1,0.3,1)' }}
             >
-              <Icon name={debe ? 'cash' : 'check'} size={18} style={{ flexShrink: 0 }} />
+              <Icon name={debe || aFavor ? 'cash' : 'check'} size={18} style={{ flexShrink: 0 }} />
               {debe ? (
                 <span className="lb-estado__txt">
                   Falta cobrar
                   <b className="mono lb-estado__monto">{fmtMoney(falta)}</b>
+                </span>
+              ) : aFavor ? (
+                <span className="lb-estado__txt">
+                  Pagó por adelantado
+                  <b className="mono lb-estado__monto">{fmtMoney(-falta)}</b>
                 </span>
               ) : (
                 <span>Al día — no debe nada</span>
               )}
             </div>
 
-            {/* Una sola columna (celular y tablet) → pestañas. Con las dos
-                columnas a la vista no hacen falta. */}
-            {stack && (
-              <div className="seg lb-tabs-sticky" style={{ width: '100%' }}>
-                <button
-                  type="button"
-                  className={`seg__btn ${mobileTab === 'trabajos' ? 'is-active' : ''}`}
-                  onClick={() => setMobileTab('trabajos')}
-                  style={{ flex: 1 }}
-                >
-                  Trabajos · {pendientes.length + hechosCount}
-                </button>
-                <button
-                  type="button"
-                  className={`seg__btn ${mobileTab === 'pagos' ? 'is-active' : ''}`}
-                  onClick={() => setMobileTab('pagos')}
-                  style={{ flex: 1 }}
-                >
-                  Pagos · {pagos.length}
-                </button>
-              </div>
-            )}
 
-            {/* ---------- DOS COLUMNAS: Trabajos | Pagos ---------- */}
-            <div style={{ display: 'grid', gridTemplateColumns: stack ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16, alignItems: stack ? 'start' : 'stretch', flex: stack ? undefined : 1, minHeight: 0 }}>
+            {/* Una sola hoja a todo el ancho. Eran dos columnas —Trabajos |
+                Pagos— y al unificarlas el grid seguía reservando la mitad
+                derecha para nadie. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: stack ? undefined : 1, minHeight: 0 }}>
 
             {/* ---------- TRABAJOS ---------- */}
             <div
               className="card"
               style={{
                 overflow: 'visible',
-                display: stack && mobileTab !== 'trabajos' ? 'none' : 'flex',
+                display: 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
                 minWidth: 0,
@@ -1481,49 +2215,124 @@ export default function FichaRapidaPage() {
             >
               <div className="card__header" style={{ alignItems: 'center' }}>
                 <div className="card__title">
-                  Plan de tratamiento · Trabajos
-                  {pendientes.length > 0 && <span style={countBadge}>{pendientes.length} por hacer</span>}
+                  Trabajos y pagos
                 </div>
+                {/* Los tres a la vista, no un interruptor que hay que apagar.
+                    Con un solo chip había que descubrir que se destildaba para
+                    volver a la lista completa — una acción que no se anuncia en
+                    ningún lado. Además así el estado se lee sin tocar nada.
+                    "Todos" va sin número a propósito: los otros dos cuentan
+                    cosas que hay que hacer o cobrar, y ese número es una señal;
+                    la cantidad total de trabajos no le pide nada a nadie. */}
+                {(pendientes.length > 0 || porCobrar.length > 0) && (
+                <span className="fr-filtros">
+                  <button
+                    type="button"
+                    className={`chip-pill ${filtro === 'todos' ? 'is-active' : ''}`}
+                    onClick={() => aplicarFiltro('todos')}
+                    title="Ver todos los trabajos"
+                  >
+                    Todos
+                  </button>
+                  {pendientes.length > 0 && (
+                    <button
+                      type="button"
+                      className={`chip-pill ${filtro === 'hacer' ? 'is-active' : ''}`}
+                      onClick={() => aplicarFiltro('hacer')}
+                      title="Ver solo lo que falta hacer"
+                    >
+                      Por hacer · {pendientes.length}
+                    </button>
+                  )}
+                  {porCobrar.length > 0 && (
+                    <button
+                      type="button"
+                      className={`chip-pill chip-pill--plata ${filtro === 'cobrar' ? 'is-active' : ''}`}
+                      onClick={() => aplicarFiltro('cobrar')}
+                      title="Ver solo lo que falta cobrar"
+                    >
+                      Falta cobrar · {porCobrar.length}
+                    </button>
+                  )}
+                </span>
+                )}
               </div>
 
               <div ref={workRef} className="lb-addrow" style={{ position: 'relative', display: 'block' }}>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  <input
-                    className="input"
-                    placeholder="Trabajo (ej: Extracción 38)"
-                    value={twDesc}
-                    onFocus={() => setWorkPanel('trabajo')}
-                    onClick={() => setWorkPanel('trabajo')}
-                    onChange={e => setTwDesc(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addTrabajo()}
-                    style={{ flex: '1 1 110px', minWidth: 90, height: 38 }}
-                  />
-                  <div style={{ position: 'relative', width: isMobile ? 74 : 100, flexShrink: 0 }}>
+                {/* El formulario imita la forma de una fila: descripción a la
+                    izquierda ocupando lo que sobra, después el precio, y el
+                    botón donde las filas tienen su acción de cobro. Así se lee
+                    como "la fila que estás por crear" y el ancho deja de ser
+                    arbitrario: es el mismo que el de la columna de abajo.
+                    Un tope al medio dejaba un hueco a la derecha que no se
+                    correspondía con nada. */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', paddingRight: isMobile ? 0 : 128 }}>
+                  <span style={{ position: 'relative', flex: '1 1 110px', minWidth: 90 }}>
+                    <input
+                      className={`input ${campoLleno === 'trabajo' ? 'lb-landed' : ''}`}
+                      placeholder="Trabajo (ej: Extracción 38)"
+                      value={twDesc}
+                      onFocus={() => setWorkPanel('trabajo')}
+                      onClick={() => setWorkPanel('trabajo')}
+                      onChange={e => setTwDesc(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { cerrarOperaciones(); addTrabajo(); } }}
+                      style={{ width: '100%', height: 38, paddingRight: 36 }}
+                    />
+                    {twDesc && (
+                      <button
+                        type="button"
+                        className="lb-clear"
+                        title="Borrar"
+                        aria-label="Borrar el trabajo"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => { setTwDesc(''); setWorkPanel('trabajo'); }}
+                      >
+                        <Icon name="x" size={13} />
+                      </button>
+                    )}
+                  </span>
+                  {/* Más ancho de lo que parece necesario: adentro entran el
+                      "$" de la izquierda, la X de borrar a la derecha y un
+                      número de seis cifras como 120.000. Con 100px el importe
+                      quedaba apretado contra los dos. */}
+                  <div style={{ position: 'relative', width: isMobile ? 104 : 140, flexShrink: 0 }}>
                     <span style={dollarPrefix}>$</span>
                     <input
-                      className="input" inputMode="numeric" placeholder="0"
+                      className={`input ${campoLleno === 'monto' ? 'lb-landed' : ''}`}
+                      inputMode="numeric" placeholder="0"
                       value={twAmount}
                       onFocus={() => setWorkPanel('monto')}
                       onClick={() => setWorkPanel('monto')}
                       onChange={e => setTwAmount(e.target.value.replace(/[^\d]/g, ''))}
-                      onKeyDown={e => e.key === 'Enter' && addTrabajo()}
-                      style={{ width: '100%', height: 38, paddingLeft: 20 }}
+                      onKeyDown={e => { if (e.key === 'Enter') { cerrarOperaciones(); addTrabajo(); } }}
+                      style={{ width: '100%', height: 38, paddingLeft: 20, paddingRight: twAmount ? 32 : 10 }}
                     />
+                    {twAmount && (
+                      <button
+                        type="button"
+                        className="lb-clear"
+                        title="Borrar"
+                        aria-label="Borrar el monto"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => { setTwAmount(''); setWorkPanel('monto'); }}
+                      >
+                        <Icon name="x" size={13} />
+                      </button>
+                    )}
                   </div>
-                  <button className={`btn btn--primary ${isMobile ? 'btn--icon' : ''}`} onClick={addTrabajo} disabled={twBusy} title="Agregar trabajo" style={{ height: 38, flexShrink: 0 }}>
-                    {twBusy ? <Spinner /> : <><Icon name="plus" size={14} /> {!isMobile && 'Agregar'}</>}
+                  <button className={`btn btn--primary ${isMobile ? 'btn--icon' : ''}`} onClick={() => { cerrarOperaciones(); addTrabajo(); }} title="Agregar trabajo" style={{ height: 38, flexShrink: 0 }}>
+                    {/* Sin spinner ni deshabilitado: la fila se dibuja al
+                        instante y el campo queda vacío, así que no hay espera
+                        que tapar ni doble envío que evitar. */}
+                    <Icon name="plus" size={14} /> {!isMobile && 'Agregar'}
                   </button>
                 </div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 8, fontSize: 12.5, color: twDone ? 'var(--success)' : 'var(--text-secondary)', fontWeight: twDone ? 600 : 400, cursor: 'pointer', userSelect: 'none', transition: 'color 0.15s' }}>
-                  <input type="checkbox" checked={twDone} onChange={e => setTwDone(e.target.checked)} />
-                  {twDone ? '¡Hecho! ✓ (cuenta a cobrar)' : 'Ya lo hice (cuenta a cobrar)'}
-                </label>
 
                 {/* popover de chips (contextual al campo enfocado) */}
                 {workPanel === 'trabajo' && (
                   <div style={popover}>
                     <div style={popTitle}>Trabajos frecuentes</div>
-                    <div style={chipsWrap}>
+                    <div className="lb-chips" style={chipsWrap}>
                       {treatments.map(t => (
                         <button key={t} type="button" onMouseDown={e => e.preventDefault()} onClick={() => { addChip(t); setWorkPanel(null); }} className="lb-chip">{t}</button>
                       ))}
@@ -1536,9 +2345,9 @@ export default function FichaRapidaPage() {
                 {workPanel === 'monto' && (
                   <div style={popover}>
                     <div style={popTitle}>Montos</div>
-                    <div style={chipsWrap}>
+                    <div className="lb-chips" style={chipsWrap}>
                       {quickAmounts.map(v => (
-                        <button key={v} type="button" className="lb-chip mono" onMouseDown={e => e.preventDefault()} onClick={() => { setTwAmount(String(v)); setWorkPanel(null); }} style={{ fontWeight: 600 }}>{fmtMoney(v)}</button>
+                        <button key={v} type="button" className="lb-chip mono" onMouseDown={e => e.preventDefault()} onClick={() => { setTwAmount(String(v)); setCampoLleno('monto'); setWorkPanel(null); }} style={{ fontWeight: 600 }}>{fmtMoney(v)}</button>
                       ))}
                       <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
                         <Icon name="settings" size={12} /> Editar
@@ -1561,32 +2370,84 @@ export default function FichaRapidaPage() {
                   // scrollea, la lista se queda con el scroll.
                   stack
                     ? { isolation: 'isolate' }
-                    : { flex: 1, minHeight: 0, overflowY: 'auto', isolation: 'isolate' }
+                    : {
+                        flex: 1,
+                        minHeight: 0,
+                        overflowY: 'auto',
+                        isolation: 'isolate',
+                        // Sin anclaje de scroll. Chrome, cuando el contenido de
+                        // un contenedor con scroll se achica, corrige `scrollTop`
+                        // para dejar quieto lo que estás mirando. Con una
+                        // animación de alto eso pelea frame a frame: el
+                        // desglose se cerraba bien pero la LISTA saltaba y
+                        // después volvía, y parecía un rebote del desplegable.
+                        overflowAnchor: 'none',
+                      }
                 }
               >
-                {!hasWorks && (
+                {/* Pagos que no están imputados a ningún trabajo. Cuentan en
+                    el saldo igual, así que si no se vieran el número de arriba
+                    no cerraría con nada de lo que hay en pantalla. Cada uno se
+                    puede asignar a un trabajo desde el ícono de vincular. */}
+                {filtro === 'todos' && pagosACuenta.length > 0 && (
+                  <div className="fr-acuenta">
+                    <div className="fr-acuenta__hd">
+                      <Icon name="cash" size={13} />
+                      Pagos sin trabajo asignado
+                      <b>{fmtMoney(pagosACuenta.reduce((a, t) => a + t.amount, 0))}</b>
+                    </div>
+                    {pagosACuenta.slice(0, 3).map(t => renderPagoRow(t, true))}
+                    {pagosACuenta.length > 3 && (
+                      <button
+                        type="button"
+                        className="fr-wpays__more"
+                        onClick={() => {
+                          qc.removeQueries({ queryKey: ['transactions', id, 'search'] });
+                          setPagosModalOpen(true);
+                        }}
+                      >
+                        Ver los {pagosACuenta.length} pagos sin asignar
+                      </button>
+                    )}
+                  </div>
+                )}
+                {!hasWorks && pagosACuenta.length === 0 && (
                   <div style={emptyRow}>Todavía no cargaste trabajos. Agregá el primero arriba ↑</div>
                 )}
-                {hasWorks && pendientes.length === 0 && hechosCount > 0 && (
-                  <div style={{ ...emptyRow, padding: '14px' }}>Todo hecho 🎉</div>
+                {hasWorks && filtro !== 'todos' && trabajosVisibles.length === 0 && (
+                  <div style={{ ...emptyRow, padding: '14px' }}>
+                    {filtro === 'hacer' ? 'Todo hecho 🎉' : 'No queda nada por cobrar ✓'}
+                  </div>
                 )}
-                {pendientes.map(it => renderWorkRow(it))}
-                {hechosCount > 0 && (
-                  <>
-                    <button onClick={() => setShowDone(s => !s)} style={doneToggle}>
-                      <Icon name={showDone ? 'chevronDown' : 'chevronRight'} size={14} /> Hechos ({hechosCount})
-                    </button>
-                    {showDone && (
-                      <>
-                        {hechosVisibles.map(it => renderWorkRow(it))}
-                        {hechosCount > hechosVisibles.length && (
-                          <button onClick={() => setHechosModalOpen(true)} style={verTodos}>
-                            Ver los {hechosCount} trabajos hechos <Icon name="chevronRight" size={13} />
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </>
+                {/* Hechos y pendientes en la MISMA lista, del más nuevo al más
+                    viejo. Antes estaban en dos secciones y marcar algo como
+                    hecho lo mandaba de una a la otra: la fila desaparecía de
+                    donde el Dr. la estaba mirando. Acá se queda en su lugar y
+                    solo cambia de estado. */}
+                {trabajosVisibles.map(it => renderWorkRow(it))}
+                {/* Última fila: la puerta al historial completo.
+                    Antes solo aparecía con 40 trabajos cargados, o sea nunca
+                    —el paciente más cargado tiene 7—, así que el buscador con
+                    filtros existía y no había forma de llegar. Ahora está
+                    siempre que haya algo que buscar: la lista de arriba muestra
+                    lo reciente y esto abre TODO, con fecha, texto y estado. */}
+                {filtro === 'todos' && todosLosTrabajos.length > 0 && (
+                  <button
+                    /* Se TIRA la copia guardada antes de abrir, no se confía en
+                       que esté vencida. Un trabajo cuyo pago se borró seguía
+                       mostrándose "Pagado" acá adentro, y no hay margen para
+                       eso en la pantalla donde se revisa la plata: el modal
+                       arranca vacío, pide todo de nuevo y muestra lo que hay. */
+                    onClick={() => {
+                      qc.removeQueries({ queryKey: ['works', id, 'historial'] });
+                      setHechosModalOpen(true);
+                    }}
+                    style={verTodos}
+                  >
+                    {todosLosTrabajos.length >= INLINE_MAX
+                      ? 'Ver todo el historial'
+                      : 'Buscar en el historial'} <Icon name="chevronRight" size={13} />
+                  </button>
                 )}
               </div>
 
@@ -1596,154 +2457,6 @@ export default function FichaRapidaPage() {
                   lado mirando la pantalla. */}
             </div>
 
-            {/* ---------- PAGOS ---------- */}
-            <div
-              className="card"
-              style={{
-                overflow: 'visible',
-                display: stack && mobileTab !== 'pagos' ? 'none' : 'flex',
-                flexDirection: 'column',
-                minHeight: 0,
-                minWidth: 0,
-              }}
-            >
-              <div className="card__header" style={{ alignItems: 'center' }}>
-                <div className="card__title">
-                  Pagos
-                  {pagos.length > 0 && <span style={countBadge}>{pagos.length}</span>}
-                </div>
-              </div>
-
-              <div ref={pagoRef} className="lb-addrow" style={{ position: 'relative', display: 'block' }}>
-                {/* Imputar el pago a un trabajo (opcional). Solo aparece si hay
-                    alguno con saldo: si no, sería un campo vacío molestando. Por
-                    defecto va "a cuenta", que es como se cargó siempre. */}
-                {/* Celular: renglón 1 = trabajo + fecha. La fecha sube acá para
-                    que el renglón 2 (monto · método · +) entre entero. */}
-                {(trabajosCobrables.length > 0 || isMobile) && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12.5, color: 'var(--text-secondary)', flexWrap: 'nowrap' }}>
-                    {!isMobile && <span style={{ whiteSpace: 'nowrap' }}>¿De qué trabajo?</span>}
-                    {trabajosCobrables.length > 0 && (
-                      <Select
-                        value={pgWorkId}
-                        onChange={v => {
-                          setPgWorkId(v);
-                          setPagoPanel(false);
-                          // Al elegir un trabajo, el monto casi siempre es lo que
-                          // falta de ese trabajo: precargarlo saca el paso de
-                          // mirar el saldo y tipearlo. Queda editable — si entrega
-                          // menos, se corrige encima y el pago va igual imputado.
-                          const w = trabajosCobrables.find(x => x._id === v);
-                          const falta = w ? String(Math.max(0, (w.price ?? 0) - (w.paid ?? 0))) : '';
-                          setPgAmount(prev => (prev === '' || prev === pgAutoAmount.current ? falta : prev));
-                          pgAutoAmount.current = falta;
-                        }}
-                        style={{ flex: '1 1 120px', minWidth: 100 }}
-                        title="¿De qué trabajo es este pago?"
-                        options={[{ value: '', label: isMobile ? 'Pago a cuenta (sin trabajo)' : 'A cuenta (sin trabajo)' }]}
-                        groups={[
-                          {
-                            label: 'Hechos sin cobrar',
-                            options: cobrablesHechos.map(w => ({
-                              value: w._id,
-                              label: w.description,
-                              hint: `falta ${fmtMoney((w.price ?? 0) - (w.paid ?? 0))}`,
-                            })),
-                          },
-                          {
-                            label: 'Del plan (por hacer)',
-                            options: cobrablesPlan.map(w => ({
-                              value: w._id,
-                              label: w.description,
-                              hint: `falta ${fmtMoney((w.price ?? 0) - (w.paid ?? 0))}`,
-                            })),
-                          },
-                        ]}
-                      />
-                    )}
-                    {isMobile && (
-                      <div style={{ flex: trabajosCobrables.length > 0 ? '0 0 136px' : '1 1 auto' }}>
-                        <DatePicker value={pgDate} onChange={v => { setPagoPanel(false); setPgDate(v); }} />
-                      </div>
-                    )}
-                  </label>
-                )}
-
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  <div style={{ position: 'relative', flex: '1 1 110px', minWidth: 100 }}>
-                    <span style={dollarPrefix}>$</span>
-                    <input className="input" inputMode="numeric" placeholder="Monto" value={pgAmount} onFocus={() => setPagoPanel(true)} onClick={() => setPagoPanel(true)} onChange={e => setPgAmount(e.target.value.replace(/[^\d]/g, ''))} onKeyDown={e => e.key === 'Enter' && addPago()} style={{ width: '100%', height: 38, paddingLeft: 20 }} />
-                  </div>
-                  {/* Tocar otro campo del formulario también cierra el panel de
-                      montos: para el usuario es "otro lado" igual que afuera. */}
-                  {!isMobile && (
-                    <div style={{ width: 148 }}><DatePicker value={pgDate} onChange={v => { setPagoPanel(false); setPgDate(v); }} /></div>
-                  )}
-                  {/* En celular el método es UN botón que alterna, no dos: la
-                      mitad del ancho y un toque en vez de "leer y elegir".
-                      Casi siempre es efectivo, así que lo normal es no tocarlo. */}
-                  {isMobile ? (
-                    <button
-                      type="button"
-                      className="btn btn--secondary"
-                      title="Cambiar a efectivo o transferencia"
-                      onClick={() => { setPgMethod(m => (m === 'CASH' ? 'TRANSFER' : 'CASH')); setPagoPanel(false); }}
-                      style={{ height: 38, flexShrink: 0, minWidth: 74 }}
-                    >
-                      {pgMethod === 'CASH' ? 'Efec.' : 'Transf.'}
-                    </button>
-                  ) : (
-                    <div className="seg">
-                      {(['CASH', 'TRANSFER'] as const).map(m => (
-                        <button key={m} type="button" className={`seg__btn ${pgMethod === m ? 'is-active' : ''}`} onClick={() => { setPgMethod(m); setPagoPanel(false); }}>
-                          {m === 'CASH' ? 'Efec.' : 'Transf.'}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <button className={`btn btn--primary ${isMobile ? 'btn--icon' : ''}`} onClick={addPago} disabled={pgBusy} title="Agregar pago" style={{ height: 38, flexShrink: 0 }}>
-                    {pgBusy ? <Spinner /> : <><Icon name="plus" size={14} /> {!isMobile && 'Pago'}</>}
-                  </button>
-                </div>
-
-
-                {pagoPanel && (
-                  <div style={popover}>
-                    <div style={popTitle}>Montos</div>
-                    <div style={chipsWrap}>
-                      {quickAmounts.map(v => (
-                        <button key={v} type="button" className="lb-chip mono" onMouseDown={e => e.preventDefault()} onClick={() => { setPgAmount(String(v)); setPagoPanel(false); }} style={{ fontWeight: 600 }}>{fmtMoney(v)}</button>
-                      ))}
-                      <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCustomAmountsOpen(true)} className="lb-chip lb-chip--add">
-                        <Icon name="settings" size={12} /> Editar
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* lista de pagos */}
-              <div
-                ref={pagosListRef}
-                style={
-                  stack
-                    ? { isolation: 'isolate' }
-                    : { flex: 1, minHeight: 0, overflowY: 'auto', isolation: 'isolate' }
-                }
-              >
-                {pagos.length === 0 && (
-                  <div style={emptyRow}>Sin pagos todavía.</div>
-                )}
-                {pagos.slice(0, stack ? CAP : fitPagos).map(t => renderPagoRow(t))}
-                {pagos.length > (stack ? CAP : fitPagos) && (
-                  <button onClick={() => setPagosModalOpen(true)} style={verTodos}>
-                    Ver los {pagos.length} pagos <Icon name="chevronRight" size={13} />
-                  </button>
-                )}
-              </div>
-
-              {/* Sin total pagado al pie — ver nota en la hoja de Trabajos. */}
-            </div>
             </div>
           </>
         )}
@@ -1894,25 +2607,14 @@ export default function FichaRapidaPage() {
         </div>
       )}
 
-      {/* Lightbox de zoom */}
-      {zoomPhoto && (
-        <div onClick={() => setZoomPhoto(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, zIndex: 1200, padding: isMobile ? 16 : 32, cursor: 'zoom-out', animation: 'overlayFade 0.12s ease-out' }}>
-          <button onClick={() => setZoomPhoto(null)} title="Cerrar" style={{ position: 'absolute', top: 18, right: 18, width: 40, height: 40, borderRadius: 999, background: 'rgba(255,255,255,0.16)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(8px)' }}>
-            <Icon name="x" size={20} />
-          </button>
-          <img src={zoomPhoto.url} onClick={e => e.stopPropagation()} style={{ maxWidth: '100%', maxHeight: zoomPhoto.category || zoomPhoto.title || zoomPhoto.description ? '72vh' : '86vh', borderRadius: 10, boxShadow: 'var(--shadow-lg)', cursor: 'default' }} />
-          {(zoomPhoto.category || zoomPhoto.title || zoomPhoto.description) && (
-            <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '12px 16px', maxWidth: 520, width: '100%', boxShadow: 'var(--shadow-lg)', cursor: 'default' }}>
-              {zoomPhoto.category && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'var(--brand-primary-50)', color: 'var(--brand-primary-600)', fontSize: 12, fontWeight: 600, marginBottom: zoomPhoto.title || zoomPhoto.description ? 8 : 0 }}>
-                  <Icon name="image" size={12} /> {photoTypeLabel(zoomPhoto.category)}
-                </span>
-              )}
-              {zoomPhoto.title && <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{zoomPhoto.title}</div>}
-              {zoomPhoto.description && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3 }}>{zoomPhoto.description}</div>}
-            </div>
-          )}
-        </div>
+      {zoom && (
+        <VisorFotos
+          fotos={zoom.fotos}
+          indice={zoom.i}
+          onCerrar={() => setZoom(null)}
+          etiquetaCategoria={photoTypeLabel}
+          compacto={isMobile}
+        />
       )}
 
       {/* Historial completo de trabajos hechos — búsqueda + paginación server-side */}
@@ -1920,8 +2622,8 @@ export default function FichaRapidaPage() {
         <ListModal
           title={
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              Trabajos hechos{hechosFilterActive ? ` (${hechosSearchRaw.length})` : ` (${hechosCount})`}
-              {hechosSearching && hechosSearchRaw.length > 0 && <TitleSpinner />}
+              Historial de trabajos{hechosFilterActive ? ` (${hechosSearch.length})` : ''}
+              {hechosSearching && hechosSearch.length > 0 && <TitleSpinner />}
             </span>
           }
           icon="check"
@@ -1930,9 +2632,31 @@ export default function FichaRapidaPage() {
           onClose={() => {
             setHechosModalOpen(false);
             resetHechosFilter();
+            setHechosEstado('todos');
           }}
           filterSlot={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* El estado va PRIMERO y con las mismas palabras que los chips de
+                  la lista: es el corte más grueso —de qué estamos hablando— y
+                  recién después se afina con fecha o texto. Dos vocabularios
+                  para lo mismo obligarían a traducir mentalmente. */}
+              <span className="fr-filtros">
+                {([
+                  ['todos', 'Todos'],
+                  ['hechos', 'Hechos'],
+                  ['hacer', 'Por hacer'],
+                  ['cobrar', 'Falta cobrar'],
+                ] as const).map(([v, txt]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`chip-pill ${v === 'cobrar' ? 'chip-pill--plata' : ''} ${hechosEstado === v ? 'is-active' : ''}`}
+                    onClick={() => { setHechosEstado(v); setHechosLimit(PAGE); }}
+                  >
+                    {txt}
+                  </button>
+                ))}
+              </span>
               <div className="lb-filters">
                 {/* DatePicker propio en vez de <input type="date">: el nativo
                     muestra "mm/dd/yyyy" según el idioma del navegador, que no se
@@ -1973,7 +2697,7 @@ export default function FichaRapidaPage() {
                   {hechosPanelOpen && (
                     <div style={{ ...popover, left: 0, right: 0 }}>
                       <div style={popTitle}>Trabajos frecuentes</div>
-                      <div style={chipsWrap}>
+                      <div className="lb-chips" style={chipsWrap}>
                         {treatments.map(t => (
                           <button
                             key={t}
@@ -2018,7 +2742,7 @@ export default function FichaRapidaPage() {
             </div>
           }
         >
-          {hechosSearchRaw.length === 0 ? (
+          {hechosSearch.length === 0 ? (
             hechosSearching ? (
               <ListSpinner />
             ) : (
@@ -2030,7 +2754,7 @@ export default function FichaRapidaPage() {
             )
           ) : (
             <>
-              {hechosSearchRaw.map(it => renderWorkRow(it, true))}
+              {hechosSearch.map(it => renderWorkRow(it, true))}
               {hechosHasMore && (
                 <button onClick={() => setHechosLimit(l => l + PAGE)} style={verTodos}>
                   Cargar más
@@ -2232,14 +2956,6 @@ function ListModal({
   );
 }
 
-function Spinner() {
-  return (
-    <>
-      <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-      Guardando…
-    </>
-  );
-}
 
 // Spinner centrado para el cuerpo de un ListModal mientras se busca.
 function ListSpinner({ label = 'Buscando…' }: { label?: string }) {
@@ -2341,19 +3057,9 @@ const label: CSSProperties = {
 const emptyRow: CSSProperties = {
   padding: 24, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13,
 };
-const countBadge: CSSProperties = {
-  marginLeft: 8, fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)',
-  background: 'var(--bg-hover)', borderRadius: 999, padding: '1px 8px',
-};
 const dollarPrefix: CSSProperties = {
   position: 'absolute', left: 10, top: 10, color: 'var(--text-tertiary)',
   fontSize: 13, pointerEvents: 'none',
-};
-const doneToggle: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '9px 12px',
-  borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-hover)',
-  fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer',
-  textAlign: 'left',
 };
 const verTodos: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, width: '100%',

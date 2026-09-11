@@ -1229,6 +1229,25 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .lb-chip { min-height: 40px; padding: 7px 16px; font-size: 13.5px; }
 }
 
+/* Los chips DENTRO de un panel de sugerencias (montos, trabajos frecuentes)
+   van más compactos que los sueltos de la agenda: acá son ocho o diez juntos y
+   con el tamaño normal no entraban en un renglón. Que entren no es solo
+   estético — el panel queda más bajo, así que al abrirse empuja la mitad y la
+   animación tiene menos que mover.
+   Se scopea por el contenedor y no se toca `.lb-chip`: los de la Libreta están
+   sueltos entre otros elementos y ahí el tamaño grande está bien. */
+.lb-chips .lb-chip {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  gap: 4px;
+}
+@media (max-width: 1199px) {
+  /* En táctil se achica el ANCHO, no el alto: entran más por renglón sin que
+     el dedo pierda superficie donde apuntar. */
+  .lb-chips .lb-chip { min-height: 36px; padding: 6px 11px; font-size: 13px; }
+}
+
 /* Fila que entra o sale (un pago, o un trabajo que cambia de lista).
    IMPORTANTE: acá solo se animan `opacity` y `transform`. Se probó antes
    animando `max-height` para que las filas se empujaran entre sí, y nunca
@@ -1244,9 +1263,12 @@ table.tbl { width: 100%; border-collapse: collapse; }
   0%, 45% { background: var(--success-bg); }
   100% { background: transparent; }
 }
+/* Rojo tenue mientras se va: dice QUÉ pasó, no solo que algo se movió. La
+   entrada tiene su destello verde; la salida tenía solo el desvanecido y a
+   veces se leía como si la fila se hubiera ido sola. */
 @keyframes rowOut {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(-8px); }
+  from { opacity: 1; transform: none; background: var(--danger-bg); }
+  to { opacity: 0; transform: translateY(-8px); background: var(--danger-bg); }
 }
 .lb-rowin {
   animation: rowIn 0.15s ease-out, rowInFlash 0.8s ease-out;
@@ -1418,6 +1440,17 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .fp-acts, .fr-acts { display: inline-flex; flex-shrink: 0; gap: 2px; }
 .fp-br { display: none; }
 .fp-photos { display: flex; gap: 4px; flex-wrap: wrap; flex-basis: 100%; padding-left: 66px; }
+/* Cada fila se calcula sola.
+   Cuando un desglose se contrae, el alto de la lista cambia en cada frame y el
+   navegador tiene que rehacer el layout de TODO lo que hay abajo. Con
+   `contain: layout` el interior de cada fila queda cacheado: lo único que se
+   recalcula es dónde va la caja, no cómo se acomoda por dentro. Con trece
+   filas —cada una con su círculo, su texto, su precio, sus botones y sus
+   miniaturas— esa diferencia es la mayor parte del trabajo por frame.
+   No fija el tamaño (eso sería `contain: size`), así que las filas siguen
+   creciendo y achicándose normalmente. */
+.fr-row, .lb-askrow { contain: layout; }
+
 .fr-row--edit { flex-wrap: wrap; }
 /* Fila de trabajo: todo alineado arriba. Centrado, el circulo y el precio
    flotaban a media altura de un bloque de texto que crece con la fecha, el
@@ -1472,6 +1505,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
      el segundo. */
   .lb-askrow__acts { flex-wrap: wrap; }
   .lb-askrow__acts > .btn--primary { flex: 1 1 100%; }
+
   /* El precio se queda en el renglón del nombre, alineado a la derecha: es el
      par "concepto — importe" de toda la vida (una carta, un ticket). Suelto en
      otra línea el número no se sabía de qué era. */
@@ -1517,30 +1551,45 @@ table.tbl { width: 100%; border-collapse: collapse; }
 }
 .lb-askcobro b { font-weight: 600; }
 .lb-askrow__q { display: flex; align-items: center; gap: 8px; }
+/* EL campo de importe de la ficha, uno solo para los tres lugares donde se
+   escribe plata en una fila: "¿cuánto pagó?", "Cobrar" y editar un pago. Mismo
+   ancho, mismo alto y el "$" en el mismo píxel — es el mismo dato, no hay razón
+   para que cambie de forma según por dónde se llegó. */
+.fr-monto { position: relative; width: 104px; flex-shrink: 0; }
+/* Con el campo, los botones valen lo que miden: repartir el ancho entre tres
+   deja dos íconos enormes al lado de un campo chico. */
+.lb-askrow__acts--monto { justify-content: flex-start; }
+.lb-askrow__acts--monto > .btn { flex: 0 0 auto; }
+/* Dentro del Desplegable el aire va como padding y no como margin: los márgenes
+   del hijo se colapsan fuera del bloque que se mide, y el alto animado quedaría
+   corto justo esos píxeles — el tirón del final. */
+.lb-askrow__cuerpo { padding-top: 8px; }
+.lb-askrow__cuerpo > .lb-askrow__acts,
+.lb-askrow__cuerpo > .lb-editpanel { margin-top: 0; }
 .lb-askrow__txt { flex: 1; min-width: 0; font-size: 13.5px; }
 .lb-askrow__txt b { font-weight: 600; }
 /* Las respuestas reparten el ancho disponible en vez de amontonarse a un lado:
    así el bloque se ve parejo en celular, tablet y escritorio sin media queries,
    y cada botón crece con la pantalla (blanco más grande = menos errar el toque).
    El "Sí" pesa más porque lleva el monto adentro y no debe cortarse. */
-.lb-askrow__acts { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+/* `min-height` fijo: las opciones y el campo con sus botones ocupan el mismo
+   renglón y tienen que medir lo mismo, o al cambiar de uno a otro la franja
+   pegaría un salto de alto que nadie pidió. Lo único que cambia de tamaño acá
+   es el bloque de montos, y de eso se encarga el Desplegable. */
+.lb-askrow__acts { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-height: 32px; }
 .lb-askrow__acts > .btn {
   flex: 1 1 0; min-width: 0; justify-content: center;
   padding-inline: 8px; white-space: nowrap;
 }
 .lb-askrow__acts > .btn--primary { flex-grow: 1.7; }
 
-/* Al editar el monto manda el campo: se estira y los dos botones quedan al
-   tamaño justo del ícono. */
-.lb-askrow__acts--edit > .btn { flex: 0 0 auto; }
-.lb-askrow__field { position: relative; flex: 1 1 auto; min-width: 0; }
-.lb-askrow__pencil { position: absolute; left: 9px; top: 9px; opacity: .65; pointer-events: none; z-index: 1; }
-.lb-askrow__peso { position: absolute; left: 26px; top: 7px; font-size: 12.5px; color: var(--text-tertiary); pointer-events: none; z-index: 1; }
-.lb-askrow__x {
-  flex-shrink: 0; display: inline-flex; padding: 3px; border: 0; border-radius: 6px;
-  background: transparent; color: var(--text-tertiary); cursor: pointer;
-}
-.lb-askrow__x:hover { color: var(--danger); background: var(--danger-bg); }
+.fr-monto__peso { position: absolute; left: 9px; top: 6px; font-size: 12.5px; color: var(--text-tertiary); pointer-events: none; z-index: 1; }
+/* El "Cancelar" de la franja: es un botón normal, solo que vive en la esquina
+   de la pregunta y no entre las respuestas — cancelar no es una respuesta más.
+   Antes era una ✕ suelta: en una fila con plata, una ✕ se puede leer como
+   "borrar", y era la única de las cuatro operaciones de la ficha que no decía
+   con palabras lo que hacía. */
+.lb-askrow__x { flex-shrink: 0; margin-left: 6px; color: var(--text-tertiary); }
 /* La fila-pregunta reemplaza a la fila normal en su mismo lugar: el trabajo no
    se mueve hasta responder, así no se pierde de vista lo que se está
    resolviendo y un toque sin querer se cancela ahí mismo.
@@ -1565,12 +1614,18 @@ table.tbl { width: 100%; border-collapse: collapse; }
   align-items: center;
   gap: 5px;
   flex-shrink: 0;
-  padding: 4px 9px;
+  /* Más grande que antes: la hoja pasó a ocupar todo el ancho y este botón
+     —que es la acción principal de la fila— seguía con el tamaño de cuando
+     competía por lugar en media pantalla. Quedaba apretado al lado de un
+     importe de seis cifras. */
+  min-width: 104px;
+  justify-content: center;
+  padding: 7px 13px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-input);
   background: #fff;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -1582,8 +1637,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .lb-cobro--2l {
   flex-direction: column;
   gap: 0;
-  padding: 3px 10px;
-  line-height: 1.15;
+  padding: 5px 12px;
+  line-height: 1.2;
 }
 .lb-cobro.is-on {
   background: var(--success-bg);
@@ -1995,7 +2050,6 @@ table.tbl { width: 100%; border-collapse: collapse; }
      invisible de 44px centrado en el botón. Así no se mueve ningún layout
      (que es lo que hace riesgoso agrandar los botones de verdad). */
   .btn--icon::after,
-  .lb-askrow__x::after,
   .lb-link::after {
     content: '';
     position: absolute;
@@ -2005,7 +2059,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
     height: 44px;
     transform: translate(-50%, -50%);
   }
-  .btn--icon, .lb-askrow__x, .lb-link { position: relative; }
+  .btn--icon, .lb-link { position: relative; }
 
   /* Con blancos de 44px sobre botones de 32px, dos vecinos se pisarían y el
      de más adelante en el DOM (borrar) le robaría toque al anterior. 12px de
@@ -2143,7 +2197,11 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .sel__opt.is-on .sel__opt-hint { color: var(--brand-primary-600); }
 
 /* El calendario tambien se ancla con position:fixed para no recortarse */
-.datepicker-pop { z-index: 200; }
+/* Por ENCIMA de los modales (990-1200). El calendario va por portal a <body>,
+   así que compite en la capa más alta de la página: con 200 se abría detrás del
+   modal del historial y el campo parecía roto — se tocaba y no pasaba nada
+   visible. */
+.datepicker-pop { z-index: 1300; }
 
 
 /* ============================================================
@@ -2385,6 +2443,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .bt-next__work { margin-top: 4px; font-size: 12.5px; color: var(--text-secondary); }
 
 .bt-more, .bt-pend { display: flex; flex-direction: column; gap: 3px; }
+.bt-more { gap: 6px; }
 .bt-more__lbl, .bt-pend__lbl {
   font-size: 11px;
   font-weight: 600;
@@ -2393,24 +2452,39 @@ table.tbl { width: 100%; border-collapse: collapse; }
   color: var(--text-tertiary);
 }
 .bt-more__row, .bt-pend__row { font-size: 13px; color: var(--text-secondary); }
-/* Los turnos siguientes también llevan a la agenda. Como botón pero discretos:
-   el que manda sigue siendo el bloque grande de arriba. */
+/* Los turnos siguientes son TURNOS, igual que el de arriba: la misma tarjeta,
+   más chica. Antes eran dos renglones de texto suelto —el mismo gris que
+   cualquier aclaración— y había que buscarlos con lupa para darse cuenta de
+   que además se podían tocar. Que sean lo mismo en versión reducida es lo que
+   dice "hay más turnos" de un vistazo, sin robarle la respuesta al primero:
+   la jerarquía la sostienen el tamaño y el relleno, no el hecho de que uno se
+   vea y el otro no. */
 .bt-more__row--go {
-  align-self: flex-start;
-  padding: 3px 7px;
-  margin-left: -7px;
-  background: none;
-  border: 0;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 11px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   font-family: inherit;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: background 120ms, color 120ms;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Mismo encendido que el bloque grande: es el mismo gesto, ir a ese día. */
 .bt-more__row--go:hover {
   background: var(--brand-primary-50);
-  color: var(--brand-primary);
+  border-color: var(--brand-primary-100);
 }
+.bt-more__d { color: var(--text-primary); }
+/* La hora a la derecha y en negrita: es el dato que se compara entre turnos, y
+   alineado en columna se lee de un saque cuál es a qué hora. */
+.bt-more__h { flex-shrink: 0; font-weight: 600; color: var(--text-primary); }
 
 .bt-none {
   display: flex;
@@ -2503,7 +2577,10 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .skel__row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; }
 .skel__av,
 .skel__l1,
-.skel__l2 {
+.skel__l2,
+/* Bloque suelto: mismo gris y mismo brillo, pero el tamaño lo pone quien lo
+   usa — el esqueleto de la ficha copia la forma de cada pieza real. */
+.skel-b {
   background: var(--bg-muted);
   border-radius: 6px;
 }
@@ -2516,10 +2593,12 @@ table.tbl { width: 100%; border-collapse: collapse; }
    el compositor y no repinta en cada frame. */
 .skel__av,
 .skel__l1,
-.skel__l2 { position: relative; overflow: hidden; }
+.skel__l2,
+.skel-b { position: relative; overflow: hidden; }
 .skel__av::after,
 .skel__l1::after,
-.skel__l2::after {
+.skel__l2::after,
+.skel-b::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -2543,7 +2622,9 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .bt-card { animation: none; }
   .skel__av::after,
   .skel__l1::after,
-  .skel__l2::after { animation: none; }
+  .skel__l2::after,
+  .skel-b::after { animation: none; }
+  .ficha-in { animation: none; }
 }
 
 /* Tabla de pacientes: anchos fijos para que filtrar no recalcule las columnas.
@@ -2760,3 +2841,566 @@ table.tbl { width: 100%; border-collapse: collapse; }
 }
 
 
+
+/* Saldo a favor: pagó más de lo que está hecho (una seña, o un trabajo que se
+   deshizo después de cobrarlo). Azul y no verde: "al día" y "tiene plata a
+   favor" son cosas distintas y la segunda pide hacer algo con esa plata.
+   Antes este caso se mostraba como "Al día — no debe nada" y la seña
+   desaparecía de la vista. */
+.lb-estado--afavor {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+/* ── Ficha: pagos dentro de la fila del trabajo ──────────────────────────────
+   Antes vivían en una columna aparte y había que cruzarlos a ojo con el
+   trabajo al que correspondían. Van sangrados y sobre fondo tenue para que se
+   lean como "lo que pasó con este trabajo" y no como filas de la lista. */
+/* Ocupa el renglón entero de la fila, debajo de todo. Y va indentado a la
+   altura del nombre, no del círculo: así se lee como algo que cuelga del
+   trabajo y no como un elemento suelto de la lista. En el teléfono el sangrado
+   se achica —ahí el ancho es el recurso escaso—. */
+/* El bloque de pagos toma el renglón entero de la fila, debajo de todo, y va
+   sangrado a la altura del NOMBRE (no del círculo): se lee como algo que cuelga
+   del trabajo, no como un elemento suelto de la lista.
+   El ancho descuenta el sangrado: con `100%` MÁS el margen se pasaba de la
+   fila. */
+.fr-wpays-wrap {
+  flex: 0 0 calc(100% - 56px);
+  max-width: calc(100% - 56px);
+  margin-left: 56px;
+  min-width: 0;
+}
+.fr-wpays { margin-top: 4px; margin-bottom: 2px; }
+/* La fila envuelve siempre, no solo en edición: sin esto el bloque de pagos,
+   que pide el 100%, se apretaría en el mismo renglón que el precio. */
+.fw-row { flex-wrap: wrap; }
+@media (max-width: 767px) {
+  /* En el teléfono el sangrado se va: ahí el ancho es el recurso escaso, y era
+     justo lo que hacía que el formulario de un pago se apilara de a un campo
+     por renglón. */
+  .fr-wpays-wrap { flex-basis: 100%; max-width: 100%; margin-left: 0; }
+  .fr-wpays__det { max-width: 100%; }
+}
+/* Resumen en una línea: cuántos pagos y cuánto suman. El desglose se abre
+   solo si hace falta — desplegado siempre, cada trabajo ocupaba tres renglones
+   y la lista se volvía interminable. */
+.fr-wpays__sum {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--success-bg);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--success);
+  cursor: pointer;
+}
+.fr-wpays__sum:hover { filter: brightness(0.97); }
+.fr-wpays__sum b { font-variant-numeric: tabular-nums; }
+/* Detalle de pagos de un trabajo.
+   El abrir y cerrar lo maneja `Desplegable`, que anima el alto real: el bloque
+   se contrae en vez de desaparecer, y las filas de abajo suben acompañando ese
+   alto. Sin animaciones de entrada/salida acá — serían una segunda animación
+   sobre el mismo gesto, que es lo que producía el rebote. */
+.fr-wpays__det {
+  /* Tope de ancho en escritorio y tablet. El bloque ahora dispone de la fila
+     entera, pero una línea de pago son cuatro datos cortos —fecha, medio,
+     monto y sus dos acciones—: estirada a mil píxeles, el importe y los botones
+     quedan a media pantalla de la fecha y hay que barrer con la vista para leer
+     una sola línea. Con el tope se agrupan como cuando el bloque vivía en la
+     columna del nombre. En el teléfono no hay tope: ahí el ancho completo es
+     justo lo que hace que el formulario de corregir un pago entre en dos
+     renglones. */
+  max-width: 560px;
+  border-left: 2px solid var(--success-border);
+  border-radius: 0 8px 8px 0;
+  margin-top: 4px;
+}
+
+/* Un pago, en una línea. Sin el tag del trabajo —es el de la fila que lo
+   contiene— y sin las cajas de la fila completa. */
+.fr-pline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.fr-pline:hover { background: var(--bg-hover); }
+.fr-pline__d { color: var(--text-tertiary); flex-shrink: 0; }
+.fr-pline__m { flex: 1; min-width: 0; }
+.fr-pline__a {
+  font-weight: 600;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+}
+.fr-pline__b {
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.fr-pline__b:hover { background: var(--bg-muted); color: var(--text-primary); }
+.fr-pline__b--del:hover { color: var(--danger); }
+.fr-wpays .fr-row:first-child { border-top: 0; }
+.fr-wpays__more {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: none;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.fr-wpays__more:hover { background: var(--bg-hover); }
+
+/* Pagos que no están imputados a ningún trabajo. Cuentan en el saldo, así que
+   sin mostrarlos el número de arriba no cerraría con nada de lo que se ve. */
+.fr-acuenta {
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--info-bg);
+}
+.fr-acuenta__hd {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--info);
+}
+.fr-acuenta__hd b { margin-left: auto; font-size: 13px; letter-spacing: 0; }
+
+
+/* Las acciones de la fila de trabajo usan el mismo bloque que la agenda
+   (`lb-act`), pero en una fila que ya trae precio y botón de cobro: un poco
+   más juntas para no empujar el contenido. */
+.fr-acts { display: inline-flex; align-items: flex-start; gap: 2px; flex-shrink: 0; }
+.fr-acts .lb-act { min-width: 46px; }
+/* Secundarias de verdad: sin caja ni borde en reposo. Con la cajita puesta,
+   tres iconos pesaban más que el botón de cobrar —que es LA acción de la
+   fila— y la jerarquía quedaba al revés. La caja aparece al apuntarlas, que
+   es cuando hace falta saber dónde termina el objetivo. */
+.fr-acts .lb-act__ic {
+  border-color: transparent;
+  background: none;
+  color: var(--text-tertiary);
+}
+.fr-acts .lb-act:hover .lb-act__ic {
+  border-color: var(--border-input);
+  background: #fff;
+  color: var(--text-secondary);
+}
+.fr-acts .lb-act__lbl { color: var(--text-placeholder); }
+.fr-acts .lb-act:hover .lb-act__lbl { color: var(--text-tertiary); }
+
+/* Plata del trabajo: precio arriba y, si debe una parte, el saldo abajo.
+   Va junto a la descripción y no contra el borde: es un dato del trabajo, no
+   una acción. Antes el saldo iba DENTRO del botón, que pasaba a dos renglones
+   y crecía; el botón ahora dice una sola cosa. */
+.fr-plata {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  min-width: 96px;
+  line-height: 1.25;
+}
+.fr-price { font-size: 13.5px; font-weight: 600; }
+.fr-falta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--danger);
+  white-space: nowrap;
+}
+/* Separación real entre la acción principal y las secundarias: pegadas, el
+   dedo apunta a "Cobrar" y toca "Fotos". */
+.fr-acts { margin-left: 18px; }
+
+/* Cobrar desde la fila: el campo y sus dos botones toman RENGLÓN PROPIO, con
+   los montos justo debajo. Es el mismo formato que "¿cuánto pagó?" y que editar
+   un trabajo — mismo ancho de campo, mismo alto, mismos dos botones al lado —
+   así el importe se escribe siempre en el mismo lugar y no salta a la esquina
+   superior derecha según por dónde se haya entrado a cobrar. */
+.fr-cobro-linea {
+  /* Entra con el mismo fundido que la respuesta de "¿cuánto pagó?": este
+     renglón nace al tocar "Cobrar" y sin nada aparecía de golpe, mientras los
+     montos de abajo sí se desplegaban. Dos formas distintas de aparecer en el
+     mismo gesto se leen como un salto. */
+  animation: askIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 100%;
+  margin-top: 8px;
+}
+
+/* Confirmación de "volver a pendiente": la misma fila-pregunta que el cobro
+   pero más liviana — es un sí o no, sin monto que editar. */
+.lb-askrow--min { padding-top: 8px; padding-bottom: 8px; }
+.lb-askrow--min .lb-askrow__txt { font-size: 13px; }
+/* Botones al ancho de su texto y pegados a la izquierda. El estirado de la
+   fila de cobro está pensado para tres o cuatro opciones que se reparten el
+   ancho; con dos, estirarlas las vuelve enormes y hace parecer que la de la
+   derecha ("Cancelar") pesa lo mismo que la acción. */
+.lb-askrow--min .lb-askrow__acts { justify-content: flex-start; margin-top: 6px; }
+.lb-askrow--min .lb-askrow__acts > .btn { flex: 0 0 auto; }
+/* Si el trabajo ya tenía plata cobrada, se avisa: desmarcarlo no borra los
+   pagos, pero quedan colgando de algo que figura sin hacer. */
+.fr-desm__ojo {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--danger);
+  white-space: nowrap;
+}
+
+/* La fila que vuelve de la pregunta de desmarcado. La pregunta entra con su
+   fundido; sin esto la vuelta era en seco y el mismo gesto se sentía suave
+   para un lado y cortado para el otro. */
+/* La fila vuelve a su forma normal —de la franja verde, o de los inputs de
+   editar—. Arrancaba en 0.35 y en 180ms no se llegaba a leer: el cambio se veía
+   instantáneo. Desde cero y un poco más largo se entiende que ESTA fila es la
+   que volvió, sin mover nada de lugar. */
+.fr-row--vuelve { animation: filaVuelve 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes filaVuelve {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* Confirmar el cobro hace DOS cosas a la vez: la fila vuelve a su forma normal
+   (fundido) y además quedó marcada como hecha (destello verde). Las dos en una
+   sola declaración porque `animation` no se acumula entre clases —gana la
+   última y la otra se pierde—; acá se perdía el destello, que es el que dice
+   QUÉ pasó. */
+.fr-row--vuelve.lb-rowflash {
+  animation: filaVuelve 220ms cubic-bezier(0.16, 1, 0.3, 1), rowInFlash 0.8s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-row--vuelve { animation: none; }
+  /* Se queda el destello —es color, no movimiento— y se va el fundido. */
+  .fr-row--vuelve.lb-rowflash { animation: rowInFlash 0.8s ease-out; }
+}
+
+/* El círculo de "hecho": lo que realmente cambia al marcar o desmarcar.
+   Se anima ÉL y no la fila entera —hay un destello verde de fila, pero sobre
+   el fondo crema casi no se distingue, y mover toda la fila para avisar que un
+   tilde se llenó es mucho gesto para algo que se hace decenas de veces por
+   día—. El color va con transición para que no salte, y el rebote chiquito
+   confirma el toque. Es transform sobre un elemento de 22px: no mueve nada. */
+.fr-check { transition: background 160ms cubic-bezier(0.4, 0.4, 0.7, 1), border-color 160ms; }
+.fr-check--pop { animation: checkPop 280ms cubic-bezier(0.34, 1.15, 0.64, 1); }
+@keyframes checkPop {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-check--pop { animation: none; }
+}
+
+/* Fila "¿lo pagó?": el medio de pago y los botones al ancho de su contenido.
+   Estaban con `flex: 1 1 0` heredado, así que "Pagó $45.000" ocupaba media
+   pantalla y "Todavía no" pesaba lo mismo que la acción principal. Con el
+   ancho natural la jerarquía se lee sola. */
+/* `flex` completo, no solo `flex-grow`: una media query le pone
+   `flex: 1 1 100%` al botón principal, y pisar solo el grow dejaba vivo el
+   `flex-basis: 100%` — por eso seguía ocupando todo el ancho. */
+.lb-askrow__acts > .btn { flex: 0 0 auto !important; }
+
+/* Medio de pago: un botón que alterna, con el nombre completo adentro. Se
+   probó con las dos opciones a la vista y ocupaba demasiado en una fila que ya
+   tiene tres respuestas. La flechita avisa que se puede cambiar. */
+.lb-medio {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--border-input);
+  border-radius: 999px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 160ms cubic-bezier(0.4, 0.4, 0.7, 1), color 160ms,
+    border-color 160ms;
+}
+.lb-medio.is-transf {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info);
+}
+.lb-medio svg { opacity: 0.5; }
+
+/* Galería dentro del modal: alto fijo con scroll propio.
+   Los filtros y "Subir" quedan siempre a la vista, y filtrar cambia el
+   contenido sin mover la ventana.
+   El alto está pensado para que el modal ENTERO entre en pantalla —encabezado
+   + filtros + grilla—: si se pasara, quedarían dos barras de scroll, una del
+   fondo y otra de la grilla, y en el teléfono eso obliga a adivinar cuál
+   estás moviendo. Por eso en pantallas bajas se achica. */
+.gal-grid--modal {
+  height: min(58vh, 520px);
+  overflow-y: auto;
+  /* El navegador corrige el scroll cuando el contenido cambia de tamaño; al
+     filtrar eso produce saltos. */
+  overflow-anchor: none;
+}
+@media (max-height: 720px) {
+  .gal-grid--modal { height: 46vh; }
+}
+@media (max-width: 640px) {
+  .gal-grid--modal { height: min(50vh, 380px); }
+}
+
+/* La grilla cambia de contenido al filtrar, no de tamaño. El fundido dice
+   "esto se reemplazó" sin mover nada de lugar. */
+.gal-grid__in { animation: galIn 160ms cubic-bezier(0.4, 0.4, 0.7, 1); }
+@keyframes galIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gal-grid__in { animation: none; }
+}
+
+/* ── Visor de fotos: pasar de una a otra ─────────────────────────────────────
+   La que llega entra DESDE EL LADO del que viene: yendo a la siguiente aparece
+   por la derecha, volviendo por la izquierda. Sin eso las dos entradas se ven
+   iguales y no se sabe para qué lado se está moviendo uno. */
+.zoom-img, .zoom-fig { animation: zoomDer 160ms cubic-bezier(0.4, 0.4, 0.7, 1); }
+
+/* La foto y su epígrafe, una sola pieza. El `figure` se ajusta al tamaño real
+   de la imagen, así el epígrafe queda del ancho de la foto y no del contenedor
+   —flotando suelto abajo, como estaba antes—. */
+.zoom-fig {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0;
+  line-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  cursor: default;
+}
+.zoom-fig__img {
+  display: block;
+  max-width: 100%;
+  max-height: 78vh;
+}
+/* DEBAJO de la imagen, no encima.
+   Hubo una versión con el texto sobre la foto y un degradado: se ve bien, pero
+   acá se miran radiografías, y tapar el borde inferior puede esconder
+   justamente lo que se está buscando. En una app médica la imagen no se cubre.
+   Sigue siendo una sola pieza —misma anchura que la foto, mismas esquinas— que
+   era el problema del epígrafe suelto de antes. */
+.zoom-cap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 11px 14px 13px;
+  background: rgba(18, 16, 12, 0.92);
+  line-height: 1.35;
+  text-align: left;
+}
+.zoom-cap__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.zoom-cap__t { color: #fff; font-size: 15px; font-weight: 600; }
+.zoom-cap__d { color: rgba(255, 255, 255, 0.82); font-size: 13px; }
+.zoom-img--izq { animation-name: zoomIzq; }
+/* Al ABRIR no se desliza: no viene de ninguna otra foto, así que un
+   desplazamiento inventaría un recorrido que no existe. Solo aparece. */
+.zoom-img--abre { animation: zoomAbre 160ms ease-out; }
+@keyframes zoomAbre {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+/* Recorrido largo (56px) para que se lea como desplazamiento y no como un
+   temblor. Entra desde el lado del que viene. */
+@keyframes zoomDer {
+  from { opacity: 0; transform: translateX(56px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes zoomIzq {
+  from { opacity: 0; transform: translateX(-56px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Fase de SALIDA: la misma imagen se va hacia un lado y recién ahí se cambia
+   por la siguiente. `forwards` la deja fuera de vista hasta el reemplazo; sin
+   eso volvería al centro por un frame y se vería un parpadeo. */
+.zoom-img--sale-izq { animation: zoomSaleIzq 120ms cubic-bezier(0.4, 0.4, 0.7, 1) forwards; }
+.zoom-img--sale-der { animation: zoomSaleDer 120ms cubic-bezier(0.4, 0.4, 0.7, 1) forwards; }
+@keyframes zoomSaleIzq {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(-56px); }
+}
+@keyframes zoomSaleDer {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(56px); }
+}
+
+.zoom-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.4, 0.4, 0.7, 1);
+}
+.zoom-nav:hover { background: rgba(255, 255, 255, 0.3); }
+.zoom-nav--izq { left: 18px; }
+.zoom-nav--der { right: 18px; }
+
+/* Arriba a la izquierda: abajo al centro se superponía con el epígrafe, que
+   ahora vive sobre la foto. */
+.zoom-cuenta {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+/* En el teléfono las flechas se pegan a los bordes y achican: con la foto a
+   todo el ancho, en el medio taparían justo lo que se quiere mirar. */
+@media (max-width: 640px) {
+  .zoom-nav { width: 38px; height: 38px; }
+  .zoom-nav--izq { left: 6px; }
+  .zoom-nav--der { right: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zoom-img { animation: none; }
+}
+
+/* Botón de cerrar del visor (antes iba con estilos en línea repetidos en dos
+   lugares distintos). */
+.zoom-cerrar {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.4, 0.4, 0.7, 1);
+}
+.zoom-cerrar:hover { background: rgba(255, 255, 255, 0.3); }
+
+/* La ficha entra con un fundido corto: entre el esqueleto y los datos reales no
+   se mueve nada de lugar —el esqueleto ya reservó el espacio—, así que lo único
+   que hay para contar es "esto se reemplazó". Solo opacidad, y corto: 180ms
+   sobre algo que ya está en pantalla alcanza, y no retrasa nada porque corre
+   después de que llegó la respuesta, no antes. */
+.ficha-in { animation: panelIn 180ms cubic-bezier(0.4, 0.4, 0.7, 1); }
+
+/* Cambiar de respuesta dentro de la franja verde ("¿lo pagó?" ⇄ "¿cuánto
+   pagó?") no mueve nada de lugar: el renglón de botones se reemplaza donde
+   está. Lo único que hay para contar es el reemplazo, y eso es un fundido
+   corto. El alto lo acompaña el Desplegable de los montos, que es lo único que
+   sí cambia de tamaño — una sola cosa anima cada movimiento. */
+.lb-swap { animation: askIn 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .lb-swap, .fr-cobro-linea { animation: none; }
+}
+
+/* Lo que está por dejar de existir se desvanece en vez de irse de golpe.
+   Se usa cuando el dato que lo sostiene todavía no llegó del servidor: el chip
+   "pagó $X" y el "falta $Y" viven de `paid`, que se actualiza décimas después
+   de que el pago ya desapareció. `forwards` los deja invisibles hasta que los
+   datos nuevos los sacan de verdad — si volvieran a opacidad 1 en el medio,
+   parpadearían. */
+/* La línea del desglose cuando se está corrigiendo ese pago: pasa a ser un
+   formulario y necesita envolver, igual que la fila de un trabajo en edición
+   (`fr-row--edit`). Sin esto, la fecha, el monto, el medio y los dos botones se
+   apretaban en un renglón de 24px. */
+.fr-pline--edit {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 8px;
+}
+
+/* Guardar y Cancelar viajan juntos. */
+.fp-edit__acts { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.fr-seva { animation: frSeVa 160ms cubic-bezier(0.4, 0.4, 0.7, 1) forwards; }
+@keyframes frSeVa {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-seva { animation: none; opacity: 0; }
+}
+
+/* Los dos filtros de la lista, juntos a la derecha del título. */
+.fr-filtros { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* El de plata se distingue del de trabajo: mismo tamaño y misma forma —son
+   hermanos— pero con el color que la ficha ya usa para "acá falta plata". Sin
+   esto, dos pastillas iguales al lado del título se leen como una sola cosa
+   partida en dos. */
+.chip-pill--plata { color: var(--danger); border-color: var(--danger-border); }
+/* Activo con el MISMO peso que el otro filtro —borde, color y fondo suave—, no
+   relleno sólido: es un filtro, no una alarma. Solo cambia el tono. */
+.chip-pill--plata.is-active {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+  font-weight: 600;
+}

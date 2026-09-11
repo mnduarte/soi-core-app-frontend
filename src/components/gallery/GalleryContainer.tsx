@@ -183,7 +183,20 @@ export function GalleryContainer({ patientId, embedded = false }: GalleryContain
       )}
 
       {!isLoading && sessions.length > 0 && (
-        <GridView photos={filteredPhotos} patientId={patientId} />
+        /* Alto estable con scroll propio cuando va dentro del modal.
+           Sin esto el modal se agranda y se achica con cada filtro —"Intraoral"
+           deja tres fotos y la ventana se desploma—, y todo lo que está
+           alrededor (el título, los chips) se corre de lugar. Con alto fijo lo
+           único que cambia es el contenido, que es lo que el filtro toca.
+           En la página completa no aplica: ahí scrollea la página. */
+        <div className={embedded ? 'gal-grid gal-grid--modal' : 'gal-grid'}>
+          {/* `key` por filtro: remonta la grilla y dispara el fundido. Sin
+              ella React reusa los mismos nodos y las fotos se reemplazan de
+              golpe. */}
+          <div key={filter} className="gal-grid__in">
+            <GridView photos={filteredPhotos} patientId={patientId} />
+          </div>
+        </div>
       )}
     </div>
   );

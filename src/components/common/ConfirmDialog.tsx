@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
+import { Desplegable } from './Desplegable';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -148,7 +149,15 @@ export function ConfirmDialog({
               />
             </div>
           )}
-          {extra && <div style={{ paddingLeft: 45, marginTop: 10 }}>{extra}</div>}
+          {/* Red de seguridad para el extra que llega tarde (un dato que se está
+              consultando): en vez de estirar el diálogo de un salto mientras se
+              lo lee, crece con su alto. Lo normal es que ya venga puesto al
+              abrir, y entonces esto no anima nada.
+              `paddingTop` y no `marginTop`: el margen del hijo se colapsa fuera
+              del bloque que se mide y el alto quedaría corto. */}
+          <Desplegable abierto={!!extra}>
+            <div style={{ paddingLeft: 45, paddingTop: 10 }}>{extra}</div>
+          </Desplegable>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '14px 18px 16px' }}>
           <button className="btn btn--secondary btn--sm" onClick={onCancel}>

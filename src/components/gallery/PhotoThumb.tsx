@@ -25,10 +25,11 @@ function txLabel(t: Transaction): string {
 interface PhotoThumbProps {
   photo: GalleryPhoto;
   label?: string;
-  // Título/descripción de la sesión (viven ahí, no en la foto) para mostrarlos
-  // al expandir la foto.
-  sessionTitle?: string;
-  sessionNotes?: string;
+  // Abrir la foto grande NO es asunto de la miniatura: el visor tiene que
+  // poder pasar a la foto de al lado, y desde acá adentro solo se conoce esta.
+  // Antes cada miniatura montaba su propio visor de una sola foto y había que
+  // cerrar y volver a abrir por cada una.
+  onAbrir?: () => void;
   // When provided, the thumb shows hover actions (move type, delete). Without
   // these the thumb is read-only (used by the compare picker, for example).
   patientId?: string;
@@ -39,8 +40,7 @@ interface PhotoThumbProps {
 // categoría (string libre) en vez de un enum fijo.
 const isXrayCat = (t: string) => /radiograf/i.test(t);
 
-export function PhotoThumb({ photo, label, sessionTitle, sessionNotes, patientId, sessionId }: PhotoThumbProps) {
-  const [zoom, setZoom] = useState(false);
+export function PhotoThumb({ photo, label, onAbrir, patientId, sessionId }: PhotoThumbProps) {
   const [typeOpen, setTypeOpen] = useState(false);
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
@@ -90,7 +90,7 @@ export function PhotoThumb({ photo, label, sessionTitle, sessionNotes, patientId
   return (
     <>
       <div
-        onClick={() => setZoom(true)}
+        onClick={onAbrir}
         style={{
           borderRadius: 10,
           // visible (no hidden) para que el menú ⋯ no quede recortado por el
@@ -101,7 +101,7 @@ export function PhotoThumb({ photo, label, sessionTitle, sessionNotes, patientId
           background: isXray ? '#0F1218' : `url(${photo.url}) center/cover`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          cursor: 'zoom-in',
+          cursor: onAbrir ? 'zoom-in' : 'default',
         }}
       >
         {isXray && (
@@ -288,64 +288,6 @@ export function PhotoThumb({ photo, label, sessionTitle, sessionNotes, patientId
           </div>
         )}
       </div>
-
-      {zoom && (
-        <div
-          onClick={() => setZoom(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.85)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 14,
-            zIndex: 1000,
-            padding: 24,
-            cursor: 'zoom-out',
-          }}
-        >
-          <button
-            onClick={() => setZoom(false)}
-            title="Cerrar"
-            style={{ position: 'absolute', top: 18, right: 18, width: 40, height: 40, borderRadius: 999, background: 'rgba(255,255,255,0.16)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(8px)' }}
-          >
-            <Icon name="x" size={20} />
-          </button>
-          <img
-            src={photo.url}
-            alt={photo.caption ?? ''}
-            style={{
-              maxWidth: '100%',
-              maxHeight: sessionTitle || sessionNotes || photo.type ? '72vh' : '88vh',
-              objectFit: 'contain',
-              borderRadius: 4,
-            }}
-            onClick={e => e.stopPropagation()}
-          />
-          {(photo.type || sessionTitle || sessionNotes) && (
-            <div
-              onClick={e => e.stopPropagation()}
-              style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '12px 16px', maxWidth: 520, width: '100%', boxShadow: 'var(--shadow-lg)', cursor: 'default' }}
-            >
-              {photo.type && (
-                <span
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'var(--brand-primary-50)', color: 'var(--brand-primary-600)', fontSize: 12, fontWeight: 600, marginBottom: sessionTitle || sessionNotes ? 8 : 0 }}
-                >
-                  <Icon name="image" size={12} /> {photoTypeLabel(photo.type)}
-                </span>
-              )}
-              {sessionTitle && (
-                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{sessionTitle}</div>
-              )}
-              {sessionNotes && (
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3 }}>{sessionNotes}</div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       <ConfirmDialog
         open={confirmOpen}

@@ -622,7 +622,8 @@ export function BuscarTurnoModal({
                       title="Ver este turno en la agenda"
                       onClick={() => irAlTurno(t)}
                     >
-                      {fechaLarga(t.startsAt)} · {hora(t.startsAt)} hs
+                      <span className="bt-more__d">{fechaLarga(t.startsAt)}</span>
+                      <span className="bt-more__h">{hora(t.startsAt)} hs</span>
                     </button>
                   ))}
                 </div>

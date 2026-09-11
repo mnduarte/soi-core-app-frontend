@@ -1978,7 +1978,14 @@ export default function FichaRapidaPage() {
             {/* De qué trabajo fue el pago. Va primero: es lo que identifica la
                 fila. Misma etiqueta que en la agenda. */}
             <span className="fp-tag">
-              {t.workId && t.description && (
+              {/* La descripción se muestra SIEMPRE que exista, haya trabajo
+                  vinculado o no. Estaba condicionada a que lo hubiera, y en el
+                  consultorio real dos de cada tres pagos no lo tienen: ahí la
+                  descripción es lo ÚNICO que dice qué fue —"Consulta 1°vez",
+                  "op 47", "Extracción simple"—, escrita por el odontólogo, y la
+                  fila la escondía justo cuando era el único dato. Quedaba
+                  "30/07/26 · efectivo · $45.000" y a adivinar. */}
+              {t.description && (
                 <span className={`lb-sub ${t._id === flashPagoId ? 'lb-pop' : ''}`}>{t.description}</span>
               )}
               {/* Pago sin trabajo: se puede asociar a uno a mano. Es la forma de
@@ -2385,32 +2392,6 @@ export default function FichaRapidaPage() {
                       }
                 }
               >
-                {/* Pagos que no están imputados a ningún trabajo. Cuentan en
-                    el saldo igual, así que si no se vieran el número de arriba
-                    no cerraría con nada de lo que hay en pantalla. Cada uno se
-                    puede asignar a un trabajo desde el ícono de vincular. */}
-                {filtro === 'todos' && pagosACuenta.length > 0 && (
-                  <div className="fr-acuenta">
-                    <div className="fr-acuenta__hd">
-                      <Icon name="cash" size={13} />
-                      Pagos sin trabajo asignado
-                      <b>{fmtMoney(pagosACuenta.reduce((a, t) => a + t.amount, 0))}</b>
-                    </div>
-                    {pagosACuenta.slice(0, 3).map(t => renderPagoRow(t, true))}
-                    {pagosACuenta.length > 3 && (
-                      <button
-                        type="button"
-                        className="fr-wpays__more"
-                        onClick={() => {
-                          qc.removeQueries({ queryKey: ['transactions', id, 'search'] });
-                          setPagosModalOpen(true);
-                        }}
-                      >
-                        Ver los {pagosACuenta.length} pagos sin asignar
-                      </button>
-                    )}
-                  </div>
-                )}
                 {!hasWorks && pagosACuenta.length === 0 && (
                   <div style={emptyRow}>Todavía no cargaste trabajos. Agregá el primero arriba ↑</div>
                 )}
@@ -2431,6 +2412,35 @@ export default function FichaRapidaPage() {
                     filtros existía y no había forma de llegar. Ahora está
                     siempre que haya algo que buscar: la lista de arriba muestra
                     lo reciente y esto abre TODO, con fecha, texto y estado. */}
+                {/* Los pagos que no están imputados a ningún trabajo NO se
+                    listan arriba: eran lo primero que se veía al abrir la ficha
+                    —antes que los trabajos— y en el consultorio real son dos de
+                    cada tres pagos, así que la tabla abría con un bloque enorme
+                    de cosas que el odontólogo ni recuerda.
+
+                    Pero tampoco se esconden: cuentan en "Falta cobrar", y un
+                    saldo que no se puede explicar con lo que hay en pantalla es
+                    peor que una sección de más. Queda esta línea —solo si
+                    existen— que dice cuántos son y cuánto suman, y los abre en
+                    su propia lista. */}
+                {filtro === 'todos' && pagosACuenta.length > 0 && (
+                  <button
+                    type="button"
+                    className="fr-acuenta__ver"
+                    onClick={() => {
+                      qc.removeQueries({ queryKey: ['transactions', id, 'search'] });
+                      setPagosModalOpen(true);
+                    }}
+                  >
+                    <Icon name="cash" size={13} />
+                    <span>
+                      {pagosACuenta.length} {pagosACuenta.length === 1 ? 'pago' : 'pagos'} a cuenta
+                      <b className="mono"> {fmtMoney(pagosACuenta.reduce((a, t) => a + t.amount, 0))}</b>
+                    </span>
+                    <span className="fr-acuenta__ver__q">— ya restados de lo que falta cobrar</span>
+                    <Icon name="chevronRight" size={13} />
+                  </button>
+                )}
                 {filtro === 'todos' && todosLosTrabajos.length > 0 && (
                   <button
                     /* Se TIRA la copia guardada antes de abrir, no se confía en

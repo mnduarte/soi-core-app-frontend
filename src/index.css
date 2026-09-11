@@ -1172,7 +1172,27 @@ table.tbl { width: 100%; border-collapse: collapse; }
    definición: si estuviera más arriba en el archivo, el `display:none` de
    acá arriba la pisaría (misma especificidad, gana la última). */
 @media (max-width: 767px) {
-  .lb-bnav { display: flex; }
+  /* Pegada al borde de la pantalla, no al final del contenido.
+     Vivía en el flujo, como último hijo de `.main`, y eso funciona solo si el
+     alto del contenedor coincide exacto con lo que se ve. En el teléfono no
+     coincide siempre: cuando la barra de direcciones del navegador se esconde
+     o vuelve a aparecer, el alto visible cambia y `100dvh` tarda en
+     actualizarse — en ese rato la barra quedaba flotando con un hueco crema
+     abajo. Fija al viewport no depende de esa cuenta.
+     El FAB ya estaba resuelto así, con su `bottom` calculado sobre esta misma
+     altura. */
+  .lb-bnav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* Sobre el contenido, debajo de los modales (990+) y del FAB. */
+    z-index: 30;
+  }
+  /* Y el contenido le reserva el lugar: como la barra salió del flujo, sin
+     esto el último renglón de cualquier lista quedaría tapado. */
+  .main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
 }
 
 /* Fila de filtros de los modales de histórico (Trabajos hechos / Pagos).
@@ -3362,6 +3382,38 @@ table.tbl { width: 100%; border-collapse: collapse; }
 
 /* Guardar y Cancelar viajan juntos. */
 .fp-edit__acts { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* "por hacer" en una fila que ya tiene plata cobrada. En ámbar y no en rojo a
+   propósito: no es una deuda —el trabajo todavía no se debe— es un aviso de que
+   ese dinero es una seña. El rojo de la ficha está reservado para plata que hay
+   que cobrar. */
+.fr-pend {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warning-bg, #FDF3E3);
+  color: var(--warning, #A8710A);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* "por hacer" en una fila que ya tiene plata cobrada. En ámbar y no en rojo a
+   propósito: no es una deuda —el trabajo todavía no se debe—, es un aviso de
+   que ese dinero es una seña. El rojo de la ficha está reservado para plata que
+   hay que cobrar. */
+.fr-pend {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .fr-seva { animation: frSeVa 160ms cubic-bezier(0.4, 0.4, 0.7, 1) forwards; }
 @keyframes frSeVa {

@@ -278,6 +278,7 @@ export default function FichaRapidaPage() {
     qc.setQueryData<Work[]>(['works', id, 'pending'], (old = []) => [optimista, ...old]);
     setTwDesc(''); setTwAmount('');
     setNewWorkId(idTemp);
+    mostrarLoNuevo(idTemp);
 
     // El destello verde de la fila nueva dura 800ms (`rowInFlash`). El servidor
     // suele contestar antes, y al cambiar el id provisorio por el real la fila
@@ -1138,6 +1139,20 @@ export default function FichaRapidaPage() {
   // solo a la vez: comparar dos tratamientos largos es un caso real.
   // Trabajo hecho al que se le está preguntando si de verdad no se hizo.
   const [askDesmarcar, setAskDesmarcar] = useState<string | null>(null);
+  /**
+   * Trabajo al que se le tocó "Cobrar" SIN estar hecho.
+   *
+   * Cobrar algo por hacer es legítimo —una seña de brackets o retenedores se
+   * paga meses antes— y el saldo lo refleja bien: el pago resta, el precio
+   * todavía no suma, y la ficha dice "pagó por adelantado". El problema es el
+   * otro caso: lo hiciste, cobraste, y te olvidaste de marcarlo. Ahí la ficha
+   * dice "por adelantado" cuando en realidad está saldado, y el trabajo queda
+   * en "Por hacer" para siempre.
+   *
+   * La pregunta es la simétrica de "¿lo pagó?" al marcar como hecho: la misma
+   * forma para los dos ejes. Si ya está hecho no se pregunta nada.
+   */
+  const [askHecho, setAskHecho] = useState<string | null>(null);
   // Fila que acaba de volver de la pregunta. La pregunta entra con su fundido,
   // pero al cancelar la fila normal aparecía en seco: el mismo gesto se sentía
   // suave para un lado y cortado para el otro.
@@ -1149,6 +1164,35 @@ export default function FichaRapidaPage() {
   };
 
   /** Cerrar la edición de un pago, con el fundido de la fila que vuelve. */
+  /**
+   * Lleva la vista hasta la fila recién agregada.
+   *
+   * La lista va del más nuevo al más viejo, así que lo que se acaba de cargar
+   * entra ARRIBA. Con la lista desplazada —que es lo normal después de mirar el
+   * historial de un paciente— el trabajo aparecía fuera de la pantalla: se
+   * tocaba "Agregar", el formulario se vaciaba y no pasaba nada visible.
+   *
+   * Se mueve la vista, no la fila. Y con el scroll suave del navegador: un
+   * salto seco a otra parte de la lista hace perder de vista dónde se estaba
+   * parado. El que anima es el scroll; la fila tiene su propia entrada (el
+   * destello verde) y no se toca.
+   *
+   * Sirve en los tres tamaños sin preguntar cuál es: `scrollIntoView` sube el
+   * contenedor que scrollee —la lista en escritorio, la página en celular,
+   * donde la lista no tiene scroll propio—. `block: 'nearest'` hace lo mínimo
+   * necesario: si la fila ya está a la vista, no mueve nada.
+   */
+  const mostrarLoNuevo = (workId: string) => {
+    const quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Un frame de espera: la fila optimista todavía no está en el DOM cuando
+    // esto se llama, porque React no renderizó el cambio de caché.
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-flip="${workId}"]`)
+        ?.scrollIntoView({ block: 'nearest', behavior: quieto ? 'auto' : 'smooth' });
+    });
+  };
+
   const salirDeEdicionPago = (pagoId: string) => {
     setEditPago(null);
     setEpPanel(false);
@@ -1180,6 +1224,7 @@ export default function FichaRapidaPage() {
     if (cobroItem) salirDeCobro(cobroItem);
     if (editPago) salirDeEdicionPago(editPago);
     if (askDesmarcar) cancelarDesmarcar(askDesmarcar);
+    if (askHecho) { setAskHecho(null); volverDeLaFranja(askHecho); }
     if (askMontoId) cerrarOtroMonto();
   };
   const [pagosAbiertos, setPagosAbiertos] = useState<Record<string, boolean>>({});
@@ -1372,6 +1417,40 @@ export default function FichaRapidaPage() {
             </button>
             <button className="btn btn--ghost btn--sm" onClick={() => cancelarDesmarcar(it._id)}>
               Cancelar
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // "Cobrar" en algo que todavía no se hizo: se pregunta antes, porque de la
+    // respuesta depende que el saldo diga la verdad.
+    if (askHecho === it._id) {
+      const abrirCobro = () => {
+        setAskHecho(null);
+        setCobroAmount(String(price - paid));
+        setCobroItem(it._id);
+      };
+      return (
+        <div key={it._id} data-flip={it._id} className="lb-askrow lb-askrow--min">
+          <div className="lb-askrow__q">
+            <Icon name="cash" size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
+            <span className="lb-askrow__txt">
+              <b>{it.description}</b> — ¿ya lo hiciste?
+            </span>
+            <button className="btn btn--ghost btn--sm lb-askrow__x" title="Dejar el trabajo como estaba"
+              onClick={() => { setAskHecho(null); volverDeLaFranja(it._id); }}>
+              Cancelar
+            </button>
+          </div>
+          <div className="lb-askrow__acts lb-swap">
+            <button className="btn btn--primary btn--sm" onClick={() => { confirmarHecho(it); abrirCobro(); }}>
+              <Icon name="check" size={13} /> Sí, y cobrar
+            </button>
+            {/* El caso legítimo de cobrar algo sin hacer: se paga por
+                adelantado y el trabajo queda por hacer, como corresponde. */}
+            <button className="btn btn--secondary btn--sm" onClick={abrirCobro}>
+              Todavía no, es una seña
             </button>
           </div>
         </div>
@@ -1635,6 +1714,16 @@ export default function FichaRapidaPage() {
                   )}
                   {/* Cuanto lleva pagado, para los que se pagan en cuotas */}
                   {parcial && <span className={`lb-paidprog ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>pagó {fmtMoney(paid)}</span>}
+                  {/* Cobrado pero todavía sin hacer. Es el único cruce que no
+                      se lee solo: el círculo vacío dice el estado, pero al lado
+                      de "pagó $75.000" se pasa por alto, y esa plata es una
+                      seña, no un trabajo saldado. Mismas palabras que el filtro
+                      de arriba, para que se entienda que esta fila es una de
+                      las que ahí se cuentan.
+                      Solo en este cruce: un pendiente sin plata no necesita
+                      rótulo —la lista está llena de pendientes— y en uno hecho
+                      ya lo dicen el tilde, el tachado y la fecha. */}
+                  {!done && paid > 0 && <span className="fr-pend">por hacer</span>}
                   {/* Acá había un chip "✓ pagado" para los pendientes ya
                       cobrados. Existía porque los pendientes NO tenían botón de
                       cobro y era la única forma de ver el estado. Ahora lo
@@ -1677,8 +1766,11 @@ export default function FichaRapidaPage() {
                   cobrar nada no mostraba nada, así que se leía igual que uno
                   cobrado. Sin monto en ese caso: el precio está al lado y sería
                   el mismo número dos veces.
-                  Los pendientes siguen sin marca: todavía no se deben. */}
-              {!cobrado && (parcial || (done && price > 0)) && (
+                  Y SOLO en los hechos: un trabajo por hacer no debe nada
+                  todavía, aunque tenga plata cobrada —eso es una seña— así que
+                  el rojo ahí contradecía al propio modelo. Ese caso lo avisa el
+                  ámbar de "por hacer", al lado del monto pagado. */}
+              {done && !cobrado && price > 0 && (
                 <span className={`fr-falta ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>
                   {paid > 0 ? `falta ${fmtMoney(price - paid)}` : 'sin cobrar'}
                 </span>
@@ -1755,6 +1847,7 @@ export default function FichaRapidaPage() {
                 onClick={() => {
                   cerrarOperaciones();
                   if (cobrado) { pedirDescobrar(it); return; }
+                  if (!done) { setAskHecho(it._id); return; }
                   setCobroAmount(String(price - paid));
                   setCobroItem(it._id);
                 }}

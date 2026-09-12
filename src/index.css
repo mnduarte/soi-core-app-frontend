@@ -47,6 +47,10 @@
   --info: #2C4A9E;           /* azul agendado */
   --info-bg: #F4F6FF;
   --info-border: #C3CBEA;
+  /* Aro del tilde "hecho": entre el azul pleno y el borde suave. Pleno pesaba
+     como un círculo relleno en una lista con muchas filas hechas; el suave se
+     perdía. */
+  --info-ring: #8B9BCA;
 
   /* Odontograma — conserva su diseño actual (fuera de alcance del rediseño).
      Convención de la ficha de papel: rojo = existente, azul = requerido. */
@@ -1660,11 +1664,61 @@ table.tbl { width: 100%; border-collapse: collapse; }
   padding: 5px 12px;
   line-height: 1.2;
 }
+/* Cobrado = SELLO, no botón.
+   "Cobrar" es una acción y por eso es un botón; "Pagado" es un estado y por eso
+   es un sello, igual que "hecho" y "sin hacer". Que se vean distinto no es
+   estética: dice cuál de los dos hay que tocar.
+   Sigue siendo cliqueable para deshacer el cobro —de ahí el hover y el
+   tooltip—, pero deja de pedir el toque.
+   Derecho, sin inclinar: con tres sellos torcidos la fila entera se veía
+   desacomodada. Uno derecho al lado de dos torcidos alcanza para que el
+   conjunto se lea como sellos y no como un error de maquetación. */
 .lb-cobro.is-on {
-  background: var(--success-bg);
-  border-color: var(--success-border);
+  /* Mismas dimensiones que "Cobrar" —hereda el `min-width` y el padding— para
+     que la columna de acciones quede alineada fila a fila. Lo que cambia es la
+     piel: sin relleno, con el borde despareja del sello y la letra mono. */
+  position: relative;
+  background: transparent;
+  /* Doble marco, como un sello de certificación: el de afuera grueso y de
+     punta corta, el de adentro de un pelo. Es lo que lo separa de "una caja
+     con borde" — dos líneas paralelas no aparecen por casualidad, se leen como
+     algo impreso a propósito. */
+  border: 2px solid rgba(62, 122, 58, 0.55);
+  border-radius: 4px;
   color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  gap: 7px;
 }
+.lb-cobro.is-on::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 1px solid rgba(62, 122, 58, 0.4);
+  border-radius: 2px;
+  pointer-events: none;
+}
+/* Estado arriba, fecha abajo — el mismo orden que el sello de "hecho". */
+.lb-cobro__txt {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+  gap: 1px;
+}
+.lb-cobro__txt b { font-weight: 700; letter-spacing: 0.12em; }
+.lb-cobro__txt i {
+  font-style: normal;
+  font-weight: 500;
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+.lb-cobro.is-on:hover { border-color: var(--success); background: var(--success-bg); }
+.lb-cobro.is-on:hover::before { border-color: var(--success); }
 .lb-cobro:disabled { opacity: 0.5; cursor: default; }
 
 /* "pago $X de $Y" — para los tratamientos que se pagan en cuotas */
@@ -2906,6 +2960,10 @@ table.tbl { width: 100%; border-collapse: collapse; }
 /* Resumen en una línea: cuántos pagos y cuánto suman. El desglose se abre
    solo si hace falta — desplegado siempre, cada trabajo ocupaba tres renglones
    y la lista se volvía interminable. */
+/* El resumen de pagos es un CONTROL para abrir el desglose, no un estado. En
+   verde competía con el chip de "pagó $X" y con el botón "Pagado" —tres verdes
+   en la misma fila— y encima repetía el monto. Queda en tono menor: lo que
+   aporta es cuántos pagos hay y que se pueden ver. */
 .fr-wpays__sum {
   display: inline-flex;
   align-items: center;
@@ -2913,14 +2971,16 @@ table.tbl { width: 100%; border-collapse: collapse; }
   padding: 3px 9px 3px 5px;
   border: 0;
   border-radius: 999px;
-  background: var(--success-bg);
+  background: transparent;
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--success);
+  color: var(--text-tertiary);
   cursor: pointer;
+  padding-left: 0;
 }
-.fr-wpays__sum:hover { filter: brightness(0.97); }
+.fr-wpays__sum:hover { color: var(--text-primary); background: transparent; }
+
 .fr-wpays__sum b { font-variant-numeric: tabular-nums; }
 /* Detalle de pagos de un trabajo.
    El abrir y cerrar lo maneja `Desplegable`, que anima el alto real: el bloque
@@ -2937,7 +2997,10 @@ table.tbl { width: 100%; border-collapse: collapse; }
      justo lo que hace que el formulario de corregir un pago entre en dos
      renglones. */
   max-width: 560px;
-  border-left: 2px solid var(--success-border);
+  /* La línea del margen del cuaderno, el mismo rojo que la hoja de la agenda.
+     Era verde, y el verde acá quedó reservado para la plata: esto no es un
+     estado, es el margen de la hoja donde se anotó el detalle. */
+  border-left: 2px solid var(--margin-red);
   border-radius: 0 8px 8px 0;
   margin-top: 4px;
 }
@@ -2957,7 +3020,11 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .fr-pline__m { flex: 1; min-width: 0; }
 .fr-pline__a {
   font-weight: 600;
-  color: var(--success);
+  /* En negro, no en verde. Acá el verde no aporta —ya se sabe que son pagos,
+     lo dice el bloque entero— y sumaba color a una fila que tiene el tilde
+     azul, el sello marrón y a veces el rojo del saldo. La plata se lee mejor
+     en tinta. */
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 .fr-pline__b {
@@ -3387,22 +3454,62 @@ table.tbl { width: 100%; border-collapse: collapse; }
    propósito: no es una deuda —el trabajo todavía no se debe— es un aviso de que
    ese dinero es una seña. El rojo de la ficha está reservado para plata que hay
    que cobrar. */
-.fr-pend {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--warning-bg, #FDF3E3);
-  color: var(--warning, #A8710A);
-  font-size: 11px;
+/* Sello de "hecho" en la fila del trabajo. Mismo marrón y misma caja que los
+   sellos de la agenda: es lo escrito a mano sobre la ficha de papel, no un chip
+   de estado más. Deliberadamente NO usa el azul de marca —ese es el de botones
+   y acciones— ni el verde, que acá quedó reservado para la plata. */
+/* El trabajo, protagonista de su fila: misma familia y mismo peso que el
+   nombre del paciente en la agenda (`.lb-name`), un punto más chica porque acá
+   la fila lleva más datos al lado. */
+.fr-desc {
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
-/* "por hacer" en una fila que ya tiene plata cobrada. En ámbar y no en rojo a
-   propósito: no es una deuda —el trabajo todavía no se debe—, es un aviso de
-   que ese dinero es una seña. El rojo de la ficha está reservado para plata que
-   hay que cobrar. */
+/* Sello de goma sobre la ficha de papel: dos renglones, "HECHO" arriba y la
+   fecha abajo, encerrados en su caja. Es lo que lo distingue de un chip de
+   estado — un chip informa, un sello dice "esto ya se despachó".
+   Sin fondo: el sello se estampa sobre el papel, no es una etiqueta pegada. */
+.fr-sello {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.15;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-stamp);
+  /* Borde despareja y apenas torcido: un sello de goma nunca cae derecho ni
+     entinta parejo. Los cuatro radios distintos hacen que la caja se lea
+     dibujada a mano y no trazada por una computadora, y el color va traslúcido
+     para que se vea como tinta que no agarró del todo. */
+  border: 1.5px solid rgba(138, 90, 42, 0.45);
+  border-radius: 6px 4px 7px 5px;
+  transform: rotate(-2deg);
+  padding: 3px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fr-sello b { font-weight: 700; letter-spacing: 0.14em; }
+/* EN PRUEBA — el mismo sello en bordó para lo que falta hacer. Se inclina para
+   el otro lado: dos sellos idénticos torcidos igual parecen un patrón, torcidos
+   distinto parecen dos sellos. */
+.fr-sello--pend {
+  color: #8F3A3A;
+  border-color: rgba(143, 58, 58, 0.4);
+  transform: rotate(1.5deg);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.fr-sello i { font-style: normal; font-weight: 500; letter-spacing: 0.04em; }
+
+
 .fr-pend {
   display: inline-flex;
   align-items: center;

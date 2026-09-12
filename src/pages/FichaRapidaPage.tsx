@@ -1640,14 +1640,30 @@ export default function FichaRapidaPage() {
             style={{
               width: 22, height: 22, borderRadius: 999, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: done ? 'none' : '2px solid var(--border-input)',
-              /* Verde. Se probó en gris para que el verde fuera solo de plata,
-                 pero el tilde perdía fuerza y la fila se veía apagada. La
-                 ambigüedad que preocupaba —"todo verde"— la resuelve el rojo:
-                 cuando falta plata aparece `falta $X` al lado, así que un
-                 verde sin rojo significa hecho Y cobrado. El color que hay que
-                 buscar con la vista es el rojo, no el verde. */
-              background: done ? 'var(--success)' : '#fff', color: 'white',
+              /* 2px, no 1.5.
+                 `border-width` NO hace subpíxeles: el navegador lo redondea a
+                 píxeles enteros del dispositivo, así que en una pantalla común
+                 1.5 y 1.9 se dibujaban los dos como 1px y solo en 2 se veía el
+                 cambio. Como 2px de azul pleno pesaba tanto como el círculo
+                 relleno que vinimos a sacar, el grosor va en 2 y lo que se
+                 baja es el COLOR (`--info-ring`, un punto medio). El tilde de
+                 adentro sí va en azul entero: el aro es el contorno de la
+                 casilla, el tilde es la marca. */
+              border: `2px solid ${done ? 'var(--info-ring)' : 'var(--border-input)'}`,
+              /* AZUL, no verde: un color, un significado.
+                 El verde estaba diciendo dos cosas a la vez en la misma fila
+                 —el tilde "hecho" y el botón "cobrado"—, que son ejes
+                 independientes: podés tener uno sin el otro. Con el estado del
+                 trabajo en azul y la plata en verde, un vistazo alcanza: azul
+                 solo = lo hiciste y falta cobrar; azul y verde = cerrado.
+                 Va `--info` y no `--brand-primary` porque el color de marca lo
+                 elige cada consultorio: en uno podría ser verde, y ahí el
+                 sistema de colores se caía. */
+              /* Relleno claro siempre y el tilde dibujado en azul, como una
+                 casilla tildada a mano sobre el papel. Relleno sólido pesaba
+                 demasiado en una lista donde la mayoría de las filas están
+                 hechas: seis círculos macizos se leen antes que los nombres. */
+              background: '#fff', color: 'var(--info)',
             }}
           >
             {done && <Icon name="check" size={13} />}
@@ -1727,29 +1743,37 @@ export default function FichaRapidaPage() {
                 que hubiera —fecha, pago parcial, una foto— cada fila se armaba
                 distinta y la lista se leia desordenada. */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, wordBreak: 'break-word', color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</div>
+              {/* Newsreader, la misma que la agenda usa para el nombre del
+                  paciente (`.lb-name`). En cada pantalla hay un protagonista de
+                  la fila —allá el paciente, acá el trabajo— y tiene sentido que
+                  los dos se lean con la misma voz. En sans quedaba al mismo
+                  peso que la fecha y el precio, que son datos de apoyo. */}
+              <div className="fr-desc" style={{ color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</div>
               {/* Sin tag "por hacer": estos trabajos ya viven en la sección de
                   pendientes, arriba de "Hechos". Repetirlo ocupaba ancho (partía
                   descripciones largas al medio) y no aportaba nada. */}
               {(((done && it.completedAt) || parcial || (!done && cobrado))) && (
                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 8px', marginTop: 3 }}>
+                  {/* Sello, no renglón gris. Hace dos trabajos con un solo
+                      elemento: marca el estado y dice la fecha, que antes iba
+                      suelta abajo del nombre. Y es el gesto de la libreta —a
+                      una ficha de papel se le pone un sello de goma—, con el
+                      mismo marrón que la agenda usa para lo escrito a mano. */}
                   {done && it.completedAt && (
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-                      hecho {fmtDate(it.completedAt)}
+                    <span className="fr-sello">
+                      <b>hecho</b>
+                      <i>{fmtDate(it.completedAt)}</i>
                     </span>
                   )}
                   {/* Cuanto lleva pagado, para los que se pagan en cuotas */}
                   {parcial && <span className={`lb-paidprog ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>pagó {fmtMoney(paid)}</span>}
-                  {/* Cobrado pero todavía sin hacer. Es el único cruce que no
-                      se lee solo: el círculo vacío dice el estado, pero al lado
-                      de "pagó $75.000" se pasa por alto, y esa plata es una
-                      seña, no un trabajo saldado. Mismas palabras que el filtro
-                      de arriba, para que se entienda que esta fila es una de
-                      las que ahí se cuentan.
-                      Solo en este cruce: un pendiente sin plata no necesita
-                      rótulo —la lista está llena de pendientes— y en uno hecho
-                      ya lo dicen el tilde, el tachado y la fecha. */}
-                  {!done && paid > 0 && <span className="fr-pend">por hacer</span>}
+                  {/* EN PRUEBA — sello de "sin hacer" en todos los pendientes.
+                      Reemplaza al chip ámbar que estaba solo cuando había plata
+                      cobrada: los dos decían lo mismo y juntos en la misma fila
+                      sonaba a eco.
+                      Si no convence, se borra este bloque y se restituye:
+                        {!done && paid > 0 && <span className="fr-pend">por hacer</span>} */}
+                  {!done && <span className="fr-sello fr-sello--pend">sin hacer</span>}
                   {/* Acá había un chip "✓ pagado" para los pendientes ya
                       cobrados. Existía porque los pendientes NO tenían botón de
                       cobro y era la única forma de ver el estado. Ahora lo
@@ -1883,7 +1907,19 @@ export default function FichaRapidaPage() {
                     monto va en un renglón aparte para no estirar la fila. */}
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <Icon name={cobrado ? 'check' : 'cash'} size={12} />
-                  {cobrado ? 'Pagado' : 'Cobrar'}
+                  {cobrado ? (
+                    /* Dos renglones, como el sello de "hecho": el estado arriba
+                       y la fecha abajo. La fecha es la del último pago —el que
+                       terminó de saldarlo—, que es la que contesta "¿cuándo
+                       terminó de pagar esto?" sin abrir el desglose. */
+                    <span className="lb-cobro__txt">
+                      <b>Pagado</b>
+                      {(() => {
+                        const ult = pagosPorTrabajo.get(it._id)?.[0];
+                        return ult ? <i>{fmtDate(isoDateOf(ult))}</i> : null;
+                      })()}
+                    </span>
+                  ) : 'Cobrar'}
                 </span>
               </button>
             )}
@@ -1967,9 +2003,14 @@ export default function FichaRapidaPage() {
                           onClick={() => togglePagos(it._id)}
                         >
                           <Icon name={pagosAbiertos[it._id] ? 'chevronDown' : 'chevronRight'} size={12} />
+                          {/* Sin el total: ya está dicho al lado. En un pago
+                              parcial el chip dice "pagó $70.000" y esto repetía
+                              los mismos $70.000 a dos centímetros; en uno
+                              saldado, el monto es el precio que está en la otra
+                              punta de la fila. Acá lo único que falta saber es
+                              CUÁNTOS son — el desglose está a un toque. */}
                           {pagosW.length}{' '}
                           {pagosW.length === 1 ? 'pago' : 'pagos'}
-                          <b>{fmtMoney(pagosW.reduce((a, t) => a + t.amount, 0))}</b>
                         </button>
                       </div>
                     </Desplegable>

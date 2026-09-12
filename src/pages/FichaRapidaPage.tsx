@@ -7,6 +7,7 @@ import { worksApi, type Work, type WorkStatus, type CreateWorkInput } from '../a
 import { clinicsApi } from '../api/clinics';
 import { useUIStore } from '../store/ui.store';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useFlip } from '../hooks/useFlip';
 import { Icon } from '../components/common/Icon';
 import { VisorFotos, type FotoVisor } from '../components/common/VisorFotos';
 import { FichaEsqueleto } from '../components/patient/FichaEsqueleto';
@@ -1279,7 +1280,32 @@ export default function FichaRapidaPage() {
   const [flashWorkId, setFlashWorkId] = useState<string | null>(null);
   const [flashPagoId, setFlashPagoId] = useState<string | null>(null);
   const worksListRef = useRef<HTMLDivElement>(null);
-  // Sin FLIP en esta lista.
+  /**
+   * FLIP para las altas y las bajas (`soloAltaYBaja`).
+   *
+   * Cuando se agrega un trabajo, las filas de abajo se corren para abrirle el
+   * hueco y la fila nueva aparece adentro, con el mismo ritmo que en la agenda:
+   * 260ms para el hueco y la nueva fundiéndose en la segunda mitad, cuando el
+   * lugar ya existe. Sin esto la fila entraba sola y las de abajo saltaban: se
+   * leía "en seco" al lado de la agenda, que hace lo mismo pero completo.
+   *
+   * Al borrar pasa lo simétrico: la fila se desvanece y las de abajo suben
+   * acompañando, en vez de saltar.
+   *
+   * Estuvo apagado un tiempo porque se peleaba con el desplegable de pagos —al
+   * cambiar el alto de una fila, el hook tomaba a las de abajo por un
+   * reordenamiento y las arrastraba encima—. `soloAltaYBaja` cierra eso por
+   * construcción: el desplegable cambia altos pero no cambia la CANTIDAD de
+   * filas, así que ya no lo despierta.
+   */
+  useFlip(worksListRef, { insert: true, soloAltaYBaja: true });
+  // Ojo con la fila nueva: la entrada la hace FLIP y NADA MÁS. Antes llevaba
+  // `lb-rowin`, que la hacía entrar desde arriba con su propio fundido; con el
+  // hook puesto serían dos animaciones de entrada sobre el mismo elemento, y
+  // la de CSS pisa la opacidad que FLIP maneja para que aparezca recién cuando
+  // el hueco está abierto. Le queda solo el destello verde (`lb-rowflash`),
+  // que no compite: es color, no movimiento. La agenda hace exactamente esto.
+  // Nota histórica de por qué había quedado apagado del todo:
   //
   // Se peleaba con el desplegable de pagos: al cambiar el alto de una fila
   // tomaba a las de abajo como un reordenamiento y las arrastraba encima de la
@@ -1596,7 +1622,7 @@ export default function FichaRapidaPage() {
     }
 
     return (
-      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : cobroItem === it._id ? cobroRef : undefined} className={`fr-row fw-row ${editing || cobroItem === it._id ? 'fr-row--edit' : ''} ${it._id === newWorkId ? 'lb-rowin' : ''} ${it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''} ${it._id === volviendo ? 'fr-row--vuelve' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : cobroItem === it._id ? cobroRef : undefined} className={`fr-row fw-row ${editing || cobroItem === it._id ? 'fr-row--edit' : ''} ${it._id === newWorkId || it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''} ${it._id === volviendo ? 'fr-row--vuelve' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {/* El circulito solo no dice qué hace, y en tablet no hay tooltip que lo
             aclare. Los pendientes llevan la etiqueta al lado; los hechos no la
             necesitan (el tilde verde + el tachado + "hecho DD/MM" ya se leen). */}
@@ -2311,6 +2337,28 @@ export default function FichaRapidaPage() {
                 flexDirection: 'column',
                 minHeight: 0,
                 minWidth: 0,
+                /**
+                 * Ocupa el alto disponible en escritorio y tablet.
+                 *
+                 * Sin esto la tarjeta medía lo que midiera su contenido, así
+                 * que con pocos trabajos quedaba corta y CADA alta la estiraba
+                 * un renglón: la tabla crecía de un salto y lo de abajo se
+                 * corría. Con muchos trabajos andaba de casualidad —el
+                 * contenedor la obligaba a encogerse y ahí aparecía el scroll—,
+                 * o sea que el comportamiento dependía de cuántos pacientes
+                 * hubiera cargado el consultorio.
+                 *
+                 * Fijándola al alto disponible no hay nada que animar: el
+                 * encabezado y el formulario se quedan quietos, la lista
+                 * scrollea por dentro, y agregar un trabajo no cambia el tamaño
+                 * de nada. Que es mucho mejor que animar el crecimiento —animar
+                 * alto recalcula el layout de toda la lista en cada frame, y
+                 * esto pasa decenas de veces por día.
+                 *
+                 * Apilado (celular) no aplica: ahí scrollea la página entera y
+                 * la tarjeta tiene que poder crecer.
+                 */
+                ...(stack ? {} : { flex: 1 }),
               }}
             >
               <div className="card__header" style={{ alignItems: 'center' }}>

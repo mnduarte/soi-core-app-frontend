@@ -28,6 +28,34 @@ export function useFlip(
      * es lo más notorio. Sin esto, un alta no anima nada.
      */
     insert?: boolean;
+    /**
+     * Anima solo cuando cambia la CANTIDAD de filas — un alta o una baja — y
+     * no cuando una fila cambia de alto.
+     *
+     * Existe por la lista de la ficha, donde el desglose de pagos de una fila
+     * se abre y se cierra animando su propio alto. Sin esta guarda el hook veía
+     * moverse a las filas de abajo, lo tomaba por un reordenamiento y las
+     * animaba ENCIMA de la animación que ya estaba corriendo: dos animaciones
+     * de distinta duración sobre los mismos píxeles, que es exactamente como se
+     * ve un rebote. Pausarlo no alcanzaba —al reanudar veía el desplazamiento
+     * acumulado y lo repetía—, así que estuvo apagado del todo y con él se fue
+     * también el efecto del alta.
+     *
+     * Contar filas separa los casos sin ambigüedad:
+     *
+     *   agregar un trabajo   +1   anima
+     *   borrar un trabajo    -1   anima
+     *   el desglose se abre   =   no
+     *   el id provisorio pasa a ser el real   =   no
+     *
+     * Ese último es el que no se ve venir: una fila nueva se dibuja al instante
+     * con un id provisorio y, cuando el servidor confirma, ese id se reemplaza
+     * por el real. React la remonta, el hook ve un `data-flip` desconocido y lo
+     * toma por una segunda alta — pero el layout ya quedó acomodado en la
+     * primera, así que la fila se anima SOLA medio segundo después. Reemplazar
+     * no suma, y por eso también queda afuera.
+     */
+    soloAltaYBaja?: boolean;
   },
 ) {
   const prev = useRef(new Map<string, number>());
@@ -97,6 +125,12 @@ export function useFlip(
 
     // Primer render: las filas que ya estaban no tienen que entrar volando.
     if (eraElPrimerRender) return;
+
+    // Va DESPUÉS de guardar las posiciones nuevas (`prev.current = next`): no
+    // animamos este cambio, pero sí lo registramos. Si se saltearan las
+    // mediciones, el próximo movimiento se compararía contra posiciones viejas
+    // y arrancaría un desplazamiento fantasma.
+    if (opts?.soloAltaYBaja && nodes.length === prevSize) return;
 
     // Un alta es UNA fila que se suma a las que ya estaban. Si no sobrevivió
     // ninguna y aparecieron varias, no se agregó nada: cambió el día entero.

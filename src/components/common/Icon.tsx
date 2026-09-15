@@ -92,7 +92,11 @@ const EMOJI: Partial<Record<IconName, string>> = {
   // versión a color, para que acompañen a 🦷 y ✏️.
   image: '🖼️',
   tooth: '🦷',
-  cash: '💵',
+  // `cash` va en SVG y no en emoji: es el ícono del botón Cobrar, del sello de
+  // "falta cobrar" y de la línea de pagos a cuenta — tres lugares con colores
+  // distintos. El billete a color los ignoraba todos y metía un verde ajeno
+  // adentro de un botón azul y de un aviso rojo.
+
   camera: '📷',
   // trash NO va como emoji: el 🗑 de Windows es un tacho casi blanco, ilegible
   // a 14px, y encima el emoji ignora el color del contexto — el botón de borrar

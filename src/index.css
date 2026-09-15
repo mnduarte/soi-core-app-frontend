@@ -1646,16 +1646,23 @@ table.tbl { width: 100%; border-collapse: collapse; }
   justify-content: center;
   padding: 7px 13px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-input);
+  /* En tinta azul, no en gris: es la acción principal de la fila y era lo único
+     que no tomaba partido —quedaba como un botón apagado al lado de un sello
+     verde—. El azul es el mismo del tilde y el de los campos, así que se lee
+     como "esto se toca" sin inventar un color nuevo. */
+  border: 1.5px solid var(--info-ring);
   background: #fff;
-  color: var(--text-secondary);
+  color: var(--info);
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.lb-cobro:hover:not(:disabled) { border-color: var(--success); color: var(--success); }
+.lb-cobro:hover:not(:disabled) {
+  border-color: var(--info);
+  background: var(--info-bg);
+}
 /* Con saldo: "Cobrar" arriba y el monto abajo, para no estirar la fila a lo
    ancho (que es donde falta lugar, no a lo alto). */
 .lb-cobro--2l {
@@ -1679,28 +1686,21 @@ table.tbl { width: 100%; border-collapse: collapse; }
      piel: sin relleno, con el borde despareja del sello y la letra mono. */
   position: relative;
   background: transparent;
-  /* Doble marco, como un sello de certificación: el de afuera grueso y de
-     punta corta, el de adentro de un pelo. Es lo que lo separa de "una caja
-     con borde" — dos líneas paralelas no aparecen por casualidad, se leen como
-     algo impreso a propósito. */
-  border: 2px solid rgba(62, 122, 58, 0.55);
-  border-radius: 4px;
+  /* Borde a fuerza plena y un punto más de letra: la fila saldada no tiene
+     números abajo del precio, así que si el sello viene desteñido la fila entera
+     se ve a medio terminar. Con el borde firme el sello sostiene solo el peso
+     de esa fila — que es justo lo que tiene que hacer: decir "acá ya está". */
+  border: 1.5px solid var(--success);
+  border-radius: 5px;
   color: var(--success);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   gap: 7px;
 }
-.lb-cobro.is-on::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border: 1px solid rgba(62, 122, 58, 0.4);
-  border-radius: 2px;
-  pointer-events: none;
-}
+
 /* Estado arriba, fecha abajo — el mismo orden que el sello de "hecho". */
 .lb-cobro__txt {
   display: inline-flex;
@@ -1718,7 +1718,6 @@ table.tbl { width: 100%; border-collapse: collapse; }
   opacity: 0.85;
 }
 .lb-cobro.is-on:hover { border-color: var(--success); background: var(--success-bg); }
-.lb-cobro.is-on:hover::before { border-color: var(--success); }
 .lb-cobro:disabled { opacity: 0.5; cursor: default; }
 
 /* "pago $X de $Y" — para los tratamientos que se pagan en cuotas */
@@ -3093,6 +3092,20 @@ table.tbl { width: 100%; border-collapse: collapse; }
   line-height: 1.25;
 }
 .fr-price { font-size: 13.5px; font-weight: 600; }
+/* Lo que ya entró: verde, porque es buena noticia, pero en texto y al mismo
+   tamaño que "falta". Era un chip con fondo y borde, y ahí pesaba igual que el
+   sello de PAGADO — dos verdes del mismo tamaño en la misma fila, compitiendo.
+   Mismo tamaño que el rojo a propósito: son dos mitades del mismo importe y
+   ninguna es más chica que la otra. Lo que las diferencia es el color y el
+   orden, no la escala. */
+.fr-pago {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .fr-falta {
   font-size: 11px;
   font-weight: 600;
@@ -3199,8 +3212,15 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .lb-medio {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   flex: 0 0 auto;
+  /* Ancho fijo, el de la palabra más larga ("Transferencia").
+     Sin esto el botón cambiaba de tamaño al alternar y empujaba a los otros
+     tres: tocabas el medio de pago y toda la fila se corría, con el riesgo de
+     terminar apretando "Todavía no" en el lugar donde recién estaba "Otro
+     monto". Un control que se mueve cuando lo usás es una trampa. */
+  min-width: 124px;
   padding: 6px 12px;
   border: 1px solid var(--border-input);
   border-radius: 999px;

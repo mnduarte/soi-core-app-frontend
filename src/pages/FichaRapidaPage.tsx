@@ -1765,8 +1765,7 @@ export default function FichaRapidaPage() {
                       <i>{fmtDate(it.completedAt)}</i>
                     </span>
                   )}
-                  {/* Cuanto lleva pagado, para los que se pagan en cuotas */}
-                  {parcial && <span className={`lb-paidprog ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>pagó {fmtMoney(paid)}</span>}
+
                   {/* EN PRUEBA — sello de "sin hacer" en todos los pendientes.
                       Reemplaza al chip ámbar que estaba solo cuando había plata
                       cobrada: los dos decían lo mismo y juntos en la misma fila
@@ -1820,6 +1819,18 @@ export default function FichaRapidaPage() {
                   todavía, aunque tenga plata cobrada —eso es una seña— así que
                   el rojo ahí contradecía al propio modelo. Ese caso lo avisa el
                   ámbar de "por hacer", al lado del monto pagado. */}
+              {/* Los tres números del trabajo, juntos y en el orden en que se
+                  cuentan: cuánto salió, cuánto entró, cuánto falta.
+                  El verde del "pagó" vuelve —es buena noticia y merece su
+                  color— pero en texto y no en chip: el chip pesaba lo mismo que
+                  el sello de PAGADO y los dos verdes se peleaban.
+                  El rojo cierra el bloque a propósito: es lo último que se lee
+                  y lo único que pide una acción. */}
+              {!cobrado && paid > 0 && (
+                <span className={`fr-pago ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>
+                  pagó {fmtMoney(paid)}
+                </span>
+              )}
               {done && !cobrado && price > 0 && (
                 <span className={`fr-falta ${sinPagosPronto === it._id ? 'fr-seva' : ''}`}>
                   {paid > 0 ? `falta ${fmtMoney(price - paid)}` : 'sin cobrar'}

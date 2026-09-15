@@ -3599,3 +3599,12 @@ table.tbl { width: 100%; border-collapse: collapse; }
 @media (max-width: 640px) {
   .fr-acuenta__ver__q { display: none; }
 }
+
+/* Encabezado y hora del desplegable de pacientes de la ficha. */
+.fr-sug__hd { padding: 9px 12px 5px; margin: 0; border-bottom: 1px solid var(--border-subtle); }
+.fr-sug__hora {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--info);
+  white-space: nowrap;
+}

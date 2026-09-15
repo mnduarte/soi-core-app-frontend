@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { appointmentsApi } from '../api/appointments';
 import { patientsApi, type Patient } from '../api/patients';
 import { transactionsApi, type Transaction, type PaymentMethod } from '../api/transactions';
 import { worksApi, type Work, type WorkStatus, type CreateWorkInput } from '../api/works';
@@ -43,6 +44,48 @@ function fmtDate(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
 }
+/** La hora del turno, 24hs. El día lo dice el encabezado del grupo. */
+function etiquetaTurno(iso: string): string {
+  return new Date(iso).toLocaleTimeString('es-AR', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+/**
+ * Fichas que ya se abrieron HOY, para no volver a sugerirlas.
+ *
+ * Vive en el navegador y no en el servidor a propósito: es una comodidad de la
+ * jornada, no un dato clínico. Guardarlo en la base pediría un campo, un
+ * endpoint y una escritura por cada ficha que se mira — mucho aparato para
+ * ordenar una lista de diez nombres.
+ *
+ * La clave lleva la fecha, así que al día siguiente la lista vuelve a estar
+ * completa sin tener que limpiar nada. Se descartan las claves viejas al pasar.
+ *
+ * Contrapartida honesta: es por dispositivo. Si se atiende con la tablet y
+ * después se carga desde la computadora, cada una lleva su propia cuenta. Para
+ * un consultorio de un profesional alcanza, y el costo de equivocarse es
+ * escribir tres letras en el buscador.
+ */
+const CLAVE_VISTAS = 'soi.fichas-vistas';
+
+function fichasVistasHoy(): string[] {
+  try {
+    const crudo = localStorage.getItem(CLAVE_VISTAS);
+    if (!crudo) return [];
+    const { fecha, ids } = JSON.parse(crudo) as { fecha: string; ids: string[] };
+    return fecha === todayYMD() && Array.isArray(ids) ? ids : [];
+  } catch { return []; }
+}
+
+function marcarFichaVista(patientId: string): void {
+  try {
+    const ids = fichasVistasHoy();
+    if (ids.includes(patientId)) return;
+    localStorage.setItem(CLAVE_VISTAS, JSON.stringify({ fecha: todayYMD(), ids: [...ids, patientId] }));
+  } catch { /* modo privado, o el navegador con el almacenamiento bloqueado */ }
+}
+
 function methodLabel(m?: string): string {
   return m === 'TRANSFER' ? 'transferencia' : m === 'CARD' ? 'tarjeta' : m === 'OTHER' ? 'otro' : 'efectivo';
 }
@@ -97,6 +140,92 @@ export default function FichaRapidaPage() {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [searchOpen]);
+
+  /**
+   * Qué mostrar en el desplegable ANTES de escribir.
+   *
+   * Mostraba los primeros cinco pacientes de la lista, o sea los mismos
+   * siempre y en orden alfabético — información cero. Pero la ficha casi nunca
+   * se abre para un paciente cualquiera: se abre para el que está en el sillón,
+   * y ese tiene turno hoy.
+   *
+   * Así que con el campo vacío van los pacientes del día (y los de mañana,
+   * para el que prepara la jornada la noche anterior), ordenados por hora. No
+   * cuesta una consulta más: la lista de pacientes ya trae el próximo turno de
+   * cada uno desde que se hizo la columna "Próximo turno".
+   *
+   * Si no hay turnos —un domingo, o un consultorio que todavía no cargó la
+   * agenda— vuelve a los primeros cinco, que es mejor que un desplegable vacío.
+   */
+
+  /**
+   * Los turnos de hoy y de mañana, para sugerir en el buscador.
+   *
+   * Se le piden a la AGENDA y no al campo `nextVisitAt` de cada paciente, que
+   * fue el primer intento y estaba mal: ese campo guarda el PRÓXIMO turno, así
+   * que pasado el mediodía los pacientes de hoy ya tienen como "próximo" el de
+   * mañana y el grupo de hoy quedaba vacío — justo cuando más se necesita.
+   * Peor: mostraba la hora del turno de mañana al lado de un paciente que
+   * estabas atendiendo hoy, y no coincidía con nada de lo que decía la agenda.
+   *
+   * Solo se pide con el buscador abierto y sin paciente elegido: son dos días
+   * de turnos, una consulta chica que además ya suele estar en caché porque la
+   * agenda la hizo.
+   */
+  const { data: turnosCerca = [] } = useQuery({
+    queryKey: ['appointments', 'sugeridos', todayYMD()],
+    queryFn: () => {
+      const desde = new Date(); desde.setHours(0, 0, 0, 0);
+      const hasta = new Date(desde); hasta.setDate(hasta.getDate() + 2);
+      return appointmentsApi.findAll({ from: desde.toISOString(), to: hasta.toISOString() });
+    },
+    enabled: searchOpen && !id,
+    staleTime: 60_000,
+  });
+
+  /*
+   * Solo escribe; no toca estado a propósito. Un `setState` acá dispararía un
+   * render en cascada justo en el commit que arma la ficha entera, que es el
+   * más pesado de la pantalla. El memo de abajo no necesita enterarse: excluye
+   * al paciente abierto mirando `id`, y cuando se vuelve al buscador `id`
+   * cambia y ahí sí lee lo que quedó guardado.
+   */
+  useEffect(() => {
+    if (id) marcarFichaVista(id);
+  }, [id]);
+
+  const sugeridos = useMemo(() => {
+    if (query.trim()) return results.slice(0, 5).map(p => ({ p, dia: '', hora: '' }));
+
+    const man0 = new Date(); man0.setHours(0, 0, 0, 0); man0.setDate(man0.getDate() + 1);
+    const porPaciente = new Map(results.map(p => [p._id, p]));
+    // Arranca con las fichas ya abiertas hoy: quedan descartadas por el mismo
+    // camino que los turnos repetidos, sin una condición aparte.
+    const vistos = new Set<string>(fichasVistasHoy());
+    // El que se está atendiendo ahora mismo tampoco se sugiere: ya está abierto.
+    if (id) vistos.add(id);
+    const lista: { p: Patient; dia: string; hora: string }[] = [];
+
+    // Los turnos ya vienen ordenados por hora; HOY va completo antes que nada
+    // de mañana. El que está atendiendo necesita ver su día entero primero, por
+    // más temprano que sea.
+    for (const dia of ['hoy', 'mañana']) {
+      for (const t of turnosCerca) {
+        const cuando = new Date(t.startsAt);
+        const esDeManana = cuando.getTime() >= man0.getTime();
+        if ((dia === 'mañana') !== esDeManana) continue;
+        // Un paciente puede tener dos turnos en el día: se lista una sola vez,
+        // en el primero.
+        if (!t.patientId || vistos.has(t.patientId)) continue;
+        const p = porPaciente.get(t.patientId);
+        if (!p) continue;
+        vistos.add(t.patientId);
+        lista.push({ p, dia, hora: etiquetaTurno(t.startsAt) });
+      }
+    }
+    const cortada = lista.slice(0, 10);
+    return cortada.length ? cortada : results.slice(0, 5).map(p => ({ p, dia: '', hora: '' }));
+  }, [results, query, turnosCerca, id]);
 
   const pickPatient = (p: Patient) => {
     setSearchOpen(false);
@@ -2309,10 +2438,19 @@ export default function FichaRapidaPage() {
                 />
                 {searchOpen && (
                   <div className="lb-menupop" style={{ transformOrigin: 'top left', position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', zIndex: 20, overflow: 'hidden' }}>
-                    <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                      {results.slice(0, 5).map(p => (
+                    <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                      {sugeridos.map(({ p, dia, hora }, i) => (
+                        <Fragment key={p._id}>
+                        {/* Un encabezado cada vez que cambia el día. Separarlos
+                            importa: mirar "mi día" y mirar "lo que viene" son
+                            dos cosas distintas, y mezcladas por hora se
+                            confunden justo cuando quedan pocos turnos. */}
+                        {dia && dia !== sugeridos[i - 1]?.dia && (
+                          <div style={popTitle} className="fr-sug__hd">
+                            {dia === 'hoy' ? 'Hoy' : 'Mañana'}
+                          </div>
+                        )}
                         <div
-                          key={p._id}
                           onMouseDown={e => { e.preventDefault(); pickPatient(p); }}
                           style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)' }}
                           onMouseOver={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
@@ -2320,8 +2458,16 @@ export default function FichaRapidaPage() {
                         >
                           <Avatar name={p.name} lastName={p.lastName} id={p._id} size="sm" />
                           <span style={{ flex: 1, fontWeight: 500, fontSize: 13.5 }}>{p.name} {p.lastName}</span>
-                          {p.obraSocial && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>{p.obraSocial}</span>}
+                          {/* Con la lista del día, la hora del turno reemplaza a
+                              la obra social: es el dato que distingue a uno de
+                              otro en ese momento. */}
+                          {hora ? (
+                            <span className="mono fr-sug__hora">{hora}</span>
+                          ) : (
+                            p.obraSocial && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>{p.obraSocial}</span>
+                          )}
                         </div>
+                        </Fragment>
                       ))}
                       {results.length === 0 && query.trim() && (
                         <div style={{ padding: '10px 12px', fontSize: 12.5, color: 'var(--text-tertiary)' }}>Sin coincidencias.</div>

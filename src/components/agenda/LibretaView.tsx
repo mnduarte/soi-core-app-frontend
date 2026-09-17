@@ -15,7 +15,6 @@ import { useFlip } from '../../hooks/useFlip';
 import { Icon } from '../common/Icon';
 import { FilasFantasma } from '../common/FilasFantasma';
 import { Avatar } from '../common/Avatar';
-import { ConfirmDialog } from '../common/ConfirmDialog';
 import { StatusBadge, FichaPendingBadge } from '../common/StatusBadge';
 import { ResolveMenu } from '../common/ResolveMenu';
 import { PatientPicker } from '../common/PatientPicker';
@@ -72,10 +71,12 @@ interface LibretaViewProps {
   prefill?: { id: string; name: string; n: number } | null;
   /** Turno al que se llegó desde el buscador: se resalta y se trae a la vista. */
   resaltado?: string | null;
-  onOpenPatient: (id: string, trabajo?: string) => void;
+  /** Sin esto (el Asistente) no aparece el botón "Ficha". */
+  onOpenPatient?: (id: string, trabajo?: string) => void;
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
-  onOpenFicha: (appt: Appointment) => void;
+  /** Sin esto no aparecen "cargar evolución" ni el aviso de ficha pendiente. */
+  onOpenFicha?: (appt: Appointment) => void;
   onDelete: (appt: Appointment) => void;
   onEditPatient: (patientId: string) => void;
   /** Asignar o cambiar el trabajo del turno. */
@@ -162,22 +163,20 @@ export function LibretaView({
   const slots = settings?.slotTimes?.length ? settings.slotTimes : TIMES;
   const [customSlotsOpen, setCustomSlotsOpen] = useState(false);
 
-  // Crear paciente rápido desde búsqueda inline
-  const quickCreateMut = useMutation({
-    mutationFn: (fullName: string) => patientsApi.quickCreate(fullName),
-    onSuccess: (newPatient, fullName) => {
-      pickPatient(newPatient);
-      setSearchOpen(false);
-      showToast(`${newPatient.name || fullName} creado ✓`);
-      // Auto-agenda el turno con el paciente recién creado. Pasamos su _id como
-      // override explícito: si dependiéramos del estado `patientId`, el closure
-      // de este setTimeout lo lee stale (null, el setState de pickPatient todavía
-      // no re-renderizó) → anotar() reabriría el cartel "no existe" y crearía un
-      // segundo paciente al confirmar de nuevo. Con el id explícito va derecho.
-      anotar(newPatient._id);
-    },
-    onError: () => showToast('No se pudo crear el paciente', 'error'),
-  });
+  /*
+   * Paciente nuevo desde la fila de anotar: abre el formulario con el nombre ya
+   * escrito, y al guardarlo anota el turno.
+   *
+   * Antes se creaba solo con el nombre, de un golpe. Era rápido, pero dejaba
+   * fichas sin celular —sin recordatorio posible— y para completarlas había que
+   * buscar la fila recién creada deslizando la lista. Ahora el formulario abre
+   * con el foco en el celular y Enter guarda: el apurado hace Enter, Enter.
+   */
+  const [altaNombre, setAltaNombre] = useState<string | null>(null);
+  const abrirAlta = (nombre: string) => {
+    setSearchOpen(false);
+    setAltaNombre(nombre);
+  };
 
   // Precarga el paciente si venimos de "Guardar y agendar turno" (?patientId=…).
   const [searchParams, setSearchParams] = useSearchParams();
@@ -291,15 +290,14 @@ export function LibretaView({
     setSearchOpen(false);
   };
 
-  const [confirmCreatePatient, setConfirmCreatePatient] = useState<string | null>(null);
   // Anti doble-submit: bloquea que dos llamadas casi simultáneas a anotar()
   // (doble-click en "Anotar"/"Sobreturno" antes de que el botón se deshabilite)
   // creen dos turnos. La guarda de arriba está en el ConfirmDialog; esta cubre
   // el path directo (paciente ya vinculado, sin diálogo de por medio).
   const submittingRef = useRef(false);
 
-  const anotar = async (patientIdOverride?: string) => {
-    const name = patientName.trim();
+  const anotar = async (patientIdOverride?: string, nameOverride?: string) => {
+    const name = (nameOverride ?? patientName).trim();
     if (!name) {
       showToast('Escribí un paciente');
       nameRef.current?.focus();
@@ -307,9 +305,9 @@ export function LibretaView({
     }
 
     const finalPatientId = patientIdOverride || patientId;
-    // Si no hay paciente vinculado y no es un override (creación rápida), pedir confirm
+    // Nombre escrito que no es de nadie: primero su ficha, después el turno.
     if (!finalPatientId && !patientIdOverride) {
-      setConfirmCreatePatient(name);
+      abrirAlta(name);
       return;
     }
 
@@ -577,7 +575,7 @@ export function LibretaView({
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       if (patientName.trim() && !patientId && searchResults.length === 0) {
-                        quickCreateMut.mutate(patientName.trim());
+                        abrirAlta(patientName.trim());
                       } else if (patientId) {
                         anotar();
                       }
@@ -681,26 +679,23 @@ export function LibretaView({
                       <div
                         onMouseDown={e => {
                           e.preventDefault();
-                          if (!quickCreateMut.isPending) quickCreateMut.mutate(patientName.trim());
+                          abrirAlta(patientName.trim());
                         }}
                         style={{
                           padding: '10px 12px',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 8,
-                          cursor: quickCreateMut.isPending ? 'wait' : 'pointer',
+                          cursor: 'pointer',
                           fontSize: 12.5,
                           fontWeight: 600,
                           color: 'var(--brand-primary-600)',
                           background: 'var(--brand-primary-50)',
                           borderTop: '1px solid var(--border-subtle)',
-                          opacity: quickCreateMut.isPending ? 0.6 : 1,
                         }}
                       >
                         <Icon name="plus" size={14} />
-                        {quickCreateMut.isPending
-                          ? 'Creando…'
-                          : `Crear ficha: «${patientName.trim()}»`}
+                        {`Crear ficha: «${patientName.trim()}»`}
                       </div>
                     )}
                   </div>
@@ -925,7 +920,7 @@ export function LibretaView({
                                   <Icon name="clipboard" size={10} /> Sin ficha
                                 </span>
                               )}
-                              {verFichaPend && <FichaPendingBadge onClick={() => onOpenFicha(a)} />}
+                              {verFichaPend && onOpenFicha && <FichaPendingBadge onClick={() => onOpenFicha(a)} />}
                               {/* El estado "recordado" NO va como chip acá: lo muestra
                                   el propio botón de la acción (tilde verde + "Recordado"). */}
                             </div>
@@ -973,14 +968,16 @@ export function LibretaView({
                               <span className="lb-act__ic"><Icon name="user" size={17} /></span>
                               <span className="lb-act__lbl">Paciente</span>
                             </button>
-                            <button
-                              className="lb-act lb-act--hide-sm"
-                              title="Abrir ficha clínica"
-                              onClick={e => { e.stopPropagation(); onOpenPatient(a.patientId!); }}
-                            >
-                              <span className="lb-act__ic"><Icon name="clipboard" size={17} /></span>
-                              <span className="lb-act__lbl">Ficha</span>
-                            </button>
+                            {onOpenPatient && (
+                              <button
+                                className="lb-act lb-act--hide-sm"
+                                title="Abrir ficha clínica"
+                                onClick={e => { e.stopPropagation(); onOpenPatient(a.patientId!); }}
+                              >
+                                <span className="lb-act__ic"><Icon name="clipboard" size={17} /></span>
+                                <span className="lb-act__lbl">Ficha</span>
+                              </button>
+                            )}
                           </>
                         )}
                         <ResolveMenu
@@ -1048,19 +1045,20 @@ export function LibretaView({
         />
       )}
 
-      {/* Confirm crear paciente si no existe y presiona Anotar */}
-      {confirmCreatePatient && (
-        <ConfirmDialog
-          open={true}
-          title="Este paciente no existe"
-          message={`¿Desea crear paciente "${confirmCreatePatient}" y agendar el turno?`}
-          confirmLabel="Crear y anotar"
-          onConfirm={() => {
-            if (quickCreateMut.isPending) return;
-            quickCreateMut.mutate(confirmCreatePatient);
-            setConfirmCreatePatient(null);
+      {/* Alta de paciente nuevo desde la fila de anotar: al guardar, se anota
+          el turno. Montado solo abierto, para que cada alta arranque limpia. */}
+      {altaNombre !== null && (
+        <NewPatientModal
+          open
+          initialName={altaNombre}
+          createLabel="Crear y anotar turno"
+          onClose={() => setAltaNombre(null)}
+          onCreated={patient => {
+            pickPatient(patient);
+            // id y nombre explícitos: el estado recién seteado por pickPatient
+            // todavía no llegó a este closure.
+            void anotar(patient._id, `${patient.name} ${patient.lastName}`);
           }}
-          onCancel={() => setConfirmCreatePatient(null)}
         />
       )}
 

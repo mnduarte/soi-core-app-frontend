@@ -9,6 +9,7 @@ import { patientAge } from '../../lib/format';
 import { whatsAppPreview } from '../../lib/phone';
 import { splitName } from '../../lib/name';
 import { useUIStore } from '../../store/ui.store';
+import { useVeClinico } from '../../lib/permisos';
 
 interface NewPatientModalProps {
   open: boolean;
@@ -22,6 +23,13 @@ interface NewPatientModalProps {
   // suelto del turno de la agenda que se está por vincular). En alta desde cero
   // no se pasa y el campo queda vacío.
   initialName?: string;
+  /**
+   * Texto del botón principal en alta vinculada (por defecto "Crear y vincular").
+   * Con esto, además, el foco arranca en el celular y Enter guarda: es el alta
+   * desde la agenda, donde el nombre ya viene escrito y lo que falta es el número
+   * para el recordatorio. Apurado, es Enter y Enter.
+   */
+  createLabel?: string;
 }
 
 const OBRA_SOCIAL_OPTIONS = ['Particular', 'OSDE', 'Swiss Medical', 'Galeno', 'IOMA', 'PAMI', 'Otra'];
@@ -102,11 +110,15 @@ function computeAge(iso: string): number | null {
   return a >= 0 && a < 150 ? a : null;
 }
 
-export function NewPatientModal({ open, onClose, editPatientId, onCreated, initialName }: NewPatientModalProps) {
+export function NewPatientModal({ open, onClose, editPatientId, onCreated, initialName, createLabel }: NewPatientModalProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
   const navigate = useNavigate();
   const editing = Boolean(editPatientId);
+  // El Asistente carga y corrige datos de contacto, pero no antecedentes
+  // médicos (alergias, notas clínicas) ni la ficha en papel escaneada. El
+  // servidor tampoco se los devuelve ni se los acepta.
+  const clinico = useVeClinico();
   // Alta desde un turno de la agenda: el turno ya existe, así que no ofrecemos
   // "agendar turno" y el botón crea + vincula.
   const linking = Boolean(onCreated);
@@ -292,6 +304,9 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
     age: data.age.trim() ? Number(data.age) : undefined,
     dni: data.dni.trim() || undefined,
     address: data.address.trim() || undefined,
+    // Sin la clave, no `undefined`: el Asistente no ve los antecedentes, así
+    // que mandar "vacío" se leería como que los borró.
+    ...(clinico && {
     medicalHistory:
       data.allergies.length || data.notes.trim()
         ? {
@@ -299,6 +314,7 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
             notes: data.notes.trim() || undefined,
           }
         : undefined,
+    }),
   });
 
   const submit = async (mode: 'close' | 'andSchedule') => {
@@ -327,6 +343,14 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
       showToast(`¡Listo! Ficha de ${saved.name} creada`);
       onClose();
     }
+  };
+
+  // Alta desde la agenda: Enter en un campo guarda y anota. Solo en inputs —
+  // en el textarea de notas Enter es un salto de línea.
+  const enterGuarda = (e: React.KeyboardEvent) => {
+    if (!createLabel || e.key !== 'Enter' || !(e.target instanceof HTMLInputElement)) return;
+    e.preventDefault();
+    if (isValid && !mutation.isPending) void submit('close');
   };
 
   return (
@@ -359,12 +383,15 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
               : editing
               ? 'Guardar cambios'
               : linking
-              ? 'Crear y vincular'
+              ? (createLabel ?? 'Crear y vincular')
               : 'Crear ficha'}
           </button>
         </>
       }
     >
+      {/* `display: contents` no agrega caja: el layout queda igual y el Enter de
+          cualquier campo sube hasta acá. */}
+      <div style={{ display: 'contents' }} onKeyDown={enterGuarda}>
       {error && (
         <div style={{ background: 'var(--danger-bg)', color: 'var(--danger)', padding: '8px 12px', borderRadius: 6, fontSize: 12.5, marginBottom: 14 }}>
           {error}
@@ -372,7 +399,7 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
       )}
 
       {/* Scan de la ficha por foto — solo al crear (en edición no aplica). */}
-      {!editing && (
+      {!editing && clinico && (
       <div
         style={{
           border: '1px dashed var(--brand-primary-100)',
@@ -491,9 +518,11 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
                   )}
                 </div>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" className="btn btn--secondary btn--sm" onClick={goToExisting}>
-                    Ir a su ficha <Icon name="arrowRight" size={13} />
-                  </button>
+                  {clinico && (
+                    <button type="button" className="btn btn--secondary btn--sm" onClick={goToExisting}>
+                      Ir a su ficha <Icon name="arrowRight" size={13} />
+                    </button>
+                  )}
                   <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setDuplicate(null); setDupDismissed(true); }}>
                     Cargar igual (riesgo de duplicado)
                   </button>
@@ -509,7 +538,7 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
         <FormField label="Nombre y apellido">
           <input
             className="input"
-            autoFocus
+            autoFocus={!createLabel}
             placeholder="Lucía Fernández"
             value={data.fullName}
             onChange={e => upd('fullName', e.target.value)}
@@ -535,6 +564,7 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
         >
           <input
             className="input"
+            autoFocus={!!createLabel}
             placeholder="11 4563 5988"
             value={data.phone}
             onChange={e => upd('phone', e.target.value)}
@@ -600,6 +630,7 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
         </FormField>
       </div>
 
+      {clinico && (<>
       <SectionLabel hint="(opcional, se puede completar después)">Antecedentes</SectionLabel>
       <FormField label="Alergias y advertencias">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -641,6 +672,8 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
           onChange={e => upd('notes', e.target.value)}
         />
       </FormField>
+      </>)}
+      </div>
     </Modal>
   );
 }

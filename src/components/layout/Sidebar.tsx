@@ -5,6 +5,7 @@ import { withTitle } from '../../lib/format';
 import { Icon, type IconName } from '../common/Icon';
 import { BrandLogo } from '../common/BrandLogo';
 import { Avatar } from '../common/Avatar';
+import { useVeClinico } from '../../lib/permisos';
 
 interface NavItem {
   to: string;
@@ -12,6 +13,8 @@ interface NavItem {
   icon: IconName;
   end?: boolean;
   kbd?: string;
+  /** Solo para quien ve lo clínico: el Asistente no la ve en el menú. */
+  clinico?: boolean;
 }
 
 // Tres secciones y nada más. Sin rótulos de grupo: con esta cantidad de ítems
@@ -21,8 +24,8 @@ interface NavItem {
 const NAV: NavItem[] = [
   // { to: '/', label: 'Dashboard', icon: 'home', end: true, kbd: 'G' },
   { to: '/agenda', label: 'Agenda', icon: 'calendar', kbd: 'A' },
-  { to: '/patients', label: 'Pacientes', icon: 'users', kbd: 'P' },
-  { to: '/ficha-rapida', label: 'Ficha clínica', icon: 'clipboard', kbd: 'F' },
+  { to: '/patients', label: 'Pacientes', icon: 'users', kbd: 'P', clinico: true },
+  { to: '/ficha-rapida', label: 'Ficha clínica', icon: 'clipboard', kbd: 'F', clinico: true },
   // { to: '/pacientes-viejos', label: 'Pacientes viejos', icon: 'history' },
   // { to: '/gallery', label: 'Galería', icon: 'image' },
   // { to: '/payments', label: 'Pagos', icon: 'receipt' },
@@ -46,6 +49,7 @@ function rolLabel(role?: string, isClinical?: boolean) {
 export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapsed }: SidebarProps) {
   const { user, clinic, clearAuth } = useAuthStore();
   const navigate = useNavigate();
+  const clinico = useVeClinico();
 
   const handleLogout = async () => {
     const refreshToken = localStorage.getItem('refreshToken');
@@ -81,7 +85,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapsed }: Sideb
       {/* Sin buscador acá: cada sección ya tiene el suyo (Pacientes y Ficha),
           y el que había era decorativo — no tenía input ni el atajo ⌘K que
           anunciaba. */}
-      {NAV.map(it => (
+      {NAV.filter(it => clinico || !it.clinico).map(it => (
         <NavLink
           key={it.to}
           to={it.to}

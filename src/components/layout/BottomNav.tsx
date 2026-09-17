@@ -1,17 +1,22 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Icon, type IconName } from '../common/Icon';
 import { useUIStore } from '../../store/ui.store';
+import { useVeClinico } from '../../lib/permisos';
 
 // Navegación de celular (<768px): reemplaza al sidebar. Mismas secciones que el
 // sidebar, ícono + texto, el activo en azul tinta. Ver handoff-libreta §4.
-const ITEMS: { to: string; label: string; icon: IconName; match: string[] }[] = [
+const ITEMS: { to: string; label: string; icon: IconName; match: string[]; clinico?: boolean }[] = [
   { to: '/agenda', label: 'Agenda', icon: 'calendar', match: ['/agenda'] },
-  { to: '/patients', label: 'Pacientes', icon: 'users', match: ['/patients'] },
-  { to: '/ficha-rapida', label: 'Ficha', icon: 'clipboard', match: ['/ficha-rapida'] },
+  { to: '/patients', label: 'Pacientes', icon: 'users', match: ['/patients'], clinico: true },
+  { to: '/ficha-rapida', label: 'Ficha', icon: 'clipboard', match: ['/ficha-rapida'], clinico: true },
 ];
 
 export function BottomNav() {
   const { pathname } = useLocation();
+  const clinico = useVeClinico();
+  // El Asistente tiene una sola sección: una barra con un único botón no
+  // navega a ningún lado, solo ocupa pantalla.
+  if (!clinico) return null;
 
   return (
     <nav className="lb-bnav">
@@ -33,6 +38,7 @@ export function MobileFab() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const openModal = useUIStore(s => s.openModal);
+  const clinico = useVeClinico();
 
   const onAgenda = pathname.startsWith('/agenda');
   const onPatients = pathname.startsWith('/patients');
@@ -56,7 +62,7 @@ export function MobileFab() {
   };
 
   return (
-    <button className="lb-fab" onClick={handle} title={onAgenda ? 'Anotar turno' : 'Nuevo paciente'}>
+    <button className={clinico ? 'lb-fab' : 'lb-fab lb-fab--sin-bnav'} onClick={handle} title={onAgenda ? 'Anotar turno' : 'Nuevo paciente'}>
       <Icon name="plus" />
     </button>
   );

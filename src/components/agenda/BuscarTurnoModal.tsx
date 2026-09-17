@@ -46,7 +46,8 @@ interface Props {
    */
   now: Date;
   onClose: () => void;
-  onVerFicha: (patientId: string) => void;
+  /** Sin esto (el Asistente) no hay botón "Ver ficha" ni se piden pendientes y saldo. */
+  onVerFicha?: (patientId: string) => void;
   /** Deja el paciente puesto en la fila de anotar. NO crea el turno. */
   onAgendar: (p: Patient) => void;
   /** Lleva la agenda al día de ese turno y resalta la fila. */
@@ -293,16 +294,20 @@ export function BuscarTurnoModal({
     enabled: !!sel,
   });
 
+  // Pendientes y saldo son de la ficha clínica: sin acceso a ella (el
+  // Asistente) ni se piden — el servidor igual los rechazaría.
+  const clinico = !!onVerFicha;
+
   const { data: pendientesData } = useQuery({
     queryKey: ['works', sel?._id, 'pending'],
     queryFn: () => worksApi.findAll(sel!._id, { status: 'pending', limit: 4 }),
-    enabled: !!sel,
+    enabled: !!sel && clinico,
   });
 
   const { data: resumen } = useQuery({
     queryKey: ['works-summary', sel?._id],
     queryFn: () => worksApi.summary(sel!._id),
-    enabled: !!sel,
+    enabled: !!sel && clinico,
   });
 
   const pendientes = pendientesData ?? [];
@@ -415,8 +420,7 @@ export function BuscarTurnoModal({
   const cargandoFicha =
     !!sel &&
     (turnosData === undefined ||
-      pendientesData === undefined ||
-      resumen === undefined);
+      (clinico && (pendientesData === undefined || resumen === undefined)));
 
 
   const nombre = sel ? `${sel.name} ${sel.lastName}`.trim() : '';
@@ -461,13 +465,15 @@ export function BuscarTurnoModal({
             >
               <Icon name="chevronLeft" size={14} /> Buscar otro
             </button>
-            <button
-              type="button"
-              className="btn btn--secondary"
-              onClick={() => onVerFicha(sel._id)}
-            >
-              Ver ficha
-            </button>
+            {onVerFicha && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => onVerFicha(sel._id)}
+              >
+                Ver ficha
+              </button>
+            )}
             <button
               type="button"
               className="btn btn--primary"

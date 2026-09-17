@@ -7,6 +7,7 @@ import {
   type AppointmentStatus,
 } from '../api/appointments';
 import { patientsApi, type Patient } from '../api/patients';
+import { useVeClinico } from '../lib/permisos';
 import { useUIStore } from '../store/ui.store';
 import { DatePicker } from '../components/common/DatePicker';
 import { Icon } from '../components/common/Icon';
@@ -217,6 +218,11 @@ export default function AgendaPage() {
     openModal('newPatient', { patientId });
   };
 
+  // El Asistente usa la agenda entera, pero todo lo que lleva a la ficha
+  // clínica (ver ficha, cargar evolución) no le aparece. Donde tocar al
+  // paciente abría su ficha, a él le abre sus datos de contacto.
+  const clinico = useVeClinico();
+
   const todayLabel = selectedDate.toLocaleDateString('es-AR', {
     weekday: 'long',
     day: 'numeric',
@@ -419,10 +425,10 @@ export default function AgendaPage() {
         open
         now={now}
         onClose={() => setBuscarOpen(false)}
-        onVerFicha={id => {
+        onVerFicha={clinico ? id => {
           setBuscarOpen(false);
           navigate(`/ficha-rapida/${id}`);
-        }}
+        } : undefined}
         onAgendar={p => {
           setBuscarOpen(false);
           setPrefill({ id: p._id, name: `${p.name} ${p.lastName}`.trim(), n: Date.now() });
@@ -512,12 +518,12 @@ export default function AgendaPage() {
           isMobile={isMobile}
           prefill={prefill}
           resaltado={resaltado}
-          onOpenPatient={(id, trabajo) =>
+          onOpenPatient={clinico ? (id, trabajo) =>
             navigate(`/ficha-rapida/${id}${trabajo ? `?trabajo=${encodeURIComponent(trabajo)}` : ''}`)
-          }
+          : undefined}
           onResolve={handleResolve}
           onReschedule={handleReschedule}
-          onOpenFicha={handleOpenFicha}
+          onOpenFicha={clinico ? handleOpenFicha : undefined}
           onDelete={handleDelete}
           onEditPatient={handleEditPatient}
           onSetTrabajo={setTrabajo}
@@ -529,10 +535,10 @@ export default function AgendaPage() {
           patientMap={patientMap}
           now={now}
           openModal={openModal}
-          onOpenPatient={id => navigate(`/ficha-rapida/${id}`)}
+          onOpenPatient={clinico ? id => navigate(`/ficha-rapida/${id}`) : handleEditPatient}
           onResolve={handleResolve}
           onReschedule={handleReschedule}
-          onOpenFicha={handleOpenFicha}
+          onOpenFicha={clinico ? handleOpenFicha : undefined}
           onDelete={handleDelete}
           isMobile={isMobile}
         />
@@ -744,7 +750,7 @@ function DayView({
   onOpenPatient: (id: string) => void;
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
-  onOpenFicha: (appt: Appointment) => void;
+  onOpenFicha?: (appt: Appointment) => void;
   onDelete?: (appt: Appointment) => void;
   isMobile: boolean;
 }) {
@@ -838,7 +844,7 @@ function DayView({
                   </div>
                   <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                     <StatusBadge status={appt.status} />
-                    {fichaPending && <FichaPendingBadge onClick={() => onOpenFicha(appt)} />}
+                    {fichaPending && onOpenFicha && <FichaPendingBadge onClick={() => onOpenFicha(appt)} />}
                   </div>
                 </div>
                 <ResolveMenu

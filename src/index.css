@@ -1197,6 +1197,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
   /* Y el contenido le reserva el lugar: como la barra salió del flujo, sin
      esto el último renglón de cualquier lista quedaría tapado. */
   .main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+  /* El Asistente no tiene barra de abajo (una sola sección no se navega). */
+  .main.main--sin-bnav { padding-bottom: env(safe-area-inset-bottom); }
 }
 
 /* Fila de filtros de los modales de histórico (Trabajos hechos / Pagos).
@@ -1781,6 +1783,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
 /* Igual que la bottom nav: mostrar acá, pegado a la definición. */
 @media (max-width: 767px) {
   .lb-fab { display: flex; }
+  /* Sin barra de abajo, el botón baja a donde ella estaba. */
+  .lb-fab.lb-fab--sin-bnav { bottom: calc(22px + env(safe-area-inset-bottom)); }
 }
 
 .toast-host {
@@ -2996,10 +3000,12 @@ table.tbl { width: 100%; border-collapse: collapse; }
      justo lo que hace que el formulario de corregir un pago entre en dos
      renglones. */
   max-width: 560px;
-  /* La línea del margen del cuaderno, el mismo rojo que la hoja de la agenda.
-     Era verde, y el verde acá quedó reservado para la plata: esto no es un
-     estado, es el margen de la hoja donde se anotó el detalle. */
-  border-left: 2px solid var(--margin-red);
+  /* Verde suave: es el detalle de lo que se cobró, así que lleva el color de la
+     plata que entró, el mismo del sello PAGADO. Estuvo en el rojo del margen
+     del cuaderno, pero al lado de un pago se leía como alerta o deuda. El tono
+     `-border` y no `--success` pleno: es una guía, no tiene que competir con el
+     sello. */
+  border-left: 2px solid var(--success-border);
   border-radius: 0 8px 8px 0;
   margin-top: 4px;
 }

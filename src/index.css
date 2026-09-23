@@ -2949,6 +2949,104 @@ table.tbl { width: 100%; border-collapse: collapse; }
   margin-left: 56px;
   min-width: 0;
 }
+/* ---------------------------------------------------------------------------
+   LA CARA DE ADELANTE DE LA FICHA
+   Antecedentes (siempre visibles) + info personal (desplegable, de lectura).
+   --------------------------------------------------------------------------- */
+
+/* Antecedentes: el renglón que en la ficha de papel está arriba de todo. Va en
+   terracota —el color de advertencia— y no en rojo de error: no está pasando
+   nada malo, hay algo que tener en cuenta. */
+.fr-ante {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 20px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.fr-ante__ic { flex-shrink: 0; margin-top: 2px; }
+.fr-ante__txt { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.fr-ante__row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fr-ante__lbl {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-right: 2px;
+}
+.fr-ante__chip {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border: 1px solid var(--warning-border);
+  border-radius: 999px;
+  background: var(--bg-surface);
+}
+/* La nota es texto libre del profesional ("hipertensa, toma enalapril"): se
+   respeta cómo la escribió, con sus renglones. */
+.fr-ante__nota {
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+}
+
+/* Mientras el panel está abierto el botón queda marcado: si no, nada dice de
+   dónde salió el bloque que apareció abajo. */
+.fr-infobtn.is-on {
+  background: var(--brand-primary-50);
+  border-color: var(--brand-primary-100);
+  color: var(--brand-primary-600);
+}
+
+@keyframes fr-info-entra {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Info personal: una lista de lectura, no un formulario. Etiqueta chica arriba
+   y el dato abajo en el color del texto normal — al revés (dato gris, etiqueta
+   negra) se lee primero la etiqueta, que es lo que menos importa. */
+.fr-info {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.fr-info__grid {
+  margin: 0;
+  display: grid;
+  /* `minmax(0, …)`: sin eso un domicilio largo estira la columna y desarma la
+     grilla en pantalla chica. */
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: 10px 22px;
+}
+.fr-info__grid dt {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.fr-info__grid dd {
+  margin: 1px 0 0;
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.fr-info__vacio { margin: 0; font-size: 13.5px; color: var(--text-tertiary); }
+/* Entra con el alto, no antes: el retraso corto deja que el bloque empiece a
+   abrirse y recién ahí aparece el texto. */
+.fr-info--entra { animation: fr-info-entra 200ms ease-out 40ms both; }
+@media (prefers-reduced-motion: reduce) {
+  .fr-info--entra { animation: none; }
+}
+.fr-info__editar { margin-top: 14px; }
+
+@media (max-width: 767px) {
+  .fr-ante { padding: 10px 16px 12px; }
+  .fr-info { padding: 12px 16px 16px; }
+}
+
 .fr-wpays { margin-top: 4px; margin-bottom: 2px; }
 /* La fila envuelve siempre, no solo en edición: sin esto el bloque de pagos,
    que pide el 100%, se apretaría en el mismo renglón que el precio. */

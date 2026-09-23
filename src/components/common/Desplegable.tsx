@@ -28,12 +28,19 @@ import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 
 export function Desplegable({
   abierto,
   ms = 140,
+  curva = 'cubic-bezier(0.4, 0.4, 0.7, 1)',
   clave,
   animarAlMontar = false,
   children,
 }: {
   abierto: boolean;
   ms?: number;
+  /**
+   * Curva del alto. La de por defecto va pareja con una frenada corta, que es
+   * lo que quiere un panel chico. Un bloque grande puede pedir otra: arrancar
+   * suave y resolver rápido se lee mejor cuando hay mucho que acomodar.
+   */
+  curva?: string;
   /**
    * Cambia cuando cambia el CONTENIDO (por ejemplo el panel que pasa de
    * "trabajos" a "montos"). El `ResizeObserver` también lo detecta, pero avisa
@@ -98,7 +105,7 @@ export function Desplegable({
     // bloque empuja.
     anim.current = el.animate(
       [{ height: `${desde}px` }, { height: `${hasta}px` }],
-      { duration: ms, easing: 'cubic-bezier(0.4, 0.4, 0.7, 1)', fill: 'forwards' },
+      { duration: ms, easing: curva, fill: 'forwards' },
     );
     anim.current.onfinish = () => {
       el.style.height = `${hasta}px`;
@@ -107,7 +114,7 @@ export function Desplegable({
     };
     // Estable salvo que cambie la duración: si se recreara en cada render, el
     // ResizeObserver se volvería a suscribir todo el tiempo.
-  }, [ms]);
+  }, [ms, curva]);
 
   useLayoutEffect(() => {
     abiertoRef.current = abierto;

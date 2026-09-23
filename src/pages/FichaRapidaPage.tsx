@@ -1108,6 +1108,47 @@ export default function FichaRapidaPage() {
   // ---- modales ----
   const [odoOpen, setOdoOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+
+  /*
+   * La cara de adelante de la ficha de papel: quién es el paciente y qué hay
+   * que tener en cuenta antes de tocarlo. Hasta ahora la app solo mostraba el
+   * dorso —la cuenta de prestaciones, debe y haber—, y estos datos vivían
+   * adentro del formulario de edición.
+   *
+   * Se parte en dos a propósito: los antecedentes van SIEMPRE a la vista
+   * (cambian lo que se hace en el sillón), el resto entra en un desplegable
+   * cerrado (se carga una vez y casi no se vuelve a mirar).
+   *
+   * No hace falta cerrarlo al cambiar de paciente: el contenedor de la ficha
+   * lleva `key` con el id, así que el estado nace limpio con cada uno.
+   */
+  const [infoOpen, setInfoOpen] = useState(false);
+  const alergias = patient?.medicalHistory?.allergies ?? [];
+  const otrosAnte = [
+    ...(patient?.medicalHistory?.conditions ?? []),
+    ...(patient?.medicalHistory?.medications ?? []),
+  ];
+  const hayAntecedentes =
+    alergias.length > 0 || otrosAnte.length > 0 || Boolean(patient?.medicalHistory?.notes?.trim());
+  // Solo lo que tiene valor: una lista llena de renglones vacíos es peor que
+  // una lista corta, hace dudar de si el dato está o no está.
+  const datosPersonales: [string, string][] = patient
+    ? ([
+        ['DNI', patient.dni],
+        [
+          'Nacimiento',
+          patient.birthDate
+            ? new Date(patient.birthDate).toLocaleDateString('es-AR', { timeZone: 'UTC' })
+            : undefined,
+        ],
+        ['Domicilio', patient.address],
+        ['Localidad', patient.locality],
+        ['Celular', patient.phone],
+        ['Email', patient.email],
+        ['Obra social', patient.obraSocial],
+        ['N° de afiliado', patient.nAfiliado],
+      ].filter(([, v]) => Boolean(v && String(v).trim())) as [string, string][])
+    : [];
   // "Ver todos" de trabajos hechos / pagos (historial completo con buscador).
   const [hechosModalOpen, setHechosModalOpen] = useState(false);
   const [pagosModalOpen, setPagosModalOpen] = useState(false);
@@ -2370,11 +2411,12 @@ export default function FichaRapidaPage() {
           <div style={{ padding: patient ? 0 : 16 }}>
             {!patient && <div style={label}>Paciente</div>}
             {patient ? (
-              /* Encabezado del paciente: avatar + nombre + datos + acciones */
-              /* Celular: tres renglones claros en vez de todo apretado contra
-                 los botones — nombre y edad · datos · acciones. La edad sube al
-                 título porque es una sola palabra y define al paciente junto
-                 con el nombre; la localidad puede ser larga y va abajo. */
+              <>
+              {/* Encabezado del paciente: avatar + nombre + datos + acciones */}
+              {/* Celular: tres renglones claros en vez de todo apretado contra
+                  los botones — nombre y edad · datos · acciones. La edad sube al
+                  título porque es una sola palabra y define al paciente junto
+                  con el nombre; la localidad puede ser larga y va abajo. */}
               <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? 12 : 14, flexWrap: isMobile ? 'wrap' : 'nowrap', padding: isMobile ? '14px 16px' : '16px 20px' }}>
                 <Avatar name={patient.name} lastName={patient.lastName} id={patient._id} size="lg" />
                 <div style={{ minWidth: 0, flex: '1 1 0' }}>
@@ -2410,8 +2452,19 @@ export default function FichaRapidaPage() {
                 <div className="row" style={isMobile
                   ? { gap: 12, flexBasis: '100%', flexWrap: 'nowrap', marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }
                   : { gap: 8, marginLeft: 'auto', flexWrap: 'nowrap', flexShrink: 0 }}>
-                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Editar datos del paciente" onClick={() => openModal('newPatient', { patientId: patient._id })} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
-                    <Icon name="edit" size={isMobile ? 16 : 14} /> {!isMobile && 'Editar'}
+                  {/* Antes acá estaba "Editar", que abría el formulario. Para
+                      MIRAR un dato —el DNI, el domicilio— había que entrar a la
+                      pantalla de escribir, con el riesgo de tocar algo sin
+                      querer. Ahora esto muestra los datos y editar es un botón
+                      adentro: primero se lee, editar es la excepción. */}
+                  <button
+                    className={`btn btn--secondary btn--sm fr-infobtn ${isMobile ? 'btn--icon' : ''} ${infoOpen ? 'is-on' : ''}`}
+                    title="Info personal del paciente"
+                    aria-expanded={infoOpen}
+                    onClick={() => setInfoOpen(v => !v)}
+                    style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}
+                  >
+                    <Icon name="user" size={isMobile ? 16 : 14} /> {!isMobile && 'Info'}
                   </button>
                   <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Galería de fotos" onClick={() => setGalleryOpen(true)} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
                     <Icon name="image" size={isMobile ? 16 : 14} /> {!isMobile && 'Galería'}
@@ -2424,6 +2477,76 @@ export default function FichaRapidaPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Antecedentes: SIEMPRE a la vista, nunca adentro del
+                  desplegable. En la ficha de papel la alergia está arriba de
+                  todo, casi gritada, porque es lo que puede cambiar lo que se
+                  hace en el sillón. Acá vivía escondida adentro del formulario
+                  de edición. Si el paciente no tiene nada cargado, no ocupa
+                  ningún lugar. */}
+              {hayAntecedentes && (
+                <div className="fr-ante">
+                  <Icon name="alert" size={15} className="fr-ante__ic" />
+                  <div className="fr-ante__txt">
+                    {alergias.length > 0 && (
+                      <div className="fr-ante__row">
+                        <span className="fr-ante__lbl">Alergias</span>
+                        {alergias.map(a => (
+                          <span key={a} className="fr-ante__chip">{a}</span>
+                        ))}
+                      </div>
+                    )}
+                    {otrosAnte.length > 0 && (
+                      <div className="fr-ante__row">
+                        <span className="fr-ante__lbl">Antecedentes</span>
+                        {otrosAnte.map(a => (
+                          <span key={a} className="fr-ante__chip">{a}</span>
+                        ))}
+                      </div>
+                    )}
+                    {patient.medicalHistory?.notes && (
+                      <div className="fr-ante__nota">{patient.medicalHistory.notes}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Info personal: se lee, no se escribe. Cerrado por defecto —la
+                  ficha se abre muchas veces por día y casi siempre es para ver
+                  qué falta hacer o cuánto debe; estos datos se cargan una vez y
+                  casi no se vuelven a mirar. */}
+              {/* 220ms y no los 140 de un menú: es un bloque grande, y a esa
+                   velocidad el alto terminaba antes de que el ojo lo siguiera.
+                   La curva arranca suave y resuelve rápido al final.
+                   El contenido entra con su propia opacidad: sin eso lo que se
+                   ve crecer es un rectángulo vacío, porque el texto ya estaba
+                   entero desde el primer cuadro. Solo opacidad, sin desplazarlo:
+                   moverlo sería una segunda animación peleando con el alto. */}
+              <Desplegable abierto={infoOpen} clave={patient._id} ms={220} curva="cubic-bezier(0.32, 0, 0.5, 1)">
+                <div className={`fr-info ${infoOpen ? 'fr-info--entra' : ''}`}>
+                  {datosPersonales.length > 0 ? (
+                    <dl className="fr-info__grid">
+                      {datosPersonales.map(([k, v]) => (
+                        <div key={k}>
+                          <dt>{k}</dt>
+                          <dd>{v}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="fr-info__vacio">
+                      Todavía no hay datos cargados de este paciente.
+                    </p>
+                  )}
+                  <button
+                    className="btn btn--secondary btn--sm fr-info__editar"
+                    onClick={() => openModal('newPatient', { patientId: patient._id })}
+                  >
+                    <Icon name="edit" size={14} /> Editar datos
+                  </button>
+                </div>
+              </Desplegable>
+              </>
             ) : (
               <div ref={searchRef} style={{ position: 'relative', maxWidth: 460, marginTop: 6 }}>
                 <Icon name="search" size={15} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-tertiary)', pointerEvents: 'none' }} />

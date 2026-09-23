@@ -491,6 +491,19 @@ function TableView({
                 {!compact && (
                   <td className="mono" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
                     {p.appointmentsCount ?? 0}
+                    {/* Las faltas solo aparecen cuando las hay: 9 de cada 10
+                        pacientes no tienen ninguna, y un "0 faltas" repetido en
+                        400 filas es ruido. Desde dos, el color avisa: ese es el
+                        que conviene reconocer antes de darle un buen horario. */}
+                    {!!p.faltas && (
+                      <div
+                        className="pac-faltas"
+                        style={p.faltas > 1 ? { color: 'var(--warning)' } : undefined}
+                        title={`No asistió a ${p.faltas} turno${p.faltas > 1 ? 's' : ''}`}
+                      >
+                        {p.faltas} falta{p.faltas > 1 ? 's' : ''}
+                      </div>
+                    )}
                   </td>
                 )}
                 <td><SaldoBadge p={p} /></td>

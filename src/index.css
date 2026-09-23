@@ -2971,6 +2971,17 @@ table.tbl { width: 100%; border-collapse: collapse; }
   margin-left: 56px;
   min-width: 0;
 }
+/* Faltas del paciente, debajo del total de turnos. Chico y sin caja: es un
+   apunte al margen del número, no un estado del paciente. */
+.pac-faltas {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
 /* ---------------------------------------------------------------------------
    OFRECER LA INSTALACIÓN
    --------------------------------------------------------------------------- */

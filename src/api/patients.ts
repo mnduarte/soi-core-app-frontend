@@ -31,6 +31,8 @@ export interface Patient {
   /** Cuántos turnos futuros tiene en total (la columna muestra el primero). */
   nextCount?: number;
   appointmentsCount?: number;
+  /** Turnos a los que no vino. Ver el comentario del aggregate en el backend. */
+  faltas?: number;
   balance?: number;
 }
 

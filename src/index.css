@@ -930,6 +930,28 @@ table.tbl { width: 100%; border-collapse: collapse; }
 
 /* Nombre del paciente en la fila */
 .lb-name { font-family: var(--font-display); font-size: 16.5px; font-weight: 600; }
+/* El nombre lleva a la ficha. Sin adorno en reposo —subrayar todos los nombres
+   llenaría la hoja de líneas—: el subrayado aparece al pasar por encima, y en
+   pantalla táctil lo delata el propio tamaño del blanco. */
+.lb-name--link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 140ms ease-out;
+}
+.lb-name--link:hover { text-decoration-color: var(--brand-primary); }
+.lb-name--link:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
 /* El trabajo a realizar (LIMP, ORT, "6 reconstrucciones"). Va como etiqueta
    con fondo y en MAYÚSCULA a pedido del Dr.: en gris pálido se le pasaba por
    alto y llegaba al sillón sin saber qué tenía que hacer. Tiene que competirle
@@ -3585,7 +3607,15 @@ table.tbl { width: 100%; border-collapse: collapse; }
    que hay para contar es "esto se reemplazó". Solo opacidad, y corto: 180ms
    sobre algo que ya está en pantalla alcanza, y no retrasa nada porque corre
    después de que llegó la respuesta, no antes. */
-.ficha-in { animation: panelIn 180ms cubic-bezier(0.4, 0.4, 0.7, 1); }
+.ficha-in {
+  animation: panelIn 180ms cubic-bezier(0.4, 0.4, 0.7, 1);
+  /* Sin anclaje de scroll. En celular la que scrollea es la PÁGINA, y cuando
+     algo de arriba cambia de alto el navegador corrige la posición para dejar
+     quieto lo que estás mirando. Con una animación de alto eso se recalcula en
+     cada frame y pelea con ella: es la misma razón por la que la lista de
+     trabajos ya lo tenía apagado en escritorio. */
+  overflow-anchor: none;
+}
 
 /* Cambiar de respuesta dentro de la franja verde ("¿lo pagó?" ⇄ "¿cuánto
    pagó?") no mueve nada de lugar: el renglón de botones se reemplaza donde

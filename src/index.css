@@ -2972,6 +2972,61 @@ table.tbl { width: 100%; border-collapse: collapse; }
   min-width: 0;
 }
 /* ---------------------------------------------------------------------------
+   OFRECER LA INSTALACIÓN
+   --------------------------------------------------------------------------- */
+
+/* Abajo y angosto. Comparte lugar con el aviso de versión nueva, pero nunca se
+   pisan: uno es para quien NO la tiene instalada y el otro solo aparece dentro
+   de la app instalada. */
+.pwa-inst {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 900;
+  max-width: 420px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 12px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.14);
+  animation: pwa-nueva-entra 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.pwa-inst__ic {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--brand-primary-50);
+  color: var(--brand-primary);
+}
+.pwa-inst__txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pwa-inst__txt strong { font-size: 14px; }
+.pwa-inst__txt span { font-size: 12.5px; color: var(--text-tertiary); line-height: 1.45; }
+/* Los botones van debajo del texto, alineados con él: el ícono manda una
+   columna sola y el renglón de acciones no tiene por qué empezar antes. */
+.pwa-inst__btns {
+  grid-column: 2;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-inst { animation: none; }
+}
+
+/* Arriba de la barra de navegación del celular. */
+@media (max-width: 767px) {
+  .pwa-inst { bottom: calc(68px + env(safe-area-inset-bottom)); }
+}
+
+/* ---------------------------------------------------------------------------
    AVISO DE VERSIÓN NUEVA (app instalada)
    --------------------------------------------------------------------------- */
 

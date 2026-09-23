@@ -12,7 +12,7 @@ import { useSessionGuard } from '../../hooks/useSessionGuard';
 import { useClinicChanges } from '../../hooks/useClinicChanges';
 import { SubscriptionBanner } from './SubscriptionBanner';
 import { BottomNav, MobileFab } from './BottomNav';
-import { ActualizacionPWA } from './ActualizacionPWA';
+import { AvisosPWA } from './AvisosPWA';
 import { veClinico } from '../../lib/permisos';
 
 export default function AppLayout() {
@@ -123,7 +123,7 @@ export default function AppLayout() {
       </div>
       </div>
       <MobileFab />
-      <ActualizacionPWA />
+      <AvisosPWA />
       <ModalHost />
       <ToastHost />
     </>

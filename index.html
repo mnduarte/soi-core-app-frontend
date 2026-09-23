@@ -23,6 +23,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- El navegador avisa que la app se puede instalar apenas termina de
+         cargar la página, bastante antes de que React monte nada. Si nadie lo
+         escucha en ese momento, el aviso se pierde y el cartel de instalación
+         no aparece nunca. Por eso se atrapa acá, en el HTML, y el resto de la
+         app lo levanta de `window` cuando está lista. -->
+    <script>
+      window.__soiInstalar = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__soiInstalar = e;
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

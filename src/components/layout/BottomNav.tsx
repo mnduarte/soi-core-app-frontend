@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Icon, type IconName } from '../common/Icon';
 import { useUIStore } from '../../store/ui.store';
 import { useVeClinico } from '../../lib/permisos';
+import { CuentaSheet } from './CuentaSheet';
 
 // Navegación de celular (<768px): reemplaza al sidebar. Mismas secciones que el
 // sidebar, ícono + texto, el activo en azul tinta. Ver handoff-libreta §4.
@@ -14,22 +16,31 @@ const ITEMS: { to: string; label: string; icon: IconName; match: string[]; clini
 export function BottomNav() {
   const { pathname } = useLocation();
   const clinico = useVeClinico();
-  // El Asistente tiene una sola sección: una barra con un único botón no
-  // navega a ningún lado, solo ocupa pantalla.
-  if (!clinico) return null;
+  const [cuentaAbierta, setCuentaAbierta] = useState(false);
 
   return (
-    <nav className="lb-bnav">
-      {ITEMS.map(it => {
-        const active = it.match.some(m => pathname.startsWith(m));
-        return (
-          <NavLink key={it.to} to={it.to} className={active ? 'is-active' : ''}>
-            <Icon name={it.icon} />
-            {it.label}
-          </NavLink>
-        );
-      })}
-    </nav>
+    <>
+      <nav className="lb-bnav">
+        {ITEMS.filter(it => clinico || !it.clinico).map(it => {
+          const active = it.match.some(m => pathname.startsWith(m));
+          return (
+            <NavLink key={it.to} to={it.to} className={active ? 'is-active' : ''}>
+              <Icon name={it.icon} />
+              {it.label}
+            </NavLink>
+          );
+        })}
+        {/* En el teléfono el menú lateral no existe, y con él quedaban
+            escondidos el consultorio, el tipo de usuario y —sobre todo— el
+            botón de salir: no había forma de cerrar sesión desde un celular.
+            No es una sección más, así que no navega: abre una hoja. */}
+        <button type="button" className="lb-bnav__cuenta" onClick={() => setCuentaAbierta(true)}>
+          <Icon name="user" />
+          Cuenta
+        </button>
+      </nav>
+      {cuentaAbierta && <CuentaSheet onClose={() => setCuentaAbierta(false)} />}
+    </>
   );
 }
 
@@ -38,7 +49,6 @@ export function MobileFab() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const openModal = useUIStore(s => s.openModal);
-  const clinico = useVeClinico();
 
   const onAgenda = pathname.startsWith('/agenda');
   const onPatients = pathname.startsWith('/patients');
@@ -62,7 +72,7 @@ export function MobileFab() {
   };
 
   return (
-    <button className={clinico ? 'lb-fab' : 'lb-fab lb-fab--sin-bnav'} onClick={handle} title={onAgenda ? 'Anotar turno' : 'Nuevo paciente'}>
+    <button className="lb-fab" onClick={handle} title={onAgenda ? 'Anotar turno' : 'Nuevo paciente'}>
       <Icon name="plus" />
     </button>
   );

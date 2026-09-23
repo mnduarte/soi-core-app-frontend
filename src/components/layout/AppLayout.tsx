@@ -13,7 +13,6 @@ import { useClinicChanges } from '../../hooks/useClinicChanges';
 import { SubscriptionBanner } from './SubscriptionBanner';
 import { BottomNav, MobileFab } from './BottomNav';
 import { AvisosPWA } from './AvisosPWA';
-import { veClinico } from '../../lib/permisos';
 
 export default function AppLayout() {
   // Sidebar angosto (solo íconos). Tres estados, no dos: `null` = como venía
@@ -112,9 +111,7 @@ export default function AppLayout() {
       <div className={`app ${rail ? 'app--rail' : 'app--wide'}`}>
         {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={rail} onToggleCollapsed={toggleCollapsed} />
-        {/* Sin la barra de abajo (el Asistente no la tiene) el contenido no le
-            reserva lugar: si no, queda un hueco vacío al pie de la pantalla. */}
-        <div className={veClinico(user) ? 'main' : 'main main--sin-bnav'}>
+        <div className="main">
           {/* En desktop/tablet la navegación vive en el sidebar; en celular
               (<768px) se reemplaza por la bottom nav + FAB de abajo. */}
           <Outlet />

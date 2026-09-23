@@ -179,8 +179,22 @@ export function TarjetaPaciente({
                    ve crecer es un rectángulo vacío, porque el texto ya estaba
                    entero desde el primer cuadro. Solo opacidad, sin desplazarlo:
                    moverlo sería una segunda animación peleando con el alto. */}
-              <Desplegable abierto={infoOpen} clave={patient._id} ms={220} curva="cubic-bezier(0.32, 0, 0.5, 1)">
-                <div className={`fr-info ${infoOpen ? 'fr-info--entra' : ''}`}>
+              {/* Más corta en el teléfono. Animar alto recalcula el layout de
+                   todo lo que está debajo en CADA cuadro, y ahí abajo hay una
+                   ficha entera: en un celular eso no llega a 60 por segundo por
+                   más prolijo que esté el código. Con menos tiempo hay menos
+                   cuadros caros, y lo que se pierde en suavidad se gana en que
+                   no trastabille. */}
+              <Desplegable
+                abierto={infoOpen}
+                clave={patient._id}
+                ms={isMobile ? 150 : 220}
+                curva="cubic-bezier(0.32, 0, 0.5, 1)"
+              >
+                {/* El fundido del contenido solo en escritorio: es una capa de
+                    pintura más sobre los mismos píxeles que ya está moviendo el
+                    alto, y en el teléfono es justo lo que sobra. */}
+                <div className={`fr-info ${infoOpen && !isMobile ? 'fr-info--entra' : ''}`}>
                   {datosPersonales.length > 0 ? (
                     <dl className="fr-info__grid">
                       {datosPersonales.map(([k, v]) => (

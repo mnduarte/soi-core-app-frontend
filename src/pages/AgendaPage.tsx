@@ -12,9 +12,8 @@ import { useUIStore } from '../store/ui.store';
 import { DatePicker } from '../components/common/DatePicker';
 import { Icon } from '../components/common/Icon';
 import { Avatar } from '../components/common/Avatar';
-import { StatusBadge, FichaPendingBadge } from '../components/common/StatusBadge';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { ResolveMenu } from '../components/common/ResolveMenu';
-import { NewClinicalEntryModal } from '../components/patient/NewClinicalEntryModal';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { LibretaView } from '../components/agenda/LibretaView';
 import { BuscarTurnoModal } from '../components/agenda/BuscarTurnoModal';
@@ -22,7 +21,6 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import {
   hhmm,
   durationMin,
-  isFichaPending,
   isTerminal,
   needsResolution,
 } from '../lib/appointment';
@@ -103,7 +101,6 @@ export default function AgendaPage() {
 
   // Turno que se está documentando: abre la entrada de evolución con el turno
   // ya enlazado. Al guardar, el backend apaga su badge "ficha pendiente".
-  const [fichaTarget, setFichaTarget] = useState<Appointment | null>(null);
 
   // Tick "now" every minute so unresolved + Now-line refresh on their own.
   const [now, setNow] = useState(new Date());
@@ -205,15 +202,6 @@ export default function AgendaPage() {
   const [confirmDelete, setConfirmDelete] = useState<Appointment | null>(null);
   const handleDelete = (appt: Appointment) => setConfirmDelete(appt);
 
-  // "Cargar evolución de esta visita": documentar el turno desde la agenda.
-  const handleOpenFicha = (appt: Appointment) => {
-    if (!appt.patientId) {
-      showToast('Primero vinculá este turno a una ficha de paciente');
-      return;
-    }
-    setFichaTarget(appt);
-  };
-
   const handleEditPatient = (patientId: string) => {
     openModal('newPatient', { patientId });
   };
@@ -260,8 +248,10 @@ export default function AgendaPage() {
     const confirmed = appts.filter(
       a => a.status === 'CONFIRMED' || a.status === 'SCHEDULED',
     ).length;
-    const pending = appts.filter(a => a.status === 'IN_PROGRESS').length;
-    return { total: appts.length, completed, confirmed, pending };
+    // "En curso" ya no se cuenta: sin la acción "está en el sillón" nadie puede
+    // poner ese estado, así que la columna mostraba 0 para siempre. Los turnos
+    // viejos que lo tienen igual muestran su chip en la fila.
+    return { total: appts.length, completed, confirmed };
   }, [appts]);
 
   // Las vistas están ordenadas de más chica a más grande (día → semana → mes).
@@ -467,8 +457,10 @@ export default function AgendaPage() {
           { l: 'Turnos', s: 'Turnos', v: stats.total, c: 'var(--text-primary)' },
           { l: 'Atendidos', s: 'Atend.', v: stats.completed, c: 'var(--text-tertiary)' },
           { l: 'Confirmados', s: 'Confirm.', v: stats.confirmed, c: 'var(--brand-primary)' },
-          { l: 'En curso', s: 'En curso', v: stats.pending, c: 'var(--info)' },
-          { l: 'Sin resolver', s: 'Sin res.', v: unresolved.length, c: unresolved.length ? 'var(--danger)' : 'var(--text-tertiary)' },
+          // Gris y no rojo: tres de cada cuatro turnos nunca se marcan, así que
+          // un número rojo permanente no avisa de nada — solo enseña a ignorar
+          // el rojo en el resto de la pantalla.
+          { l: 'Sin resolver', s: 'Sin res.', v: unresolved.length, c: 'var(--text-tertiary)' },
         ].map(s => (
           <div key={s.l} style={{ textAlign: isMobile ? 'center' : 'left', flex: isMobile ? 1 : undefined, minWidth: 0 }}>
             <div style={{ fontSize: isMobile ? 10 : 11, color: 'var(--text-tertiary)', marginBottom: 2, whiteSpace: 'nowrap' }}>
@@ -514,7 +506,6 @@ export default function AgendaPage() {
           selectedDate={selectedDate}
           dayMove={dayMove}
           outApptId={outApptId}
-          now={now}
           isMobile={isMobile}
           prefill={prefill}
           resaltado={resaltado}
@@ -523,9 +514,9 @@ export default function AgendaPage() {
           : undefined}
           onResolve={handleResolve}
           onReschedule={handleReschedule}
-          onOpenFicha={clinico ? handleOpenFicha : undefined}
           onDelete={handleDelete}
           onEditPatient={handleEditPatient}
+          onVerPaciente={clinico ? id => navigate(`/ficha-rapida/${id}?info=1`) : undefined}
           onSetTrabajo={setTrabajo}
         />
       )}
@@ -538,7 +529,7 @@ export default function AgendaPage() {
           onOpenPatient={clinico ? id => navigate(`/ficha-rapida/${id}`) : handleEditPatient}
           onResolve={handleResolve}
           onReschedule={handleReschedule}
-          onOpenFicha={clinico ? handleOpenFicha : undefined}
+          onVerFicha={clinico ? appt => navigate(`/ficha-rapida/${appt.patientId}`) : undefined}
           onDelete={handleDelete}
           isMobile={isMobile}
         />
@@ -569,15 +560,6 @@ export default function AgendaPage() {
         </div>
       )}
       </div>
-
-      {fichaTarget && (
-        <NewClinicalEntryModal
-          open
-          onClose={() => setFichaTarget(null)}
-          patientId={fichaTarget.patientId!}
-          appointmentId={fichaTarget._id}
-        />
-      )}
 
       <ConfirmDialog
         open={!!confirmDelete}
@@ -739,7 +721,7 @@ function DayView({
   onOpenPatient,
   onResolve,
   onReschedule,
-  onOpenFicha,
+  onVerFicha,
   onDelete,
   isMobile,
 }: {
@@ -750,7 +732,9 @@ function DayView({
   onOpenPatient: (id: string) => void;
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
-  onOpenFicha?: (appt: Appointment) => void;
+  /** Va aparte de `onOpenPatient`: para el Asistente, tocar al paciente abre
+      sus datos de contacto, y "ver ficha clínica" no tiene que existir. */
+  onVerFicha?: (appt: Appointment) => void;
   onDelete?: (appt: Appointment) => void;
   isMobile: boolean;
 }) {
@@ -804,7 +788,6 @@ function DayView({
           sortedAppts.map(appt => {
             const p = appt.patientId ? patientMap.get(appt.patientId) : undefined;
             const unresolvedRow = needsResolution(appt, now);
-            const fichaPending = isFichaPending(appt);
             return (
               <div
                 key={appt._id}
@@ -844,13 +827,12 @@ function DayView({
                   </div>
                   <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                     <StatusBadge status={appt.status} />
-                    {fichaPending && onOpenFicha && <FichaPendingBadge onClick={() => onOpenFicha(appt)} />}
                   </div>
                 </div>
                 <ResolveMenu
                   appt={appt}
                   onResolve={onResolve}
-                  onOpenFicha={onOpenFicha}
+                  onVerFicha={onVerFicha && appt.patientId ? () => onVerFicha(appt) : undefined}
                   onReschedule={onReschedule}
                   onDelete={onDelete}
                 />
@@ -1070,7 +1052,6 @@ function TimelineCard({
           }}
         >
           {subtitleOverride}
-          {isFichaPending(appt) && ' · ficha pendiente'}
         </div>
       )}
     </div>

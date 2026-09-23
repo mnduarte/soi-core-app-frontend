@@ -15,14 +15,14 @@ import { useFlip } from '../../hooks/useFlip';
 import { Icon } from '../common/Icon';
 import { FilasFantasma } from '../common/FilasFantasma';
 import { Avatar } from '../common/Avatar';
-import { StatusBadge, FichaPendingBadge } from '../common/StatusBadge';
+import { StatusBadge } from '../common/StatusBadge';
 import { ResolveMenu } from '../common/ResolveMenu';
 import { PatientPicker } from '../common/PatientPicker';
 import { NewPatientModal } from '../modals/NewPatientModal';
 import { CustomTreatmentsModal } from '../common/CustomTreatmentsModal';
 import { CustomSlotsModal } from '../common/CustomSlotsModal';
 import { AppointmentReminderModal } from './AppointmentReminderModal';
-import { hhmm, isFichaPending, needsResolution } from '../../lib/appointment';
+import { hhmm } from '../../lib/appointment';
 import { QUICK_CHIPS } from '../../lib/quickWork';
 
 const DURATIONS = [15, 30, 45, 60, 90];
@@ -61,7 +61,6 @@ interface LibretaViewProps {
   appts: Appointment[];
   patientMap: Map<string, Patient>;
   selectedDate: Date;
-  now: Date;
   isMobile: boolean;
   /**
    * Paciente traído desde el buscador de turnos: se carga en la fila de anotar
@@ -75,10 +74,17 @@ interface LibretaViewProps {
   onOpenPatient?: (id: string, trabajo?: string) => void;
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
-  /** Sin esto no aparecen "cargar evolución" ni el aviso de ficha pendiente. */
-  onOpenFicha?: (appt: Appointment) => void;
   onDelete: (appt: Appointment) => void;
   onEditPatient: (patientId: string) => void;
+  /**
+   * Tocar el NOMBRE del paciente: lleva a su ficha con la info personal ya
+   * abierta. Es el blanco más grande de la fila y el gesto más natural —"quién
+   * es esta persona"—, así que se gana el destino más completo.
+   *
+   * Sin esto (el Asistente, que no entra a la ficha) el nombre abre el
+   * formulario de datos, que para él es la única forma de verlos.
+   */
+  onVerPaciente?: (patientId: string) => void;
   /** Asignar o cambiar el trabajo del turno. */
   onSetTrabajo: (appt: Appointment, title: string) => void;
 }
@@ -89,16 +95,15 @@ export function LibretaView({
   appts,
   patientMap,
   selectedDate,
-  now,
   isMobile,
   prefill,
   resaltado,
   onOpenPatient,
   onResolve,
   onReschedule,
-  onOpenFicha,
   onDelete,
   onEditPatient,
+  onVerPaciente,
   onSetTrabajo,
 }: LibretaViewProps) {
   const qc = useQueryClient();
@@ -803,7 +808,6 @@ export function LibretaView({
               <div key={t} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 {items.map((a, idx) => {
                   const label = apptLabel(a, patientMap);
-                  const unresolved = needsResolution(a, now);
                   const rowPhone = a.patientId ? patientMap.get(a.patientId)?.phone : undefined;
                   const canRemind = Boolean(rowPhone);
                   return (
@@ -812,10 +816,10 @@ export function LibretaView({
                       data-flip={a._id}
                       className={`lb-row ${a._id === outApptId ? 'lb-rowout' : ''} ${a._id === resaltado ? 'lb-found' : ''}`}
                       style={{
-                        // Sin `transparent` explícito: un fondo inline le gana a
-                        // .lb-flip, y la fila que se mueve necesita ser opaca
-                        // para no transparentarse sobre la de al lado.
-                        ...(unresolved ? { background: 'color-mix(in srgb, var(--warning) 6%, transparent)' } : {}),
+                        // El turno pasado que nadie marcó ya NO se pinta: marcar
+                        // "atendido" es opcional (se hace en 1 de cada 4 turnos),
+                        // así que teñir los otros tres convertía la rutina normal
+                        // del consultorio en una lista de errores.
                         borderTop: idx > 0 ? '1px dashed var(--border-subtle)' : 'none',
                         borderBottom: 'none',
                       }}
@@ -827,7 +831,18 @@ export function LibretaView({
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                          <span className="lb-name">{label}</span>
+                          {a.patientId ? (
+                            <button
+                              type="button"
+                              className="lb-name lb-name--link"
+                              title="Ver la ficha de este paciente"
+                              onClick={e => { e.stopPropagation(); (onVerPaciente ?? onEditPatient)?.(a.patientId!); }}
+                            >
+                              {label}
+                            </button>
+                          ) : (
+                            <span className="lb-name">{label}</span>
+                          )}
                           {a.title ? (
                             <span className={`lb-sub ${a._id === trabajoFlash ? 'lb-pop' : ''}`}>{a.title}</span>
                           ) : trabajoTarget === a._id ? null : (
@@ -905,13 +920,12 @@ export function LibretaView({
                             mostrarlo en todas las filas repetía lo mismo sin
                             aportar nada y le robaba protagonismo al trabajo. El
                             badge aparece solo cuando dice algo — atendido, no
-                            asistió, en el sillón. Si no hay nada que mostrar, la
-                            fila ni siquiera dibuja el renglón. */}
+                            asistió. Si no hay nada que mostrar, la fila ni
+                            siquiera dibuja el renglón. */}
                         {(() => {
                           const verEstado = a.status !== 'SCHEDULED';
                           const verSinFicha = !a.patientId;
-                          const verFichaPend = isFichaPending(a) && !!a.patientId;
-                          if (!verEstado && !verSinFicha && !verFichaPend) return null;
+                          if (!verEstado && !verSinFicha) return null;
                           return (
                             <div className="row" style={{ gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                               {verEstado && <StatusBadge key={a.status} status={a.status} />}
@@ -920,7 +934,6 @@ export function LibretaView({
                                   <Icon name="clipboard" size={10} /> Sin ficha
                                 </span>
                               )}
-                              {verFichaPend && onOpenFicha && <FichaPendingBadge onClick={() => onOpenFicha(a)} />}
                               {/* El estado "recordado" NO va como chip acá: lo muestra
                                   el propio botón de la acción (tilde verde + "Recordado"). */}
                             </div>
@@ -962,7 +975,7 @@ export function LibretaView({
                           <>
                             <button
                               className="lb-act lb-act--hide-sm"
-                              title="Ver / editar datos del paciente"
+                              title="Cargar o corregir los datos del paciente"
                               onClick={e => { e.stopPropagation(); onEditPatient?.(a.patientId!); }}
                             >
                               <span className="lb-act__ic"><Icon name="user" size={17} /></span>
@@ -983,7 +996,7 @@ export function LibretaView({
                         <ResolveMenu
                           appt={a}
                           onResolve={onResolve}
-                          onOpenFicha={onOpenFicha}
+                          onVerFicha={onOpenPatient && a.patientId ? () => onOpenPatient(a.patientId!) : undefined}
                           onReschedule={onReschedule}
                           onDelete={onDelete}
                           onRemind={canRemind ? () => setRemindTarget(a) : undefined}

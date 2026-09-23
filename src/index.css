@@ -3077,6 +3077,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
   background: var(--brand-primary-50);
   color: var(--brand-primary);
 }
+/* El mismo cuadradito, en verde, cuando la instalación terminó bien. */
+.pwa-inst__ic--ok { background: var(--success-bg); color: var(--success); }
 .pwa-inst__txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .pwa-inst__txt strong { font-size: 14px; }
 .pwa-inst__txt span { font-size: 12.5px; color: var(--text-tertiary); line-height: 1.45; }

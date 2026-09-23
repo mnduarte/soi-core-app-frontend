@@ -28,11 +28,30 @@ declare global {
 }
 
 const CLAVE = 'soi.instalar-descartado';
+/**
+ * "Esta app ya está instalada en este equipo". Se escribe para siempre.
+ *
+ * `display-mode: standalone` solo dice si estás DENTRO de la app instalada; no
+ * sirve cuando la misma persona abre el sitio en el navegador. En Android y en
+ * escritorio eso alcanza igual, porque el navegador deja de ofrecer la
+ * instalación por su cuenta. El problema es el iPhone: no avisa nunca, ni antes
+ * ni después, así que sin esta marca volveríamos a explicarle cómo instalar
+ * algo que ya tiene.
+ */
+const CLAVE_INSTALADA = 'soi.app-instalada';
 /** Cuánto se calla después de un "ahora no". Dos semanas: lo suficiente para no
  *  ser el cartel que aparece siempre, poco para que no se olvide del todo. */
 const DIAS_DE_SILENCIO = 14;
 /** No aparece apenas entra: primero que use la app y vea que le sirve. */
 const ESPERA_MS = 30_000;
+
+function marcarInstalada(): void {
+  try { localStorage.setItem(CLAVE_INSTALADA, '1'); } catch { /* sin storage */ }
+}
+
+function constaInstalada(): boolean {
+  try { return localStorage.getItem(CLAVE_INSTALADA) === '1'; } catch { return false; }
+}
 
 function yaInstalada(): boolean {
   return (
@@ -59,7 +78,14 @@ function descartadaHacePoco(): boolean {
   }
 }
 
-export type ModoInstalacion = 'boton' | 'ios';
+/**
+ * - `boton`: el navegador puede instalarla y mostramos el botón.
+ * - `ios`: no hay API, se explican los dos pasos a mano.
+ * - `listo`: recién terminó de instalarse. Nadie avisa que la instalación
+ *   salió bien —el navegador la agrega y punto—, así que si no lo decimos
+ *   nosotros queda la duda de si pasó algo.
+ */
+export type ModoInstalacion = 'boton' | 'ios' | 'listo';
 
 export function useInstalarApp() {
   const [modo, setModo] = useState<ModoInstalacion | null>(null);
@@ -69,11 +95,28 @@ export function useInstalarApp() {
   const [evento, setEvento] = useState<EventoInstalacion | null>(() => window.__soiInstalar);
   const habiaAviso = useRef(Boolean(window.__soiInstalar));
 
+  // El aviso de "quedó instalada" se escucha SIEMPRE, incluso si el ofrecimiento
+  // estaba silenciado: puede instalarla desde el menú del navegador por su
+  // cuenta, y el momento de confirmarlo es ese.
+  useEffect(() => {
+    const alInstalarse = () => {
+      setModo('listo');
+      marcarInstalada();
+    };
+    window.addEventListener('appinstalled', alInstalarse);
+    // Abrirla desde el ícono también lo confirma. En Android y escritorio la
+    // app instalada comparte el almacenamiento con el navegador, así que la
+    // marca queda puesta para las dos. En iPhone no se comparte: ahí lo
+    // resuelve el botón "Ya la instalé".
+    if (yaInstalada()) marcarInstalada();
+    return () => window.removeEventListener('appinstalled', alInstalarse);
+  }, []);
+
   useEffect(() => {
     // `?instalar=1` lo muestra ya mismo y saltea el silencio: sirve para
     // probarlo sin esperar medio minuto ni limpiar el navegador.
     const forzar = new URLSearchParams(window.location.search).get('instalar') === '1';
-    if (!forzar && (yaInstalada() || descartadaHacePoco())) return;
+    if (!forzar && (yaInstalada() || constaInstalada() || descartadaHacePoco())) return;
     const demora = forzar ? 0 : ESPERA_MS;
 
     let espera = 0;
@@ -90,13 +133,8 @@ export function useInstalarApp() {
       setEvento(e as EventoInstalacion);
       espera = window.setTimeout(() => mostrar('boton'), demora);
     };
-    const alInstalar = () => {
-      setModo(null);
-      try { localStorage.setItem(CLAVE, String(Date.now())); } catch { /* sin storage */ }
-    };
 
     window.addEventListener('beforeinstallprompt', alPoder);
-    window.addEventListener('appinstalled', alInstalar);
 
     // Lo más común: el aviso ya llegó mientras cargaba la página y quedó
     // guardado por el script del index.html. Sin esto el cartel no aparecía
@@ -113,7 +151,6 @@ export function useInstalarApp() {
 
     return () => {
       window.removeEventListener('beforeinstallprompt', alPoder);
-      window.removeEventListener('appinstalled', alInstalar);
       window.clearTimeout(espera);
     };
   }, []);
@@ -121,16 +158,24 @@ export function useInstalarApp() {
   const instalar = async () => {
     if (!evento) return;
     await evento.prompt();
-    // Se haya aceptado o no, el evento sirve una sola vez.
+    // Se haya aceptado o no, el evento sirve una sola vez. Si aceptó, el
+    // cartel de "quedó instalada" lo levanta el otro efecto.
     window.__soiInstalar = null;
     setEvento(null);
     setModo(null);
   };
 
+  /** "Ahora no": vuelve a ofrecerse en dos semanas. */
   const descartar = () => {
     setModo(null);
     try { localStorage.setItem(CLAVE, String(Date.now())); } catch { /* sin storage */ }
   };
 
-  return { modo, instalar, descartar };
+  /** "Ya la instalé": no se ofrece nunca más en este navegador. */
+  const marcarComoInstalada = () => {
+    setModo(null);
+    marcarInstalada();
+  };
+
+  return { modo, instalar, descartar, marcarComoInstalada };
 }

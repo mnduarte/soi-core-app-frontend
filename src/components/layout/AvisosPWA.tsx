@@ -20,7 +20,7 @@ export function AvisosPWA() {
     needRefresh: [hayVersionNueva, setHayVersionNueva],
     updateServiceWorker,
   } = useRegisterSW();
-  const { modo, instalar, descartar } = useInstalarApp();
+  const { modo, instalar, descartar, marcarComoInstalada } = useInstalarApp();
   /*
    * ¿Está abierta como app instalada o como pestaña del navegador?
    *
@@ -87,6 +87,38 @@ export function AvisosPWA() {
    */
   if (!modo) return null;
 
+  /*
+   * Quedó instalada.
+   *
+   * El navegador no dice nada cuando termina: agrega el ícono y sigue. Sin
+   * este cartel queda la duda de si pasó algo, y sobre todo de dónde quedó.
+   *
+   * No se puede abrir la app instalada desde acá: ningún sistema lo permite
+   * —sería una puerta para que cualquier página te saque de donde estás—, así
+   * que lo único honesto es decir dónde está el ícono.
+   */
+  if (modo === 'listo') {
+    return (
+      <div className="pwa-inst" role="status">
+        <div className="pwa-inst__ic pwa-inst__ic--ok" aria-hidden="true">
+          <Icon name="check" size={18} />
+        </div>
+        <div className="pwa-inst__txt">
+          <strong>SOI quedó instalada</strong>
+          <span>
+            Buscá el ícono en tu pantalla de inicio: desde ahí entra directo, sin
+            pasar por el navegador.
+          </span>
+        </div>
+        <div className="pwa-inst__btns">
+          <button className="btn btn--primary btn--sm" onClick={descartar}>
+            Listo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="pwa-inst" role="dialog" aria-label="Instalar la aplicación">
       <div className="pwa-inst__ic" aria-hidden="true">
@@ -103,18 +135,26 @@ export function AvisosPWA() {
              puedan buscar con la vista sin traducir nada. */
           <span>
             Tocá <strong>Compartir</strong> abajo y elegí <strong>Agregar a inicio</strong>.
-            Queda con ícono propio y abre a pantalla completa.
+            Queda con ícono propio y abre a pantalla completa. La primera vez
+            puede pedirte tu usuario de nuevo.
           </span>
         )}
       </div>
 
       <div className="pwa-inst__btns">
         <button className="btn btn--ghost btn--sm" onClick={descartar}>
-          {modo === 'boton' ? 'Ahora no' : 'Entendido'}
+          Ahora no
         </button>
-        {modo === 'boton' && (
+        {modo === 'boton' ? (
           <button className="btn btn--primary btn--sm" onClick={() => void instalar()}>
             Instalar
+          </button>
+        ) : (
+          /* En iPhone el navegador no avisa nunca si la agregaron, ni antes ni
+             después. La única forma de no volver a molestar a quien ya la tiene
+             es que lo diga: esto no la instala, apaga el ofrecimiento. */
+          <button className="btn btn--secondary btn--sm" onClick={marcarComoInstalada}>
+            Ya la instalé
           </button>
         )}
       </div>

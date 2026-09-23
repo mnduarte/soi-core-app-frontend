@@ -499,7 +499,7 @@ function DashboardAppointmentRow({
         <ResolveMenu
           appt={appt}
           onResolve={onResolve}
-          onOpenFicha={() => appt.patientId && onOpenPatient(appt.patientId)}
+          onVerFicha={() => appt.patientId && onOpenPatient(appt.patientId)}
           onReschedule={onReschedule}
         />
       </div>

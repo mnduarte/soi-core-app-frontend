@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Icon, type IconName } from './Icon';
 import type { Appointment, AppointmentStatus } from '../../api/appointments';
-import { isTerminal, isFichaPending } from '../../lib/appointment';
+import { isTerminal } from '../../lib/appointment';
 
 interface ResolveMenuProps {
   appt: Appointment;
   onResolve: (id: string, status: AppointmentStatus) => void;
-  onOpenFicha?: (appt: Appointment) => void;
+  /** Abre la ficha del paciente. */
+  onVerFicha?: (appt: Appointment) => void;
   onReschedule?: (appt: Appointment) => void;
   onDelete?: (appt: Appointment) => void;
   onRemind?: (appt: Appointment) => void;
@@ -31,7 +32,7 @@ interface Action {
 export function ResolveMenu({
   appt,
   onResolve,
-  onOpenFicha,
+  onVerFicha,
   onReschedule,
   onDelete,
   onRemind,
@@ -55,16 +56,14 @@ export function ResolveMenu({
   const actions: Action[] = [];
 
   if (!terminal) {
+    // Atendido / No asistió quedan porque se usan (180 y 81 turnos reales),
+    // pero no obligan a nada: marcar es opcional y no marcar no es un pendiente.
+    // "Está en el sillón" salió: 3 usos en 1080 turnos. Era un estado que no le
+    // cambiaba nada a nadie y ocupaba un renglón del menú.
     actions.push({ key: 'COMPLETED', icon: 'check', label: 'Marcar atendido' });
-    if (appt.status !== 'IN_PROGRESS') {
-      actions.push({ key: 'IN_PROGRESS', icon: 'clock', label: 'Está en el sillón' });
-    }
     actions.push({ key: 'NO_SHOW', icon: 'x', label: 'No asistió', danger: true });
     actions.push({ key: 'reschedule', icon: 'calendar', label: 'Reprogramar' });
   } else if (appt.status === 'COMPLETED') {
-    if (isFichaPending(appt)) {
-      actions.push({ key: 'ficha', icon: 'clipboard', label: 'Completar ficha', accent: true });
-    }
     actions.push({ key: 'reopen', icon: 'undo', label: 'Reabrir turno' });
   } else {
     // NO_SHOW or CANCELLED
@@ -79,8 +78,8 @@ export function ResolveMenu({
   // Ver ficha / Editar paciente: en desktop y tablet están como botones de la
   // fila, pero en celular solo quedan "Recordar" y "Más" — así que acá adentro
   // tienen que estar siempre disponibles.
-  if (onOpenFicha && !actions.some(a => a.key === 'ficha')) {
-    actions.push({ key: 'ficha', icon: 'clipboard', label: 'Ver ficha clínica' });
+  if (onVerFicha) {
+    actions.push({ key: 'verFicha', icon: 'clipboard', label: 'Ver ficha clínica' });
   }
   if (onEditTrabajo) {
     actions.push({ key: 'editTrabajo', icon: 'edit', label: 'Cambiar trabajo' });
@@ -99,7 +98,7 @@ export function ResolveMenu({
   const handle = (key: string, e: MouseEvent) => {
     e.stopPropagation();
     setOpen(false);
-    if (key === 'ficha') return onOpenFicha?.(appt);
+    if (key === 'verFicha') return onVerFicha?.(appt);
         if (key === 'editTrabajo') return onEditTrabajo?.();
 if (key === 'editPatient') return onEditPatient?.(appt);
     if (key === 'reschedule') return onReschedule?.(appt);

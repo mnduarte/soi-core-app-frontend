@@ -2632,7 +2632,11 @@ export default function FichaRapidaPage() {
                     {/* Sin spinner ni deshabilitado: la fila se dibuja al
                         instante y el campo queda vacío, así que no hay espera
                         que tapar ni doble envío que evitar. */}
-                    <Icon name="plus" size={14} /> {!isMobile && 'Agregar'}
+                    {/* En celular el botón queda solo, sin la palabra al lado:
+                        con el signo en 14px dentro de una caja de 38 se veía
+                        una mancha de color con algo chiquito en el medio. Va
+                        proporcionado al botón que lo contiene. */}
+                    <Icon name="plus" size={isMobile ? 20 : 14} /> {!isMobile && 'Agregar'}
                   </button>
                 </div>
 

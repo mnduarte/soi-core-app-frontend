@@ -1611,11 +1611,24 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .fp-photos { order: 7; padding-left: 0; }
   .fp-row    { row-gap: 6px; }
 
-  /* Las tres respuestas no entran a lo ancho del teléfono. La principal se
-     lleva un renglón entero (es la que más se toca) y las otras dos comparten
-     el segundo. */
+  /* Las respuestas no entran en un renglón del teléfono, así que bajan en
+     PARES PAREJOS: cada botón toma la mitad del ancho y las filas quedan
+     alineadas a los dos costados.
+     Antes cada uno medía lo que decía su texto y se acomodaban solos: "¿lo
+     pagó?" terminaba con Efectivo y el importe arriba, "Otro monto" y "Todavía
+     no" abajo, las dos filas con distinto largo y el borde derecho en zigzag.
+     Los pares quedan además emparejados por significado: arriba cómo y cuánto,
+     abajo las dos salidas.
+     Queda afuera el modo "monto", que no son botones sueltos sino un campo con
+     sus dos acciones al lado. */
   .lb-askrow__acts { flex-wrap: wrap; }
-  .lb-askrow__acts > .btn--primary { flex: 1 1 100%; }
+  .lb-askrow__acts:not(.lb-askrow__acts--monto) > .btn,
+  .lb-askrow__acts:not(.lb-askrow__acts--monto) > .lb-medio {
+    /* `!important` porque una regla global fija el ancho al contenido; acá
+       justamente queremos lo contrario. */
+    flex: 1 1 calc(50% - 4px) !important;
+    justify-content: center;
+  }
 
   /* El precio se queda en el renglón del nombre, alineado a la derecha: es el
      par "concepto — importe" de toda la vida (una carta, un ticket). Suelto en
@@ -3204,28 +3217,44 @@ table.tbl { width: 100%; border-collapse: collapse; }
    y el dato abajo en el color del texto normal — al revés (dato gris, etiqueta
    negra) se lee primero la etiqueta, que es lo que menos importa. */
 .fr-info {
-  padding: 12px 20px 16px;
+  padding: 12px 20px 12px;
   border-top: 1px solid var(--border-subtle);
 }
 .fr-info__grid {
   margin: 0;
   display: grid;
-  /* `minmax(0, …)`: sin eso un domicilio largo estira la columna y desarma la
-     grilla en pantalla chica. */
-  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
-  gap: 10px 22px;
+  /* 150px y no 190: con 190 en el teléfono entraba UNA sola columna y la
+     localidad, el celular y la obra social se apilaban en tres renglones
+     enteros para tres palabras. Con 150 entran dos, y en escritorio siguen
+     entrando las cuatro. El `min(…, 100%)` es para que un domicilio largo no
+     estire la columna y desarme la grilla. */
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px 20px;
 }
+/* La etiqueta en la tipografía de números, chica y espaciada: es el tono de
+   una ficha impresa, no el de un formulario. Y el dato en la serif del resto
+   de la app, que es la que se lee como documento. */
 .fr-info__grid dt {
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .fr-info__grid dd {
-  margin: 1px 0 0;
-  font-size: 14px;
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  line-height: 1.3;
   color: var(--text-primary);
   overflow-wrap: anywhere;
+}
+/* Los números —DNI, celular, afiliado, fecha— con ancho fijo por dígito. */
+.fr-info__grid dd.mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: -0.01em;
 }
 .fr-info__vacio { margin: 0; font-size: 13.5px; color: var(--text-tertiary); }
 /* Entra con el alto, no antes: el retraso corto deja que el bloque empiece a
@@ -3234,7 +3263,26 @@ table.tbl { width: 100%; border-collapse: collapse; }
 @media (prefers-reduced-motion: reduce) {
   .fr-info--entra { animation: none; }
 }
-.fr-info__editar { margin-top: 14px; }
+/* Pie del bloque: la acción a la derecha, separada por una línea.
+   El aire va corto a propósito: es una sola acción secundaria, y entre el
+   margen, el relleno y el alto del botón se comía casi tanto alto como los
+   datos que vino a acompañar. */
+.fr-info__pie {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+/* Más bajo que un botón normal: al lado de una lista para leer, un botón de
+   38px de alto pesa más que todo lo que hay arriba. */
+.fr-info__pie .btn { height: 30px; font-size: 12.5px; padding: 0 12px; }
+.fr-info__pie .btn svg { width: 13px; height: 13px; }
+/* Con el dedo vuelve a crecer: 30px se achican con la mano encima, y este
+   botón no tiene el blanco táctil invisible que sí tienen los de ícono. */
+@media (pointer: coarse) {
+  .fr-info__pie .btn { height: 36px; padding: 0 14px; }
+}
 
 @media (max-width: 767px) {
   .fr-ante { padding: 10px 16px 12px; }

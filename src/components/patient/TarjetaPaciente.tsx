@@ -49,22 +49,26 @@ export function TarjetaPaciente({
 
   // Solo lo que tiene valor: una lista llena de renglones vacíos es peor que
   // una lista corta, hace dudar de si el dato está o no está.
-  const datosPersonales: [string, string][] = (
+  // El tercer valor marca los datos que son NÚMEROS y van en la tipografía de
+  // números: alineados, sin que el 1 mida menos que el 8. Es lo que hace que un
+  // DNI o un teléfono se puedan leer de corrido en vez de descifrar.
+  const datosPersonales: [string, string, boolean?][] = (
     [
-      ['DNI', patient.dni],
+      ['DNI', patient.dni, true],
       [
         'Nacimiento',
         patient.birthDate
           ? new Date(patient.birthDate).toLocaleDateString('es-AR', { timeZone: 'UTC' })
           : undefined,
+        true,
       ],
       ['Domicilio', patient.address],
       ['Localidad', patient.locality],
-      ['Celular', patient.phone],
+      ['Celular', patient.phone, true],
       ['Email', patient.email],
       ['Obra social', patient.obraSocial],
-      ['N° de afiliado', patient.nAfiliado],
-    ].filter(([, v]) => Boolean(v && String(v).trim())) as [string, string][]
+      ['N° de afiliado', patient.nAfiliado, true],
+    ].filter(([, v]) => Boolean(v && String(v).trim())) as [string, string, boolean?][]
   );
 
   return (
@@ -197,10 +201,10 @@ export function TarjetaPaciente({
                 <div className={`fr-info ${infoOpen && !isMobile ? 'fr-info--entra' : ''}`}>
                   {datosPersonales.length > 0 ? (
                     <dl className="fr-info__grid">
-                      {datosPersonales.map(([k, v]) => (
+                      {datosPersonales.map(([k, v, esNumero]) => (
                         <div key={k}>
                           <dt>{k}</dt>
-                          <dd>{v}</dd>
+                          <dd className={esNumero ? 'mono' : undefined}>{v}</dd>
                         </div>
                       ))}
                     </dl>
@@ -209,12 +213,14 @@ export function TarjetaPaciente({
                       Todavía no hay datos cargados de este paciente.
                     </p>
                   )}
-                  <button
-                    className="btn btn--secondary btn--sm fr-info__editar"
-                    onClick={onEditar}
-                  >
-                    <Icon name="edit" size={14} /> Editar datos
-                  </button>
+                  {/* Al pie y a la derecha, como corresponde a la acción de un
+                      bloque: suelto a la izquierda parecía un botón más de la
+                      lista de datos y no el cierre del panel. */}
+                  <div className="fr-info__pie">
+                    <button className="btn btn--secondary btn--sm" onClick={onEditar}>
+                      <Icon name="edit" size={14} /> Editar datos
+                    </button>
+                  </div>
                 </div>
               </Desplegable>
     </>

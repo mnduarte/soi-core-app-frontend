@@ -1,10 +1,11 @@
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Icon } from '../common/Icon';
 import { Avatar } from '../common/Avatar';
 import { useAuthStore } from '../../store/auth.store';
 import { authApi } from '../../api/auth';
 import { withTitle } from '../../lib/format';
+import { linkSoporte } from '../../lib/soporte';
 
 /**
  * Quién sos y cómo salir, en el celular.
@@ -25,6 +26,7 @@ function rolLabel(role?: string, isClinical?: boolean) {
 export function CuentaSheet({ onClose }: { onClose: () => void }) {
   const { user, clinic, clearAuth } = useAuthStore();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const salir = async () => {
     const refreshToken = localStorage.getItem('refreshToken');
@@ -53,6 +55,18 @@ export function CuentaSheet({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         </div>
+
+        {/* Primero consultar, después salir: es lo que más se va a usar de acá,
+            y además evita que el único botón de la hoja sea el de irse. */}
+        <a
+          className="btn btn--secondary"
+          href={linkSoporte(user, clinic, pathname)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={onClose}
+        >
+          <Icon name="whatsapp" size={15} /> Contacto
+        </a>
 
         <button className="btn btn--secondary" onClick={() => void salir()}>
           <Icon name="undo" size={15} /> Cerrar sesión

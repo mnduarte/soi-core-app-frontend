@@ -3,7 +3,18 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
+/**
+ * Versión visible de la app: la fecha del build.
+ *
+ * No es un número de release —no los usamos— sino la respuesta a "¿qué tenés
+ * instalado?". Viaja en el mensaje de WhatsApp de soporte: con la copia local
+ * de la app, alguien puede estar viendo una versión de hace una semana y
+ * describir un problema que ya se arregló.
+ */
+const VERSION = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+
 export default defineConfig({
+  define: { __SOI_VERSION__: JSON.stringify(VERSION) },
   plugins: [
     react(),
     /*

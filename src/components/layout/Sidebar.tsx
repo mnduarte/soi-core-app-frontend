@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import { authApi } from '../../api/auth';
 import { withTitle } from '../../lib/format';
@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../common/Icon';
 import { BrandLogo } from '../common/BrandLogo';
 import { Avatar } from '../common/Avatar';
 import { useVeClinico } from '../../lib/permisos';
+import { linkSoporte } from '../../lib/soporte';
 
 interface NavItem {
   to: string;
@@ -50,6 +51,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapsed }: Sideb
   const { user, clinic, clearAuth } = useAuthStore();
   const navigate = useNavigate();
   const clinico = useVeClinico();
+  const { pathname } = useLocation();
 
   const handleLogout = async () => {
     const refreshToken = localStorage.getItem('refreshToken');
@@ -99,6 +101,23 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapsed }: Sideb
           {it.kbd && <span className="nav-item__kbd">{it.kbd}</span>}
         </NavLink>
       ))}
+
+      {/* Contacto: un ítem más del menú —mismo alto, mismo ícono a la
+          izquierda, misma sangría—, pero abajo de todo, pegado al usuario. No
+          es una sección de la app: es adónde se va cuando algo no se entiende,
+          y por eso no comparte lugar con las tres que sí lo son.
+          Usa `nav-item` para heredar el comportamiento en el menú contraído
+          (solo ícono) sin repetir reglas. */}
+      <a
+        className="nav-item sidebar__contacto"
+        href={linkSoporte(user, clinic, pathname)}
+        target="_blank"
+        rel="noreferrer"
+        title="Escribinos por WhatsApp"
+      >
+        <Icon name="whatsapp" />
+        <span className="nav-item__lbl">Contacto</span>
+      </a>
 
       <div className="sidebar__user">
         <Avatar name={user?.name ?? '?'} id={user?.id} size="md" />

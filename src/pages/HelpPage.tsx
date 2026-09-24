@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { PageHeader } from '../components/common/PageHeader';
 import { Icon, type IconName } from '../components/common/Icon';
+import { useLocation } from 'react-router-dom';
+import { useAuthStore } from '../store/auth.store';
+import { linkSoporte } from '../lib/soporte';
 
 // Bolds text wrapped in **double asterisks** so step strings can highlight the
 // exact button/label the dentist has to look for.
@@ -292,6 +295,9 @@ function FlowSection({ index, flow }: { index: number; flow: Flow }) {
 }
 
 export default function HelpPage() {
+  const { user, clinic } = useAuthStore();
+  const { pathname } = useLocation();
+
   return (
     <div className="content fade-in">
       <PageHeader title="Ayuda" sub="Guía rápida de SOI — cada flujo, paso a paso." />
@@ -300,10 +306,14 @@ export default function HelpPage() {
         <FlowSection key={f.title} index={i + 1} flow={f} />
       ))}
 
-      <div
+      <a
+        href={linkSoporte(user, clinic, pathname)}
+        target="_blank"
+        rel="noreferrer"
         style={{
           marginTop: 8,
           maxWidth: 720,
+          textDecoration: 'none',
           padding: '14px 16px',
           background: 'var(--brand-primary-50)',
           border: '1px solid var(--brand-primary-100)',
@@ -316,8 +326,11 @@ export default function HelpPage() {
         }}
       >
         <Icon name="whatsapp" size={16} style={{ color: 'var(--success)', marginTop: 1, flexShrink: 0 }} />
-        <span>¿Algo no funciona o tenés una duda? Escribinos por WhatsApp y te ayudamos.</span>
-      </div>
+        <span>
+          ¿Algo no funciona o tenés una duda? <b>Escribinos por WhatsApp</b> y te
+          ayudamos.
+        </span>
+      </a>
     </div>
   );
 }

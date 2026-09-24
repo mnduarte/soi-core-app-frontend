@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   name: string;
   email: string;
@@ -11,7 +11,7 @@ interface AuthUser {
   title?: 'DR' | 'DRA' | 'NONE' | null;
 }
 
-interface ClinicInfo {
+export interface ClinicInfo {
   id: string;
   name: string;
   logoUrl?: string;

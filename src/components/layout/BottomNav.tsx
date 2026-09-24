@@ -51,7 +51,11 @@ export function MobileFab() {
   const openModal = useUIStore(s => s.openModal);
 
   const onAgenda = pathname.startsWith('/agenda');
-  const onPatients = pathname.startsWith('/patients');
+  // Solo el LISTADO de pacientes, no la ficha de uno. La ficha abierta desde
+  // ahí vive en /patients/:id, así que "empieza con /patients" la incluía: el
+  // botón flotante se plantaba encima de "Borrar" del último trabajo, y encima
+  // ofrecía crear un paciente nuevo mientras se está mirando uno.
+  const onPatients = /^\/patients\/?$/.test(pathname);
   if (!onAgenda && !onPatients) return null;
 
   const handle = () => {

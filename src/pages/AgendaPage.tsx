@@ -115,7 +115,27 @@ export default function AgendaPage() {
     return { from: startOfMonth(selectedDate), to: endOfMonth(selectedDate) };
   }, [view, selectedDate]);
 
-  const { data: appts = [] } = useQuery({
+  /*
+   * Cuántas filas dibuja el esqueleto de la Libreta.
+   *
+   * Un número fijo no sirve: con cuatro filas de gris y trece turnos reales, la
+   * hoja pegaba un estirón al llegar la respuesta — el "se expande en seco".
+   * Así que se recuerda cuántos turnos tuvo la última carga y el esqueleto se
+   * dibuja de ese alto. Un consultorio tiene una cantidad de turnos bastante
+   * pareja de un día para el otro, así que la estimación le pega cerca.
+   *
+   * Vive en el navegador para que la PRIMERA pantalla de la mañana —la que más
+   * importa, porque es la única donde se espera de verdad— ya sepa el alto.
+   */
+  const CLAVE_FILAS = 'soi.libreta-filas';
+  const [filasEsqueleto] = useState(() => {
+    const guardado = Number(localStorage.getItem(CLAVE_FILAS));
+    // Entre 3 y 12: menos no se lee como lista y más llena la pantalla de gris
+    // para algo que en un segundo va a tener otra cosa.
+    return Number.isFinite(guardado) && guardado > 0 ? Math.min(Math.max(guardado, 3), 12) : 5;
+  });
+
+  const { data: appts = [], isPending: turnosPendientes } = useQuery({
     queryKey: ['appointments', view, range.from.toISOString()],
     queryFn: () => appointmentsApi.findAll({
       from: range.from.toISOString(),
@@ -132,6 +152,13 @@ export default function AgendaPage() {
     queryKey: ['patients', 'all'],
     queryFn: () => patientsApi.findAll(),
   });
+
+  // Se anota al llegar los datos, no durante el render: es un efecto secundario
+  // (tocar el almacenamiento del navegador) y no tiene que correr dos veces.
+  useEffect(() => {
+    if (turnosPendientes || view !== 'libreta') return;
+    try { localStorage.setItem(CLAVE_FILAS, String(appts.length)); } catch { /* sin storage */ }
+  }, [turnosPendientes, view, appts.length]);
 
   const patientMap = useMemo(() => {
     const m = new Map<string, Patient>();
@@ -517,6 +544,10 @@ export default function AgendaPage() {
           onDelete={handleDelete}
           onEditPatient={handleEditPatient}
           onVerPaciente={clinico ? id => navigate(`/ficha-rapida/${id}?info=1`) : undefined}
+          // Solo la PRIMERA carga de cada día: cuando el heartbeat refresca en
+          // segundo plano los datos ya están, así que la hoja no parpadea.
+          cargando={turnosPendientes}
+          filasEsqueleto={filasEsqueleto}
           onSetTrabajo={setTrabajo}
         />
       )}

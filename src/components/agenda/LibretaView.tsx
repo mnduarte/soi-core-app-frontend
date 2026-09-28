@@ -19,6 +19,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { ResolveMenu } from '../common/ResolveMenu';
 import { PatientPicker } from '../common/PatientPicker';
 import { NewPatientModal } from '../modals/NewPatientModal';
+import { LibretaEsqueleto } from './LibretaEsqueleto';
 import { CustomTreatmentsModal } from '../common/CustomTreatmentsModal';
 import { CustomSlotsModal } from '../common/CustomSlotsModal';
 import { AppointmentReminderModal } from './AppointmentReminderModal';
@@ -75,6 +76,10 @@ interface LibretaViewProps {
   onResolve: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appt: Appointment) => void;
   onDelete: (appt: Appointment) => void;
+  /** Los turnos todavía no llegaron: la hoja muestra el esqueleto. */
+  cargando?: boolean;
+  /** Cuántas filas dibujar mientras tanto — ver AgendaPage. */
+  filasEsqueleto?: number;
   onEditPatient: (patientId: string) => void;
   /**
    * Tocar el NOMBRE del paciente: lleva a su ficha con la info personal ya
@@ -102,6 +107,8 @@ export function LibretaView({
   onResolve,
   onReschedule,
   onDelete,
+  cargando,
+  filasEsqueleto,
   onEditPatient,
   onVerPaciente,
   onSetTrabajo,
@@ -796,10 +803,21 @@ export function LibretaView({
             // La `key` remonta la lista para que la animación vuelva a correr
             // en cada salto. Solo la hoja: el formulario de arriba se queda
             // quieto (si no, se perdería lo que estuvieras tipeando).
-            key={dayMove?.n ?? 0}
-            className={dayMove && dayMove.n > 0 ? `lb-day-${dayMove.dir}` : undefined}
+            /* La `key` incluye si está cargando: al llegar los datos, la hoja
+               se vuelve a montar y con eso corre el fundido de entrada. Sin
+               esto el esqueleto se reemplazaba de un cuadro al otro, que es
+               justo el "corte en seco". */
+            key={`${dayMove?.n ?? 0}-${cargando ? 'carga' : 'datos'}`}
+            className={
+              dayMove && dayMove.n > 0 ? `lb-day-${dayMove.dir}` : cargando ? undefined : 'lb-hoja-entra'
+            }
           >
-          {groups.length === 0 ? (
+          {cargando ? (
+            /* Primero el esqueleto: decir "no hay turnos" mientras todavía se
+               están trayendo es afirmar algo falso, y encima en el peor momento
+               —al abrir la app a la mañana, con el día lleno. */
+            <LibretaEsqueleto filas={filasEsqueleto} />
+          ) : groups.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
               Sin turnos anotados. Cargá el primero arriba ↑
             </div>

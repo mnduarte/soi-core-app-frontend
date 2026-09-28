@@ -1845,6 +1845,20 @@ table.tbl { width: 100%; border-collapse: collapse; }
 /* Estado de carga: filas fantasma con el pulso del papel. Se usan mientras
    llegan los datos (el listado de pacientes calcula saldo y última visita, así
    que puede tardar) para que nunca parezca que la app se colgó. */
+/* La hoja del día cuando reemplaza al esqueleto: un fundido corto con un
+   milímetro de recorrido. El esqueleto ya reservó el alto, así que no hay nada
+   que acomodar — lo único que hay para contar es que lo gris se volvió texto.
+   Sin esto el cambio ocurre entre un cuadro y el siguiente, y eso es lo que se
+   siente como un corte en seco. */
+.lb-hoja-entra { animation: lbHojaEntra 200ms cubic-bezier(0.4, 0.4, 0.7, 1) both; }
+@keyframes lbHojaEntra {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-hoja-entra { animation: none; }
+}
+
 .lb-skeleton-row {
   display: flex;
   align-items: center;

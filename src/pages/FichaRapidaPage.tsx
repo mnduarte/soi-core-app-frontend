@@ -581,16 +581,70 @@ export default function FichaRapidaPage() {
   };
 
   /**
-   * Cerrar el cobro en línea. Existe por lo mismo que `salirDeEdicion`: los dos
-   * botones apagaban el modo y la fila volvía a su forma de golpe, sin nada que
-   * dijera que era la MISMA fila la que quedaba. Con el fundido hay continuidad;
-   * el destello verde que llega después es otra cosa (que se cobró), y llega
+   * Cerrar el cobro en línea: se va el campo con sus botones y el panel de
+   * montos. Nada más.
+   *
+   * Acá había un fundido de la fila entera (`volverDeLaFranja`) con la idea de
+   * dar continuidad. Estaba mal: esa animación arranca en opacidad CERO, y
+   * sirve cuando la fila estuvo reemplazada por la franja verde y vuelve a
+   * existir. Al cancelar un cobro la fila nunca se fue —solo se cierra lo que
+   * se abrió encima—, así que fundirla desde invisible hacía desaparecer y
+   * reaparecer la descripción: se leía como si la fila se hubiera recargado.
+   *
+   * Que algo se cobró ya lo cuenta el destello verde del sello, que llega
    * cuando responde el servidor.
    */
-  const salirDeCobro = (workId: string) => {
-    setCobroItem(null);
+  const salirDeCobro = () => {
+    const saliendo = cobroItem;
+    if (!saliendo) return;
+    const fila = cobroRef.current;
+
+    /*
+     * La fila se contrae de una sola pieza.
+     *
+     * Antes salían por separado: los montos se contraían con su desplegable y
+     * el campo se desvanecía. Medido en el build, la contracción venía de a
+     * 12px por cuadro y al desmontar el campo la fila perdía 79px DE GOLPE —el
+     * fundido le bajaba la opacidad, no el alto, así que hasta el último cuadro
+     * seguía ocupando su lugar. Ese salto era el escalón.
+     *
+     * Ahora se saca todo junto y lo que se anima es el alto de la fila, de
+     * donde estaba a donde queda: una sola animación para un solo movimiento.
+     * Se mide antes y después del cambio y se interpola entre los dos valores
+     * (la técnica de siempre: primero, último, invertir, soltar).
+     */
+    const alto0 = fila?.getBoundingClientRect().height ?? 0;
     setCobroPanel(false);
-    volverDeLaFranja(workId);
+    setCobroItem(null);
+    if (fila && alto0 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      requestAnimationFrame(() => {
+        const alto1 = fila.getBoundingClientRect().height;
+        if (Math.abs(alto1 - alto0) < 2) return;
+        const anim = fila.animate(
+          [{ height: `${alto0}px` }, { height: `${alto1}px` }],
+          // Pareja: algo que se va no tiene nada que aterrizar.
+          { duration: 170, easing: 'linear' },
+        );
+        // `overflow` recortado mientras dura: si no, el contenido que ya no
+        // entra se desborda sobre la fila de abajo.
+        fila.style.overflow = 'hidden';
+        anim.onfinish = () => { fila.style.overflow = ''; fila.style.height = ''; };
+      });
+    }
+    /*
+     * El campo se desvanece en 120ms y el botón entra apenas termina, sin
+     * pausa en el medio.
+     *
+     * Antes había un hueco: el campo llegaba a opacidad cero pero seguía
+     * ocupando su lugar hasta que se desmontaba, 60ms después. En ese rato no
+     * pasaba nada y el botón aparecía recién al final — eso es lo que se veía
+     * como un escalón, no la velocidad de cada tramo.
+     */
+    // Las acciones entran con el fundido mientras la fila se contrae: las dos
+    // cosas cuentan el mismo momento, así que van juntas y no una después de
+    // la otra.
+    setCobroReaparece(saliendo);
+    window.setTimeout(() => setCobroReaparece(null), 220);
   };
 
   const salirDeEdicion = (workId: string) => {
@@ -946,6 +1000,14 @@ export default function FichaRapidaPage() {
   // datos, así que para poder animar la salida primero marcamos la fila, la
   // dejamos encogerse, y recién después pegamos el borrado al servidor.
   const [outPagoId, setOutPagoId] = useState<string | null>(null);
+  /**
+   * Y el instante siguiente: el botón y las acciones de la fila volviendo.
+   *
+   * Es lo único que quedaba apareciendo de un cuadro al otro. El fundido va
+   * SOLO en lo que vuelve —no en la fila entera—: fundir la fila completa es lo
+   * que antes hacía parpadear la descripción, que nunca se había ido.
+   */
+  const [cobroReaparece, setCobroReaparece] = useState<string | null>(null);
   /**
    * Trabajo cuyo chip "pagó $X" y cuyo "falta $Y" están por dejar de existir.
    *
@@ -1358,7 +1420,7 @@ export default function FichaRapidaPage() {
    */
   const cerrarOperaciones = () => {
     if (editItem) salirDeEdicion(editItem);
-    if (cobroItem) salirDeCobro(cobroItem);
+    if (cobroItem) salirDeCobro();
     if (editPago) salirDeEdicionPago(editPago);
     if (askDesmarcar) cancelarDesmarcar(askDesmarcar);
     if (askHecho) { setAskHecho(null); volverDeLaFranja(askHecho); }
@@ -1758,7 +1820,7 @@ export default function FichaRapidaPage() {
     }
 
     return (
-      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : cobroItem === it._id ? cobroRef : undefined} className={`fr-row fw-row ${editing || cobroItem === it._id ? 'fr-row--edit' : ''} ${it._id === newWorkId || it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''} ${it._id === volviendo ? 'fr-row--vuelve' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={it._id} data-flip={it._id} ref={editing ? editRowRef : cobroItem === it._id ? cobroRef : undefined} className={`fr-row fw-row ${editing || cobroItem === it._id ? 'fr-row--edit' : ''} ${cobroReaparece === it._id ? 'fr-row--reaparece' : ''} ${it._id === newWorkId || it._id === flashWorkId ? 'lb-rowflash' : ''} ${it._id === outWorkId ? 'lb-rowout' : ''} ${it._id === volviendo ? 'fr-row--vuelve' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: dense ? '6px 12px' : '10px 12px', borderTop: '1px solid var(--border-subtle)' }}>
         {/* El circulito solo no dice qué hace, y en tablet no hay tooltip que lo
             aclare. Los pendientes llevan la etiqueta al lado; los hechos no la
             necesitan (el tilde verde + el tachado + "hecho DD/MM" ya se leen). */}
@@ -1996,29 +2058,33 @@ export default function FichaRapidaPage() {
                     onFocus={() => setCobroPanel(true)}
                     onClick={() => setCobroPanel(true)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') { const m = num(cobroAmount); salirDeCobro(it._id); marcarCobrado(it, m); }
-                      if (e.key === 'Escape') salirDeCobro(it._id);
+                      if (e.key === 'Enter') { const m = num(cobroAmount); salirDeCobro(); marcarCobrado(it, m); }
+                      if (e.key === 'Escape') salirDeCobro();
                     }}
                     style={{ width: '100%', height: 32, paddingLeft: 18, fontSize: 13 }}
                   />
                 </span>
                 <button
                   className="btn btn--primary btn--sm"
-                  onClick={() => { const m = num(cobroAmount); salirDeCobro(it._id); marcarCobrado(it, m); }}
+                  onClick={() => { const m = num(cobroAmount); salirDeCobro(); marcarCobrado(it, m); }}
                 >
                   <Icon name="check" size={13} /> Cobrar
                 </button>
-                <button className="btn btn--ghost btn--sm" onClick={() => salirDeCobro(it._id)}>Cancelar</button>
+                <button className="btn btn--ghost btn--sm" onClick={salirDeCobro}>Cancelar</button>
               </span>
                 {/* El alto lo lleva el Desplegable, igual que en "Editar": suelto,
-                    el panel aparecía de golpe y empujaba la lista de un salto. */}
-                <div style={{ flex: '0 0 100%', width: '100%' }}>
+                    el panel aparecía de golpe y empujaba la lista de un salto.
+                    En escritorio va anclado a la derecha y angosto (ver
+                    `.fr-montos`): a lo ancho de la fila dejaba un hueco en el
+                    medio y parecía que la fila se hubiera agrandado sola. */}
+                <div className="fr-montos">
                 {/* El contenido va SIEMPRE montado: si se desmontara al cerrar,
                     los montos desaparecerían primero y el espacio se cerraría
                     después, vacío. Lo abre y lo cierra `abierto`. */}
                 <Desplegable abierto={cobroPanel} clave="montos" animarAlMontar>
                   <div className="lb-editpanel">
-                    <div style={popTitle}>Montos</div>
+                    {/* Sin el rótulo "Montos": son cinco botones con el signo
+                        $ adelante, no hace falta anunciarlos. */}
                     <div className="lb-chips" style={chipsWrap}>
                       {quickAmounts.map(v => (
                         <button key={v} type="button" className="lb-chip mono" style={{ fontWeight: 600 }}
@@ -2080,8 +2146,14 @@ export default function FichaRapidaPage() {
                 Fotos, Editar y Borrar ahí son ruido, y encima llevan afuera a
                 mitad de una operación con plata. Al editar ya pasaba: es la
                 misma idea. */}
-            {cobroItem !== it._id && (
-            <span className="fr-acts">
+            {/* Durante el cobro las acciones NO se desmontan: se ocultan dejando
+                su lugar. Miden 48px de alto contra los 32 del campo, así que al
+                volver hacían crecer la fila de golpe justo en el cuadro en que
+                aparecía el botón — eso era el escalón, y ningún fundido lo tapa
+                porque no es opacidad, es alto. En celular sí se desmontan: ahí
+                viven en su propio renglón y reservar el espacio dejaría una
+                franja vacía abajo del campo. */}
+            <span className={`fr-acts ${cobroItem === it._id ? 'fr-acts--fantasma' : ''}`}>
               <button className="lb-act" title="Fotos del trabajo" onClick={() => openModal('uploadPhotos', { patientId: id, treatmentItemId: it._id })}>
                 <span className="lb-act__ic" style={{ color: itemPhotos.length ? 'var(--brand-primary-600)' : undefined }}><Icon name="image" size={16} /></span>
                 <span className="lb-act__lbl">{itemPhotos.length ? `Fotos ${itemPhotos.length}` : 'Fotos'}</span>
@@ -2095,7 +2167,6 @@ export default function FichaRapidaPage() {
                 <span className="lb-act__lbl">Borrar</span>
               </button>
             </span>
-            )}
             </span>
             {/* El desglose de pagos, a lo ANCHO DE LA FILA.
                 Vivía adentro de la columna de la descripción, que comparte el

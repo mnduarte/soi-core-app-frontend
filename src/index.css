@@ -910,7 +910,11 @@ table.tbl { width: 100%; border-collapse: collapse; }
   border-bottom: 1px solid var(--border-subtle);
 }
 .lb-row:last-child { border-bottom: 0; }
-.lb-row:hover { background: rgba(246, 240, 225, 0.5); }
+/* Solo con mouse: en la tablet del consultorio el dedo dejaba la fila
+   encendida hasta el toque siguiente, como si estuviera seleccionada. */
+@media (hover: hover) and (pointer: fine) {
+  .lb-row:hover { background: rgba(246, 240, 225, 0.5); }
+}
 
 /* Hora del turno: mono, marrón sello, alineada al margen */
 .lb-time {
@@ -1916,9 +1920,23 @@ table.tbl { width: 100%; border-collapse: collapse; }
   display: flex; align-items: center; justify-content: center;
 }
 
-/* Ficha rápida: acciones (editar/borrar) visibles al pasar el mouse por la fila. */
-.fr-row:hover { background: var(--bg-hover); }
-.fr-row:hover .fr-actions { opacity: 1 !important; }
+/* Ficha rápida: acciones (editar/borrar) visibles al pasar el mouse por la fila.
+ *
+ * Dos condiciones, y las dos salieron del mismo problema —el parpadeo al tocar
+ * "Cobrar":
+ *
+ * `hover: hover` deja esto solo para el mouse. En una pantalla táctil el dedo
+ * dispara :hover igual, pero se queda pegado hasta el toque siguiente: al
+ * confirmar un cobro la fila quedaba encendida un instante, después se apagaba
+ * sola, y recién ahí aparecía el sello. Tres estados para una sola acción.
+ *
+ * Y mientras la fila está operando —cobrando o editando— tampoco se enciende:
+ * ahí adentro hay un formulario con sus propios botones, y el fondo cambiando
+ * bajo el campo mientras se escribe un importe es ruido, no información. */
+@media (hover: hover) and (pointer: fine) {
+  .fr-row:not(.fr-row--edit):hover { background: var(--bg-hover); }
+  .fr-row:not(.fr-row--edit):hover .fr-actions { opacity: 1 !important; }
+}
 
 /* Diálogo de confirmación: fade del fondo + un pop sutil de la tarjeta (sin
    traslado horizontal, para que aparezca centrada sin "saltar"). */
@@ -3473,6 +3491,51 @@ table.tbl { width: 100%; border-collapse: collapse; }
    un trabajo — mismo ancho de campo, mismo alto, mismos dos botones al lado —
    así el importe se escribe siempre en el mismo lugar y no salta a la esquina
    superior derecha según por dónde se haya entrado a cobrar. */
+/* Cobrar desde la fila, en escritorio: el campo y sus botones aparecen DONDE
+   ESTABA el botón que se tocó —a la derecha— y con el ancho que necesitan.
+   Ocupando el ancho completo, los controles saltaban al margen izquierdo y
+   dejaban un hueco en el medio: la fila parecía haberse agrandado sola. Es el
+   mismo criterio del sello PAGADO, que ocupa el lugar exacto del botón Cobrar.
+   En celular no aplica: ahí no hay otra columna con la que alinearse. */
+@media (min-width: 768px) {
+  .fr-cobro-linea { flex: 0 0 auto !important; margin-left: auto; margin-top: 0; }
+  .fr-cobro-linea .fr-monto { width: 130px; }
+  .fr-montos { display: flex; justify-content: flex-end; }
+  .fr-montos .lb-editpanel { width: auto; max-width: 470px; flex: 0 0 auto; }
+}
+.fr-montos { flex: 0 0 100%; width: 100%; }
+
+/* Y se va igual de rápido: 140ms parejos. Entrar desacelera —algo llega y se
+   acomoda—, salir no tiene nada que aterrizar. Mientras se desvanece deja de
+   recibir toques, para que no se pueda cobrar dos veces en ese instante. */
+/* Lo que vuelve después del cobro: el botón (o el sello) y las tres acciones.
+   Solo ellos — la descripción y el precio nunca se fueron, y fundirlos haría
+   parpadear una fila que estuvo ahí todo el tiempo. */
+.fr-row--reaparece .lb-cobro,
+.fr-row--reaparece .fr-acts {
+  animation: frReaparece 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes frReaparece {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-row--reaparece .lb-cobro,
+  .fr-row--reaparece .fr-acts { animation: none; }
+}
+
+/* Las acciones mientras se cobra: ocupan su lugar pero no se ven ni se tocan.
+   Así la fila mide lo mismo antes, durante y después, y cuando vuelven no hay
+   ningún salto de alto que disimular. */
+@media (min-width: 768px) {
+  .fr-acts--fantasma { visibility: hidden; pointer-events: none; }
+}
+/* En celular las acciones están en su propio renglón: reservarles el espacio
+   dejaría una franja vacía debajo del campo, peor que el salto. */
+@media (max-width: 767px) {
+  .fr-acts--fantasma { display: none; }
+}
+
 .fr-cobro-linea {
   /* Entra con el mismo fundido que la respuesta de "¿cuánto pagó?": este
      renglón nace al tocar "Cobrar" y sin nada aparecía de golpe, mientras los

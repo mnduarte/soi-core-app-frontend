@@ -52,37 +52,47 @@ function etiquetaTurno(iso: string): string {
 }
 
 /**
- * Fichas que ya se abrieron HOY, para no volver a sugerirlas.
+ * Las últimas fichas que se abrieron.
+ *
+ * Sirve para dos cosas en el desplegable del buscador: poner una tilde a los
+ * pacientes del día que ya se miraron, y completar la lista con los últimos
+ * vistos cuando la agenda no llega a llenarla.
+ *
+ * ANTES ESCONDÍA a los ya vistos, y estaba mal: justo al que acabás de atender
+ * es al que más probablemente vuelvas —a cobrarle, a sumarle un trabajo, a
+ * mirarle una foto— y era el único que la lista sacaba del acceso rápido.
+ * Ahora no se esconde a nadie; la tilde cuenta lo mismo sin quitar nada.
  *
  * Vive en el navegador y no en el servidor a propósito: es una comodidad de la
  * jornada, no un dato clínico. Guardarlo en la base pediría un campo, un
  * endpoint y una escritura por cada ficha que se mira — mucho aparato para
- * ordenar una lista de diez nombres.
- *
- * La clave lleva la fecha, así que al día siguiente la lista vuelve a estar
- * completa sin tener que limpiar nada. Se descartan las claves viejas al pasar.
- *
- * Contrapartida honesta: es por dispositivo. Si se atiende con la tablet y
- * después se carga desde la computadora, cada una lleva su propia cuenta. Para
- * un consultorio de un profesional alcanza, y el costo de equivocarse es
- * escribir tres letras en el buscador.
+ * ordenar una lista de diez nombres. Que sea por dispositivo ya no molesta:
+ * equivocarse pintando una tilde no le saca el acceso rápido a nadie, que era
+ * el problema cuando esto escondía.
  */
 const CLAVE_VISTAS = 'soi.fichas-vistas';
+/** Se guardan unas pocas: es el final de la lista, no un historial. */
+const TOPE_VISTAS = 12;
 
-function fichasVistasHoy(): string[] {
+type FichaVista = { id: string; ts: number };
+
+function fichasVistas(): FichaVista[] {
   try {
     const crudo = localStorage.getItem(CLAVE_VISTAS);
     if (!crudo) return [];
-    const { fecha, ids } = JSON.parse(crudo) as { fecha: string; ids: string[] };
-    return fecha === todayYMD() && Array.isArray(ids) ? ids : [];
+    const dato = JSON.parse(crudo) as unknown;
+    // Formato viejo ({ fecha, ids }): se descarta en silencio. Es una
+    // comodidad, no vale la pena migrarla.
+    if (!Array.isArray(dato)) return [];
+    return (dato as FichaVista[]).filter(v => v && typeof v.id === 'string');
   } catch { return []; }
 }
 
 function marcarFichaVista(patientId: string): void {
   try {
-    const ids = fichasVistasHoy();
-    if (ids.includes(patientId)) return;
-    localStorage.setItem(CLAVE_VISTAS, JSON.stringify({ fecha: todayYMD(), ids: [...ids, patientId] }));
+    const previas = fichasVistas().filter(v => v.id !== patientId);
+    const lista = [{ id: patientId, ts: Date.now() }, ...previas].slice(0, TOPE_VISTAS);
+    localStorage.setItem(CLAVE_VISTAS, JSON.stringify(lista));
   } catch { /* modo privado, o el navegador con el almacenamiento bloqueado */ }
 }
 
@@ -195,20 +205,22 @@ export default function FichaRapidaPage() {
   }, [id]);
 
   const sugeridos = useMemo(() => {
-    if (query.trim()) return results.slice(0, 5).map(p => ({ p, dia: '', hora: '' }));
+    if (query.trim()) {
+      return results.slice(0, 5).map(p => ({ p, dia: '', hora: '', vista: false }));
+    }
 
     const man0 = new Date(); man0.setHours(0, 0, 0, 0); man0.setDate(man0.getDate() + 1);
+    const hoy0 = new Date(); hoy0.setHours(0, 0, 0, 0);
     const porPaciente = new Map(results.map(p => [p._id, p]));
-    // Arranca con las fichas ya abiertas hoy: quedan descartadas por el mismo
-    // camino que los turnos repetidos, sin una condición aparte.
-    const vistos = new Set<string>(fichasVistasHoy());
-    // El que se está atendiendo ahora mismo tampoco se sugiere: ya está abierto.
-    if (id) vistos.add(id);
-    const lista: { p: Patient; dia: string; hora: string }[] = [];
+    const vistas = fichasVistas();
+    const vistaHoy = new Set(vistas.filter(v => v.ts >= hoy0.getTime()).map(v => v.id));
+
+    const yaEsta = new Set<string>();
+    const lista: { p: Patient; dia: string; hora: string; vista: boolean }[] = [];
 
     // Los turnos ya vienen ordenados por hora; HOY va completo antes que nada
     // de mañana. El que está atendiendo necesita ver su día entero primero, por
-    // más temprano que sea.
+    // más temprano que sea. Nadie se saca: al que ya se miró le queda la tilde.
     for (const dia of ['hoy', 'mañana']) {
       for (const t of turnosCerca) {
         const cuando = new Date(t.startsAt);
@@ -216,15 +228,35 @@ export default function FichaRapidaPage() {
         if ((dia === 'mañana') !== esDeManana) continue;
         // Un paciente puede tener dos turnos en el día: se lista una sola vez,
         // en el primero.
-        if (!t.patientId || vistos.has(t.patientId)) continue;
+        if (!t.patientId || yaEsta.has(t.patientId)) continue;
         const p = porPaciente.get(t.patientId);
         if (!p) continue;
-        vistos.add(t.patientId);
-        lista.push({ p, dia, hora: etiquetaTurno(t.startsAt) });
+        yaEsta.add(t.patientId);
+        lista.push({ p, dia, hora: etiquetaTurno(t.startsAt), vista: vistaHoy.has(t.patientId) });
       }
     }
+
+    // Y si sobra lugar, los últimos que se abrieron QUE NO ESTÉN en la agenda:
+    // el que llamó por teléfono, el de ayer que quedó a medias. Los de hoy ya
+    // están arriba, así que acá no se repite a nadie.
+    for (const v of vistas) {
+      if (lista.length >= 10) break;
+      if (yaEsta.has(v.id)) continue;
+      const p = porPaciente.get(v.id);
+      if (!p) continue;
+      yaEsta.add(v.id);
+      lista.push({ p, dia: 'vistos', hora: '', vista: true });
+    }
+
     const cortada = lista.slice(0, 10);
-    return cortada.length ? cortada : results.slice(0, 5).map(p => ({ p, dia: '', hora: '' }));
+    return cortada.length
+      ? cortada
+      : results.slice(0, 5).map(p => ({ p, dia: '', hora: '', vista: false }));
+    // `id` no se usa adentro del cálculo: está como SEÑAL. Abrir una ficha es
+    // lo que agrega una marca, y esa marca vive en el almacenamiento del
+    // navegador, fuera de React — sin esto, la tilde del que se acaba de ver no
+    // aparecía hasta que cambiara cualquier otra cosa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results, query, turnosCerca, id]);
 
   const pickPatient = (p: Patient) => {
@@ -2471,8 +2503,12 @@ export default function FichaRapidaPage() {
                 />
                 {searchOpen && (
                   <div className="lb-menupop" style={{ transformOrigin: 'top left', position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', zIndex: 20, overflow: 'hidden' }}>
-                    <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                      {sugeridos.map(({ p, dia, hora }, i) => (
+                    {/* El alto lo pone el CSS: en escritorio y tablet entran
+                        nueve nombres, en el teléfono seis. Ahí el teclado se
+                        come media pantalla, y una lista más larga terminaría
+                        tapada por él. */}
+                    <div className="fr-sug__lista">
+                      {sugeridos.map(({ p, dia, hora, vista }, i) => (
                         <Fragment key={p._id}>
                         {/* Un encabezado cada vez que cambia el día. Separarlos
                             importa: mirar "mi día" y mirar "lo que viene" son
@@ -2480,7 +2516,7 @@ export default function FichaRapidaPage() {
                             confunden justo cuando quedan pocos turnos. */}
                         {dia && dia !== sugeridos[i - 1]?.dia && (
                           <div style={popTitle} className="fr-sug__hd">
-                            {dia === 'hoy' ? 'Hoy' : 'Mañana'}
+                            {dia === 'hoy' ? 'Hoy' : dia === 'mañana' ? 'Mañana' : 'Vistos hace poco'}
                           </div>
                         )}
                         <div
@@ -2494,6 +2530,9 @@ export default function FichaRapidaPage() {
                           {/* Con la lista del día, la hora del turno reemplaza a
                               la obra social: es el dato que distingue a uno de
                               otro en ese momento. */}
+                          {/* La tilde dice "a este ya lo miraste hoy". Va en gris y
+                              chica: es un apunte, no un estado del paciente. */}
+                          {vista && <Icon name="check" size={12} className="fr-sug__vista" />}
                           {hora ? (
                             <span className="mono fr-sug__hora">{hora}</span>
                           ) : (

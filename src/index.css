@@ -3538,18 +3538,6 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .fr-row--reaparece .fr-acts { animation: none; }
 }
 
-/* Las acciones mientras se cobra: ocupan su lugar pero no se ven ni se tocan.
-   Así la fila mide lo mismo antes, durante y después, y cuando vuelven no hay
-   ningún salto de alto que disimular. */
-@media (min-width: 768px) {
-  .fr-acts--fantasma { visibility: hidden; pointer-events: none; }
-}
-/* En celular las acciones están en su propio renglón: reservarles el espacio
-   dejaría una franja vacía debajo del campo, peor que el salto. */
-@media (max-width: 767px) {
-  .fr-acts--fantasma { display: none; }
-}
-
 .fr-cobro-linea {
   /* Entra con el mismo fundido que la respuesta de "¿cuánto pagó?": este
      renglón nace al tocar "Cobrar" y sin nada aparecía de golpe, mientras los

@@ -2011,7 +2011,12 @@ export default function FichaRapidaPage() {
                 </div>
               )}
 
-              {itemPhotos.length > 0 && (
+              {/* Mientras se cobra no van: la fila tiene una sola pregunta en ese
+                  momento —cuánto— y las miniaturas suman medio renglón de alto
+                  justo cuando el bloque de montos ya la hizo crecer. Vuelven al
+                  cerrar, con el resto. Es la misma idea que dejar afuera las
+                  acciones de la fila durante la operación. */}
+              {itemPhotos.length > 0 && cobroItem !== it._id && (
                 /* flexBasis 100% → las miniaturas siempre arrancan renglón propio */
                 <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', flexBasis: '100%' }}>
                   {itemPhotos.map(({ photo }, idx) => (
@@ -2178,14 +2183,17 @@ export default function FichaRapidaPage() {
                 Fotos, Editar y Borrar ahí son ruido, y encima llevan afuera a
                 mitad de una operación con plata. Al editar ya pasaba: es la
                 misma idea. */}
-            {/* Durante el cobro las acciones NO se desmontan: se ocultan dejando
-                su lugar. Miden 48px de alto contra los 32 del campo, así que al
-                volver hacían crecer la fila de golpe justo en el cuadro en que
-                aparecía el botón — eso era el escalón, y ningún fundido lo tapa
-                porque no es opacidad, es alto. En celular sí se desmontan: ahí
-                viven en su propio renglón y reservar el espacio dejaría una
-                franja vacía abajo del campo. */}
-            <span className={`fr-acts ${cobroItem === it._id ? 'fr-acts--fantasma' : ''}`}>
+            {/* Mientras se cobra no van: la fila tiene una sola pregunta abierta
+                —cuánto— y sus dos botones para responderla.
+                Estuvieron un tiempo montadas pero invisibles, para que la fila
+                no pegara un salto de alto al volver. Salió peor: como la fila
+                envuelve, no se quedaban al lado del precio sino en un renglón
+                propio, y dejaban 56px de aire invisible entre los montos y el
+                desglose de pagos. El salto se resolvió mejor animando el alto
+                de la fila entera al cerrar (ver salirDeCobro), así que reservar
+                el espacio dejó de tener sentido. */}
+            {cobroItem !== it._id && (
+            <span className="fr-acts">
               <button className="lb-act" title="Fotos del trabajo" onClick={() => openModal('uploadPhotos', { patientId: id, treatmentItemId: it._id })}>
                 <span className="lb-act__ic" style={{ color: itemPhotos.length ? 'var(--brand-primary-600)' : undefined }}><Icon name="image" size={16} /></span>
                 <span className="lb-act__lbl">{itemPhotos.length ? `Fotos ${itemPhotos.length}` : 'Fotos'}</span>
@@ -2199,6 +2207,7 @@ export default function FichaRapidaPage() {
                 <span className="lb-act__lbl">Borrar</span>
               </button>
             </span>
+            )}
             </span>
             {/* El desglose de pagos, a lo ANCHO DE LA FILA.
                 Vivía adentro de la columna de la descripción, que comparte el

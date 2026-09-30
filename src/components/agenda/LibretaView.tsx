@@ -157,6 +157,7 @@ export function LibretaView({
   const quickRef = useRef<HTMLDivElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
   const trabRef = useRef<HTMLDivElement>(null);
+  const trabInputRef = useRef<HTMLInputElement>(null);
 
   // Cerrar popovers (horario / trabajo) al clickear afuera.
   useEffect(() => {
@@ -300,6 +301,22 @@ export function LibretaView({
     setPatientId(p._id);
     setPatientName(`${p.name} ${p.lastName}`);
     setSearchOpen(false);
+    /*
+     * Elegir un paciente que YA existe deja el cursor en Trabajo, y el onFocus
+     * de ese campo abre los chips solo. Encadena igual que la hora, que al
+     * elegirse abre el listado de pacientes: el turno se anota bajando por los
+     * tres campos sin volver a apuntar con el dedo.
+     *
+     * Solo por acá: crear una ficha nueva va por `abrirAlta`, que abre su
+     * propio formulario. Encadenar ahí taparia el alta con un panel.
+     *
+     * Mover el foco en vez de prender `trabOpen` a mano no es un rodeo: el
+     * campo ya sabe abrirse al recibirlo, y de paso el panel —que entra
+     * animado— arranca en el commit siguiente al de este cambio de estado, no
+     * encima. Un panel que nace en el frame mas ocupado se crea y no avanza
+     * hasta que el hilo se libera, y eso se ve como un tiron.
+     */
+    requestAnimationFrame(() => trabInputRef.current?.focus());
   };
 
   // Anti doble-submit: bloquea que dos llamadas casi simultáneas a anotar()
@@ -717,6 +734,7 @@ export function LibretaView({
               {/* Trabajo con solapa de chips (mismos que Ficha rápida) */}
               <div ref={trabRef} style={{ position: 'relative', flex: '1 1 180px', minWidth: 150 }}>
                 <input
+                  ref={trabInputRef}
                   className="input"
                   placeholder="Trabajo… ej: 1°V op o limp?"
                   value={trabajo}

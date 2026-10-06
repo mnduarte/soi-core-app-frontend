@@ -1978,7 +1978,13 @@ export default function FichaRapidaPage() {
                   la fila —allá el paciente, acá el trabajo— y tiene sentido que
                   los dos se lean con la misma voz. En sans quedaba al mismo
                   peso que la fecha y el precio, que son datos de apoyo. */}
-              <div className="fr-desc" style={{ color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>{it.description || '(sin nombre)'}</div>
+              {/* Sin tachado cuando está hecho. El tachado significa ANULADO,
+                  no terminado: en una lista de tareas se lee como listo, pero en
+                  una ficha donde al lado hay montos se lee como un trabajo que
+                  se descartó o que no se cobra. Lo dijo el odontólogo que la usa
+                  todos los días. La tilde de la izquierda y el sello HECHO ya lo
+                  dicen; el gris alcanza para mandarlo al fondo. */}
+              <div className="fr-desc" style={{ color: done ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>{it.description || '(sin nombre)'}</div>
               {/* Sin tag "por hacer": estos trabajos ya viven en la sección de
                   pendientes, arriba de "Hechos". Repetirlo ocupaba ancho (partía
                   descripciones largas al medio) y no aportaba nada. */}

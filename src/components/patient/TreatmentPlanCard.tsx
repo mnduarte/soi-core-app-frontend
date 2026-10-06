@@ -183,7 +183,9 @@ function PlanItemRow({
       >
         {item.toothNumber ?? '—'}
       </div>
-      <div style={{ fontWeight: 500, textDecoration: done ? 'line-through' : 'none' }}>
+      {/* Sin tachado cuando está hecho: significa anulado, no terminado.
+          Mismo criterio que en la ficha rápida. */}
+      <div style={{ fontWeight: 500 }}>
         {item.description}
       </div>
       <span

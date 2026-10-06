@@ -469,7 +469,10 @@ function DashboardAppointmentRow({
             style={{
               fontSize: 13.5,
               fontWeight: 500,
-              textDecoration: muted ? 'line-through' : 'none',
+              // Tachado solo si el turno se cayó (no asistió o se canceló),
+              // que es lo que el tachado significa. Atendido se apaga con la
+              // opacidad nomás: pasó, no se anuló.
+              textDecoration: voided ? 'line-through' : 'none',
               opacity: muted ? 0.6 : 1,
               whiteSpace: 'nowrap',
               overflow: 'hidden',

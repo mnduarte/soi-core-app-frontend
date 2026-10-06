@@ -62,6 +62,7 @@ export default function PatientsPage() {
     );
   };
   const [search, setSearch] = useState('');
+  const buscarRef = useRef<HTMLInputElement>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
@@ -146,12 +147,29 @@ export default function PatientsPage() {
         >
           <Icon name="search" size={14} style={{ color: 'var(--text-tertiary)' }} />
           <input
+            ref={buscarRef}
             placeholder={isMobile ? 'Buscar…' : 'Buscar por nombre, DNI, teléfono…'}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
           {/* Spinner dentro del buscador mientras se re-consulta */}
           {refreshing && <span className="spinner" style={{ width: 14, height: 14 }} />}
+          {/* Volver a la lista completa sin borrar letra por letra. Devuelve el
+              foco al campo: se limpia para buscar otra cosa, no para irse. */}
+          {!!search && (
+            <button
+              type="button"
+              className="lb-clear lb-clear--inline"
+              title="Limpiar la búsqueda"
+              aria-label="Limpiar la búsqueda"
+              onClick={() => {
+                setSearch('');
+                buscarRef.current?.focus();
+              }}
+            >
+              <Icon name="x" size={13} />
+            </button>
+          )}
         </div>
 
         <button

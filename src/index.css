@@ -2924,6 +2924,15 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .lb-clear::after { content: ''; position: absolute; inset: -11px; }
 }
 
+/* Dentro de un contenedor flex —el buscador de Pacientes— el botón es un hijo
+   más y no hace falta sacarlo del flujo: absoluto se montaría encima del texto
+   cuando la búsqueda es larga. */
+.lb-clear--inline {
+  position: static;
+  transform: none;
+  flex-shrink: 0;
+}
+
 /* El bloque grande de la tarjeta es además el camino a la agenda. Como botón,
    pero sin parecer uno: el dato tiene que seguir leyéndose primero. */
 .bt-next--go {

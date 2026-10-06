@@ -183,7 +183,12 @@ export function LibretaView({
    * Antes se creaba solo con el nombre, de un golpe. Era rápido, pero dejaba
    * fichas sin celular —sin recordatorio posible— y para completarlas había que
    * buscar la fila recién creada deslizando la lista. Ahora el formulario abre
-   * con el foco en el celular y Enter guarda: el apurado hace Enter, Enter.
+   * con el foco en el celular y Enter guarda.
+   *
+   * Guardar deja el paciente puesto en la fila y el foco en Trabajo; el turno
+   * se anota con el botón. Antes se agendaba en el mismo acto, pero así el
+   * turno quedaba sin trabajo y el camino no coincidía con el del paciente que
+   * ya existe, que sí para en Trabajo.
    */
   const [altaNombre, setAltaNombre] = useState<string | null>(null);
   const abrirAlta = (nombre: string) => {
@@ -1100,13 +1105,20 @@ export function LibretaView({
         <NewPatientModal
           open
           initialName={altaNombre}
-          createLabel="Crear y anotar turno"
+          createLabel="Crear ficha"
           onClose={() => setAltaNombre(null)}
           onCreated={patient => {
+            /*
+             * Crear la ficha NO anota el turno. Vuelve a la fila con el paciente
+             * puesto y el foco en Trabajo, igual que al elegir uno que ya
+             * existe: el turno se anota con el botón, como siempre.
+             *
+             * Antes agendaba de una. Era un paso menos, pero el turno salía sin
+             * trabajo —el campo quedaba atrás— y además los dos caminos no
+             * terminaban en el mismo lugar: con un paciente existente el foco
+             * iba a Trabajo, y con uno nuevo se salteaba ese paso.
+             */
             pickPatient(patient);
-            // id y nombre explícitos: el estado recién seteado por pickPatient
-            // todavía no llegó a este closure.
-            void anotar(patient._id, `${patient.name} ${patient.lastName}`);
           }}
         />
       )}

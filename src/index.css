@@ -332,6 +332,11 @@ a { color: inherit; text-decoration: none; }
   background: none;
   outline: none;
   flex: 1;
+  /* Un <input> trae un ancho mínimo propio (unos 20 caracteres) y `flex: 1` no
+     lo anula: se niega a achicarse y empuja fuera del recuadro a lo que tenga
+     al lado —la X de limpiar se salía y pisaba el chip siguiente—. Se nota al
+     angostar la ventana o con zoom. */
+  min-width: 0;
   font-size: 13px;
   color: var(--text-primary);
 }
@@ -1035,6 +1040,17 @@ table.tbl { width: 100%; border-collapse: collapse; }
 /* Celular: la fila deja solo Recordar + Más (el resto vive en el menú "Más") */
 @media (max-width: 767px) {
   .lb-act--hide-sm { display: none; }
+}
+
+/* En la tabla de Pacientes y pantalla angosta, los botones quedan solo con el
+   ícono. Ahí la fila tiene CUATRO acciones —se suma Recordar cuando se va la
+   columna de WhatsApp— y con la etiqueta debajo cada una pide 52px: la celda no
+   alcanza y el último botón quedaba cortado contra el borde. Sin etiqueta son
+   32px y entran los cuatro. El `title` de cada uno sigue diciendo qué hace.
+   Solo acá: en la agenda la fila es ancha y las etiquetas entran bien. */
+@media (max-width: 1199px) {
+  .tbl--fix .lb-act { min-width: 0; }
+  .tbl--fix .lb-act__lbl { display: none; }
 }
 /* Paciente sin celular: botón fantasma, nunca se oculta el slot */
 .lb-act--off .lb-act__ic { border-style: dashed; background: transparent; color: #C9BFA8; }

@@ -425,14 +425,19 @@ function TableView({
       <table className="tbl tbl--fix">
         {/* En porcentajes que suman 100. Con anchos en píxeles, todo el sobrante
             caía en la primera columna y "Paciente" se comía la pantalla. */}
+        {/* En compacto el reparto es otro: con 15% para Saldo la chapa
+            "Debe $40.000" no entraba y la celda la cortaba con puntos
+            suspensivos, y con 16% para las acciones el botón de Ficha quedaba
+            partido al medio. Las columnas de fecha son las que pueden ceder:
+            su contenido mide siempre lo mismo. */}
         <colgroup>
-          <col style={{ width: compact ? '34%' : '27%' }} />
-          <col style={{ width: compact ? '17%' : '13%' }} />
-          <col style={{ width: compact ? '18%' : '14%' }} />
+          <col style={{ width: compact ? '26%' : '27%' }} />
+          <col style={{ width: compact ? '16%' : '13%' }} />
+          <col style={{ width: compact ? '17%' : '14%' }} />
           {!compact && <col style={{ width: '9%' }} />}
-          <col style={{ width: compact ? '15%' : '12%' }} />
+          <col style={{ width: compact ? '18%' : '12%' }} />
           {!compact && <col style={{ width: '13%' }} />}
-          <col style={{ width: compact ? '16%' : '12%' }} />
+          <col style={{ width: compact ? '23%' : '12%' }} />
         </colgroup>
         <thead>
           <tr>
@@ -444,7 +449,11 @@ function TableView({
             {!compact && <th>Turnos</th>}
             <th>Saldo</th>
             {!compact && <th>WhatsApp</th>}
-            <th style={{ textAlign: 'right' }}></th>
+            {/* La columna de acciones tenia el encabezado vacio. Con nombre, el
+                ancho de la columna se entiende antes de pasar por encima de los
+                iconos — y en compacto, donde no tienen etiqueta, es lo unico que
+                dice que eso es una zona de botones. */}
+            <th style={{ textAlign: 'right' }}>Acciones</th>
           </tr>
         </thead>
         {/* SIN `key`. Ponerla remontaba las 379 filas de cero en cada cambio

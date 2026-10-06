@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isoAFecha, mascaraFecha, fechaAIso } from '../../lib/format';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { useAnchored } from '../../hooks/useAnchored';
@@ -7,6 +8,13 @@ interface DatePickerProps {
   value: string;            // YYYY-MM-DD
   onChange: (value: string) => void;
   placeholder?: string;
+  /*
+   * Deja escribir la fecha además de elegirla. Para un turno de esta semana
+   * elegir es más rápido; para una fecha de nacimiento es al revés —el paciente
+   * la dice en voz alta y se tipea—, y navegar hasta 1975 son varios toques
+   * aunque el calendario salte de año.
+   */
+  editable?: boolean;
 }
 
 const WEEKDAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
@@ -38,8 +46,23 @@ function formatDisplay(d: Date): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: DatePickerProps) {
+export function DatePicker({ value, onChange, placeholder = 'Elegir fecha', editable }: DatePickerProps) {
   const [open, setOpen] = useState(false);
+  /*
+   * Tres vistas en el mismo panel. Antes solo existían los días y se avanzaba
+   * de a un mes: para una fecha de nacimiento de 1975 eran más de 600 clics en
+   * la flecha. Tocando el título se sube a meses, y de ahí a años, así cualquier
+   * fecha queda a tres o cuatro toques.
+   */
+  const [vista, setVista] = useState<'dias' | 'meses' | 'anios'>('dias');
+  /*
+   * Lo tipeado. Arranca en null y recién ahí se usa: mientras tanto se muestra
+   * lo que viene por `value`. Así un valor que llega después de montar —la
+   * precarga de un paciente que se está editando— aparece solo, sin un efecto
+   * que lo sincronice.
+   */
+  const [tipeado, setTipeado] = useState<string | null>(null);
+  const [anioBase, setAnioBase] = useState(() => new Date().getFullYear() - 5);
   const ref = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   // Anclado con position:fixed: adentro de una lista con scroll un panel
@@ -97,6 +120,7 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
 
   const pick = (day: number) => {
     const next = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day);
+    setTipeado(null);
     onChange(toISO(next));
     setOpen(false);
   };
@@ -104,15 +128,71 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
   const jumpToday = () => {
     const t = new Date();
     setViewMonth(new Date(t.getFullYear(), t.getMonth(), 1));
+    setVista('dias');
+    setTipeado(null);
     onChange(toISO(t));
     setOpen(false);
   };
 
+  // Las flechas mueven lo que la vista esté mostrando.
+  const retroceder = () =>
+    vista === 'dias' ? shiftMonth(-1)
+      : vista === 'meses' ? setViewMonth(new Date(viewMonth.getFullYear() - 1, viewMonth.getMonth(), 1))
+      : setAnioBase(a => a - 12);
+  const avanzar = () =>
+    vista === 'dias' ? shiftMonth(1)
+      : vista === 'meses' ? setViewMonth(new Date(viewMonth.getFullYear() + 1, viewMonth.getMonth(), 1))
+      : setAnioBase(a => a + 12);
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
+      {/* Abrir siempre muestra los días: la navegación por mes y año está para
+          cuando hace falta, no es el punto de partida. Se resetea acá y no en un
+          efecto, que dispararía un render de más. */}
+      {editable ? (
+        <div
+          className="input"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, paddingLeft: 10 }}
+        >
+          <input
+            inputMode="numeric"
+            placeholder={placeholder}
+            maxLength={10}
+            value={tipeado ?? isoAFecha(value)}
+            onChange={e => {
+              const t = mascaraFecha(e.target.value);
+              setTipeado(t);
+              const iso = fechaAIso(t);
+              // Solo se avisa cuando la fecha está completa y es de verdad, o
+              // cuando se borró todo. A medio escribir no hay nada que informar.
+              if (iso) onChange(iso);
+              else if (!t) onChange('');
+            }}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              font: 'inherit',
+              fontSize: 13,
+              color: 'var(--text-primary)',
+              padding: 0,
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn--ghost btn--icon"
+            title="Elegir del calendario"
+            onClick={() => { setVista('dias'); setOpen(o => !o); }}
+          >
+            <Icon name="calendar" size={14} />
+          </button>
+        </div>
+      ) : (
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { setVista('dias'); setOpen(o => !o); }}
         className="input"
         style={{
           display: 'flex',
@@ -135,6 +215,7 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
         </span>
         <Icon name="chevronDown" size={12} style={{ color: 'var(--text-tertiary)' }} />
       </button>
+      )}
 
       {/* En <body>: dentro de un modal (que tiene transform por su animacion)
           position:fixed se ancla al modal y el calendario terminaba lejos del
@@ -161,17 +242,35 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
               marginBottom: 8,
             }}
           >
-            <button type="button" className="btn btn--ghost btn--icon" onClick={() => shiftMonth(-1)}>
+            <button type="button" className="btn btn--ghost btn--icon" onClick={retroceder}>
               <Icon name="chevronLeft" />
             </button>
-            <div style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>
-              {MONTHS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
-            </div>
-            <button type="button" className="btn btn--ghost btn--icon" onClick={() => shiftMonth(1)}>
+            {/* El título sube de nivel: días → meses → años. Se ve que es
+                tocable porque cambia de fondo al pasar por encima; un ícono al
+                lado competiría con las dos flechas que ya están. */}
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => {
+                if (vista === 'dias') setVista('meses');
+                else if (vista === 'meses') {
+                  setAnioBase(viewMonth.getFullYear() - 5);
+                  setVista('anios');
+                }
+              }}
+              style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}
+            >
+              {vista === 'dias' && `${MONTHS[viewMonth.getMonth()]} ${viewMonth.getFullYear()}`}
+              {vista === 'meses' && viewMonth.getFullYear()}
+              {vista === 'anios' && `${anioBase} – ${anioBase + 11}`}
+            </button>
+            <button type="button" className="btn btn--ghost btn--icon" onClick={avanzar}>
               <Icon name="chevronRight" />
             </button>
           </div>
 
+          {vista === 'dias' && (
+          <>
           <div
             style={{
               display: 'grid',
@@ -234,6 +333,64 @@ export function DatePicker({ value, onChange, placeholder = 'Elegir fecha' }: Da
               );
             })}
           </div>
+          </>
+          )}
+
+          {vista === 'meses' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+              {MONTHS.map((nombre, i) => {
+                const activo = i === viewMonth.getMonth();
+                return (
+                  <button
+                    key={nombre}
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => {
+                      setViewMonth(new Date(viewMonth.getFullYear(), i, 1));
+                      setVista('dias');
+                    }}
+                    style={{
+                      height: 38,
+                      fontSize: 12.5,
+                      fontWeight: activo ? 600 : 500,
+                      background: activo ? 'var(--brand-primary)' : undefined,
+                      color: activo ? 'white' : undefined,
+                    }}
+                  >
+                    {nombre.slice(0, 3)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {vista === 'anios' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+              {Array.from({ length: 12 }, (_, i) => anioBase + i).map(anio => {
+                const activo = anio === viewMonth.getFullYear();
+                return (
+                  <button
+                    key={anio}
+                    type="button"
+                    className="btn btn--ghost btn--sm mono"
+                    onClick={() => {
+                      setViewMonth(new Date(anio, viewMonth.getMonth(), 1));
+                      setVista('meses');
+                    }}
+                    style={{
+                      height: 38,
+                      fontSize: 12.5,
+                      fontWeight: activo ? 600 : 500,
+                      background: activo ? 'var(--brand-primary)' : undefined,
+                      color: activo ? 'white' : undefined,
+                    }}
+                  >
+                    {anio}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div
             style={{

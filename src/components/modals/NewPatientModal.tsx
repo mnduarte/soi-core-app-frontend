@@ -6,6 +6,7 @@ import { SectionLabel } from '../common/Toggle';
 import { Icon } from '../common/Icon';
 import { patientsApi, type Patient, type ScanFichaResult } from '../../api/patients';
 import { patientAge } from '../../lib/format';
+import { DatePicker } from '../common/DatePicker';
 import { whatsAppPreview } from '../../lib/phone';
 import { splitName } from '../../lib/name';
 import { useUIStore } from '../../store/ui.store';
@@ -38,6 +39,8 @@ const ALLERGY_OPTIONS = ['Penicilina', 'Látex', 'Anestésicos', 'Aspirina', 'Ot
 interface FormState {
   fullName: string;
   age: string;
+  /** YYYY-MM-DD. El campo deja escribirla o elegirla del calendario. */
+  birthDate: string;
   dni: string;
   phone: string;
   email: string;
@@ -52,6 +55,7 @@ interface FormState {
 const EMPTY: FormState = {
   fullName: '',
   age: '',
+  birthDate: '',
   dni: '',
   phone: '',
   email: '',
@@ -197,10 +201,11 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
   // Precarga del paciente a editar.
   useEffect(() => {
     if (open && editing && editPatient) {
-      const age = patientAge(editPatient);
+      const age = editPatient.age ?? patientAge(editPatient);
       setData({
         fullName: `${editPatient.name} ${editPatient.lastName ?? ''}`.trim(),
         age: age != null ? String(age) : '',
+        birthDate: editPatient.birthDate ? editPatient.birthDate.slice(0, 10) : '',
         dni: editPatient.dni ?? '',
         phone: editPatient.phone ?? '',
         email: editPatient.email ?? '',
@@ -226,13 +231,15 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
       const { data: b64, mediaType } = await fileToScaledBase64(file);
       const res = await patientsApi.scanFicha(b64, mediaType);
       const ex = res.extracted;
-      // La ficha vieja puede traer la edad escrita o la fecha de nacimiento; si
-      // viene la fecha la convertimos a edad para precargar el campo.
-      const scannedAge = ex.age ?? (ex.birthDate ? computeAge(ex.birthDate)?.toString() : undefined);
+      // La ficha vieja puede traer la edad escrita o la fecha de nacimiento. Si
+      // viene la fecha la guardamos como fecha: antes se convertía a edad y se
+      // descartaba, o sea que se tiraba el dato bueno que el papel acababa de
+      // dar y quedaba un número que envejecía solo.
       setData(d => ({
         ...d,
         fullName: [ex.name, ex.lastName].filter(Boolean).join(' ') || d.fullName,
-        age: scannedAge ?? d.age,
+        age: ex.age ?? d.age,
+        birthDate: ex.birthDate ? ex.birthDate.slice(0, 10) : d.birthDate,
         dni: ex.dni ?? d.dni,
         phone: ex.phone ?? d.phone,
         email: ex.email ?? d.email,
@@ -301,7 +308,12 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
     locality: data.locality.trim() || undefined,
     obraSocial: data.obraSocial || undefined,
     nAfiliado: data.nAfiliado.trim() || undefined,
-    age: data.age.trim() ? Number(data.age) : undefined,
+    // Con fecha cargada, la edad que se guarda es la calculada: así, si algún
+    // día se borra la fecha, queda un número razonable y no uno de hace años.
+    age: data.birthDate
+      ? (computeAge(data.birthDate) ?? undefined)
+      : (data.age.trim() ? Number(data.age) : undefined),
+    birthDate: data.birthDate || undefined,
     dni: data.dni.trim() || undefined,
     address: data.address.trim() || undefined,
     // Sin la clave, no `undefined`: el Asistente no ve los antecedentes, así
@@ -546,7 +558,20 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
         </FormField>
       </div>
       <div className="form-row form-row--3">
-        <FormField label="Edad" hint="años">
+        {/*
+          * Dos formas de cargar lo mismo, en una sola celda: se tipea la edad
+          * (lo que hace el 95% de las veces, dos teclas y sigue) o se pone la
+          * fecha y la edad se calcula sola, para siempre.
+          *
+          * Con fecha, el campo de edad pasa a mostrar el número derivado y se
+          * bloquea. Dejarlo editable invitaría a escribir un número que la
+          * fecha le va a ganar igual, y eso se lee como que la app ignora lo
+          * que uno escribe.
+          */}
+        <FormField
+          label="Edad"
+          hint={data.birthDate ? 'se calcula de la fecha' : 'años'}
+        >
           <input
             className="input"
             type="number"
@@ -554,12 +579,26 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
             min={0}
             max={130}
             placeholder="35"
-            value={data.age}
+            disabled={!!data.birthDate}
+            value={data.birthDate ? (computeAge(data.birthDate)?.toString() ?? '') : data.age}
             onChange={e => upd('age', e.target.value)}
           />
         </FormField>
+        <FormField label="Fecha de nacimiento" hint="la edad se actualiza sola">
+          <DatePicker
+            editable
+            placeholder="dd/mm/aaaa"
+            value={data.birthDate}
+            onChange={v => upd('birthDate', v)}
+          />
+        </FormField>
+        {/* Dos renglones reservados: la pista cambia al escribir —de la
+            explicación al número ya normalizado— y los dos textos no miden lo
+            mismo. Sin reservar, el campo se achicaba y subía todo lo de abajo
+            justo mientras se tipea. */}
         <FormField
           label="Celular (WhatsApp)"
+          hintLines={2}
           hint={data.phone.trim() ? `WhatsApp: ${whatsAppPreview(data.phone)}` : 'Con este número se manda el recordatorio'}
         >
           <input
@@ -570,6 +609,8 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
             onChange={e => upd('phone', e.target.value)}
           />
         </FormField>
+      </div>
+      <div className="form-row form-row--3">
         <FormField label="Email">
           <input
             className="input"
@@ -579,8 +620,6 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
             onChange={e => upd('email', e.target.value)}
           />
         </FormField>
-      </div>
-      <div className="form-row form-row--2">
         <FormField label="DNI">
           <input
             className="input"

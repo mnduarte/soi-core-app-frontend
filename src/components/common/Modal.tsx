@@ -45,14 +45,33 @@ interface FormFieldProps {
   hint?: string;
   children: ReactNode;
   span?: number;
+  /*
+   * Renglones a reservar para la pista, cuando el texto CAMBIA mientras se usa
+   * el campo. Sin esto, una pista de dos renglones que pasa a uno achica el
+   * campo y empuja hacia arriba todo lo que tiene debajo, con el cursor adentro.
+   * Un mínimo no alcanza: hay que abrir con el tamaño final.
+   */
+  hintLines?: number;
 }
 
-export function FormField({ label, hint, children, span }: FormFieldProps) {
+export function FormField({ label, hint, children, span, hintLines }: FormFieldProps) {
   return (
     <div className="field-group" style={span ? { gridColumn: `span ${span}` } : undefined}>
       <label className="field-label">{label}</label>
       {children}
-      {hint && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>{hint}</div>}
+      {(hint || hintLines) && (
+        <div
+          style={{
+            fontSize: 11,
+            lineHeight: '14px',
+            color: 'var(--text-tertiary)',
+            marginTop: 4,
+            ...(hintLines ? { height: hintLines * 14 } : null),
+          }}
+        >
+          {hint}
+        </div>
+      )}
     </div>
   );
 }

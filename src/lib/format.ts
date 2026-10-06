@@ -19,6 +19,48 @@ export const avatarColorFromId = (id: string): string => {
   return AVATAR_COLORS[(h >>> 0) % AVATAR_COLORS.length];
 };
 
+/*
+ * Fecha de nacimiento como texto: se escribe, no se elige.
+ *
+ * Un calendario sirve para fechas cerca de hoy —un turno, un pago—. Para una
+ * fecha de nacimiento es al revés: el paciente la dice en voz alta y hay que
+ * tipearla. El calendario de la agenda, además, solo avanza de a un mes, así
+ * que llegar a 1975 serían más de 600 clics.
+ */
+
+/** 'YYYY-MM-DD' → 'dd/mm/aaaa' (vacío si no hay nada). */
+export const isoAFecha = (iso?: string | null): string => {
+  if (!iso) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return y && m && d ? `${d}/${m}/${y}` : '';
+};
+
+/** Va poniendo las barras mientras se escribe. */
+export const mascaraFecha = (txt: string): string => {
+  const n = txt.replace(/\D/g, '').slice(0, 8);
+  if (n.length <= 2) return n;
+  if (n.length <= 4) return `${n.slice(0, 2)}/${n.slice(2)}`;
+  return `${n.slice(0, 2)}/${n.slice(2, 4)}/${n.slice(4)}`;
+};
+
+/**
+ * 'dd/mm/aaaa' → 'YYYY-MM-DD', o '' si todavía no es una fecha de verdad.
+ *
+ * Verifica que el día exista (31/02 no) y que no sea futura: una fecha de
+ * nacimiento que todavía no pasó es siempre un error de tipeo.
+ */
+export const fechaAIso = (txt: string): string => {
+  const n = txt.replace(/\D/g, '');
+  if (n.length !== 8) return '';
+  const d = Number(n.slice(0, 2));
+  const m = Number(n.slice(2, 4));
+  const y = Number(n.slice(4));
+  if (m < 1 || m > 12 || d < 1 || y < 1900) return '';
+  const f = new Date(y, m - 1, d);
+  if (f.getDate() !== d || f.getMonth() !== m - 1 || f > new Date()) return '';
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+};
+
 export const ageFromBirthDate = (birthDate?: string): number | null => {
   if (!birthDate) return null;
   const b = new Date(birthDate);
@@ -30,10 +72,19 @@ export const ageFromBirthDate = (birthDate?: string): number | null => {
   return age;
 };
 
-// Edad a mostrar: usa el campo `age` (lo carga el doctor a mano) y, para fichas
-// viejas sin ese dato, la deriva de `birthDate`.
+/*
+ * Edad a mostrar. Gana la FECHA de nacimiento, no el campo `age`.
+ *
+ * `age` es una foto que alguien sacó una vez: el paciente cumple años y el
+ * número se queda viejo sin que nadie se entere. Para un adulto da igual; para
+ * un chico en ortodoncia no. La fecha, en cambio, es un hecho, y la edad que
+ * sale de ella siempre está bien.
+ *
+ * `age` queda como respaldo para las fichas donde solo se tipeó la edad, que
+ * hoy son la mayoría de las que tienen el dato.
+ */
 export const patientAge = (p: { age?: number | null; birthDate?: string }): number | null =>
-  p.age != null ? p.age : ageFromBirthDate(p.birthDate);
+  p.birthDate ? ageFromBirthDate(p.birthDate) : (p.age ?? null);
 
 // Prefixes a name with its honorific. DR → "Dr. X", DRA → "Dra. X",
 // NONE/null/undefined (assistant) → just the name.

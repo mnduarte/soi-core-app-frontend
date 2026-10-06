@@ -8,7 +8,8 @@ import { NewClinicalEntryModal } from '../components/patient/NewClinicalEntryMod
 import { AddChargeModal } from '../components/patient/AddChargeModal';
 import { WhatsAppReminderModal } from '../components/patient/WhatsAppReminderModal';
 import { transactionsApi } from '../api/transactions';
-import { patientAge, fmtMoney } from '../lib/format';
+import { patientAge, ageFromBirthDate, fmtMoney } from '../lib/format';
+import { DatePicker } from '../components/common/DatePicker';
 import { splitName } from '../lib/name';
 import { useUIStore } from '../store/ui.store';
 import { Icon } from '../components/common/Icon';
@@ -507,13 +508,18 @@ function PagosTab({ patient }: { patient: Patient }) {
 // ===========================================================
 // DATOS
 // ===========================================================
+// La edad que sale de una fecha. Es `ageFromBirthDate` de lib/format, que ya
+// contempla si el cumpleaños de este año pasó o no.
+const edadDeFecha = (iso: string) => ageFromBirthDate(iso);
+
 function DatosTab({ patient }: { patient: Patient }) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(() => ({
     fullName: `${patient.name} ${patient.lastName ?? ''}`.trim(),
-    age: patientAge(patient) != null ? String(patientAge(patient)) : '',
+    age: patient.age != null ? String(patient.age) : '',
+    birthDate: patient.birthDate ? patient.birthDate.slice(0, 10) : '',
     dni: patient.dni ?? '',
     phone: patient.phone ?? '',
     email: patient.email ?? '',
@@ -528,7 +534,10 @@ function DatosTab({ patient }: { patient: Patient }) {
     mutationFn: () =>
       patientsApi.update(patient._id, {
         ...splitName(form.fullName),
-        age: form.age.trim() ? Number(form.age) : undefined,
+        age: form.birthDate
+          ? (edadDeFecha(form.birthDate) ?? undefined)
+          : (form.age.trim() ? Number(form.age) : undefined),
+        birthDate: form.birthDate || undefined,
         dni: form.dni.trim() || undefined,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
@@ -551,7 +560,9 @@ function DatosTab({ patient }: { patient: Patient }) {
   });
 
   const age = editing
-    ? (form.age.trim() ? Number(form.age) : null)
+    ? (form.birthDate
+        ? edadDeFecha(form.birthDate)
+        : (form.age.trim() ? Number(form.age) : null))
     : patientAge(patient);
 
   if (editing) {
@@ -565,7 +576,10 @@ function DatosTab({ patient }: { patient: Patient }) {
             <EditField label="Nombre y apellido">
               <input className="input" value={form.fullName} onChange={e => set('fullName', e.target.value)} />
             </EditField>
-            <EditField label="Edad" hint="años">
+            {/* Edad a mano, o fecha de nacimiento y se calcula sola. Con fecha
+                cargada el número se deriva y el campo se bloquea: ver el mismo
+                criterio en NewPatientModal. */}
+            <EditField label="Edad" hint={form.birthDate ? 'se calcula de la fecha' : 'años'}>
               <input
                 className="input"
                 type="number"
@@ -573,8 +587,17 @@ function DatosTab({ patient }: { patient: Patient }) {
                 min={0}
                 max={130}
                 placeholder="35"
-                value={form.age}
+                disabled={!!form.birthDate}
+                value={form.birthDate ? (edadDeFecha(form.birthDate)?.toString() ?? '') : form.age}
                 onChange={e => set('age', e.target.value)}
+              />
+            </EditField>
+            <EditField label="Fecha de nacimiento" hint="la edad se actualiza sola">
+              <DatePicker
+                editable
+                placeholder="dd/mm/aaaa"
+                value={form.birthDate}
+                onChange={v => set('birthDate', v)}
               />
             </EditField>
             <EditField label="DNI">

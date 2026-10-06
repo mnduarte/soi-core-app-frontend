@@ -854,8 +854,12 @@ table.tbl { width: 100%; border-collapse: collapse; }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
 .form-row { display: grid; gap: 14px; margin-bottom: 14px; }
-.form-row--2 { grid-template-columns: 1fr 1fr; }
-.form-row--3 { grid-template-columns: 1fr 1fr 1fr; }
+/* minmax(0,…) y no 1fr a secas: una celda de grid arranca con min-width:auto
+   ("nunca mas angosta que mi contenido"), asi que un campo con algo ancho
+   adentro ensancha su columna y aprieta a las de al lado — las etiquetas de las
+   otras se parten en dos renglones y los campos dejan de estar alineados. */
+.form-row--2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.form-row--3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); }
 .field-group { display: flex; flex-direction: column; }
 
 .seg {

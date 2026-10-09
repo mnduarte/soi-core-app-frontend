@@ -101,6 +101,21 @@ export function useFlip(
       for (const n of el.querySelectorAll<HTMLElement>('[data-flip]')) {
         prev.current.set(n.dataset.flip as string, n.offsetTop);
       }
+      // Acá YA medimos, y hay que anotarlo. Si no, el PRÓXIMO cambio entra con
+      // `medido` todavía en false, se toma por el primer render y se va sin
+      // animar.
+      //
+      // Esta rama no corre solo al montar: corre cada vez que el contenedor es
+      // otro nodo, o sea también al cambiar de día y al pasar de esqueleto a
+      // datos (la lista lleva una `key` que incluye las dos cosas). Así que lo
+      // que se perdía era la primera animación DESPUÉS DE CADA REMONTE — el
+      // primer sobreturno del día recién abierto aparecía de golpe y el
+      // siguiente ya se movía bien.
+      //
+      // En desarrollo no se ve: StrictMode corre el efecto dos veces al montar
+      // y la segunda vuelta consumía la guarda sola. Era un bug exclusivo del
+      // build de producción.
+      medido.current = true;
       return;
     }
 

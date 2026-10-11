@@ -9,7 +9,8 @@ export type IconName =
   | 'arrowRight' | 'arrowLeft' | 'arrowUp' | 'arrowDown'
   | 'sparkles' | 'cash' | 'alert' | 'menu' | 'grid' | 'list' | 'layers'
   | 'history' | 'link' | 'star' | 'send' | 'zap' | 'flame'
-  | 'sun' | 'moon' | 'smartphone' | 'clipboard' | 'undo' | 'eye' | 'eyeOff' | 'help';
+  | 'sun' | 'moon' | 'smartphone' | 'clipboard' | 'undo' | 'eye' | 'eyeOff' | 'help'
+  | 'mic';
 
 const ICONS: Record<IconName, ReactNode> = {
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></>,
@@ -64,6 +65,7 @@ const ICONS: Record<IconName, ReactNode> = {
   smartphone: <><rect x="6" y="2" width="12" height="20" rx="2" /><path d="M11 18h2" /></>,
   clipboard: <><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" /><path d="M9 12h6M9 16h4" /></>,
   undo: <><path d="M3 7v6h6" /><path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7" /></>,
+  mic: <><rect x="9" y="2" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></>,
 };
 
 // ============================================================

@@ -15,6 +15,7 @@ interface UploadPhotosModalProps {
   transactionId?: string;
   // Si viene, las fotos quedan vinculadas a ese trabajo (item del plan).
   treatmentItemId?: string;
+  clinicalEntryId?: string;
   // Se llama con las fotos subidas (para vincularlas luego desde el formulario).
   onUploaded?: (
     refs: { sessionId: string; photoId: string; url: string; type?: string; title?: string; description?: string }[],
@@ -45,6 +46,7 @@ export function UploadPhotosModal({
   defaultPatientId,
   transactionId,
   treatmentItemId,
+  clinicalEntryId,
   onUploaded,
 }: UploadPhotosModalProps) {
   const qc = useQueryClient();
@@ -121,7 +123,9 @@ export function UploadPhotosModal({
           title.trim() ||
           (treatmentItemId
             ? 'Foto del trabajo'
-            : transactionId
+            : clinicalEntryId
+              ? 'Foto de la evolución'
+              : transactionId
               ? 'Foto de movimiento'
               : category || 'Fotos'),
         notes: notes.trim() || undefined,
@@ -151,6 +155,7 @@ export function UploadPhotosModal({
             type: category || undefined,
             transactionId,
             treatmentItemId,
+            clinicalEntryId,
           });
           const newPhoto = updated.photos.find(p => p.publicId === result.public_id);
           if (newPhoto)

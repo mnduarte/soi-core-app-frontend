@@ -28,6 +28,14 @@ const router = createBrowserRouter([
     lazy: () => import('./pages/AcceptInvitationPage').then(m => ({ Component: m.default })),
   },
   {
+    // Fuera del AppLayout a propósito: en modo firma la tablet se la queda el
+    // paciente, así que no puede haber sidebar ni forma de llegar a la ficha
+    // de nadie. Salir sin firmar pide la contraseña del profesional.
+    path: '/firmar/:patientId/:id',
+    loader: requireClinico,
+    lazy: () => import('./pages/FirmarConsentimientoPage').then(m => ({ Component: m.default })),
+  },
+  {
     path: '/',
     loader: requireAuth,
     lazy: () => import('./components/layout/AppLayout').then(m => ({ Component: m.default })),

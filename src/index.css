@@ -83,6 +83,21 @@
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --font-display: "Newsreader", Georgia, serif;
 
+  /* Acento de las hojas nuevas de la ficha (Evolución, y después
+     Consentimientos).
+     Todo sale de --brand-primary, que NO es fijo: lib/brand.ts lo pisa en
+     runtime con el color de marca de cada consultorio (el que elige el
+     super-admin en el backoffice). Por eso acá no puede ir ningún violeta ni
+     ningún azul escrito a mano — el handoff de diseño traía #7C4DDB porque
+     ese es el color de UN consultorio, no del producto. Con estos cuatro
+     tokens la hoja se pinta sola con la marca de quien esté logueado. */
+  --fr-accent: var(--brand-primary);
+  --fr-accent-soft: var(--brand-primary-50);
+  --fr-accent-pill: var(--brand-primary-100);
+  /* -100 (16% de opacidad) es demasiado tenue para un borde, así que se mezcla
+     contra la hoja en vez de usar un hex suelto que no seguiría a la marca. */
+  --fr-accent-border: color-mix(in srgb, var(--brand-primary) 38%, var(--bg-surface));
+
   /* Densidad */
   --row-height: 44px;
   --input-height: 40px;
@@ -446,6 +461,35 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 720px) {
   /* En pantallas chicas el header de la card apila título y acciones. */
   .card__header { flex-wrap: wrap; }
+}
+
+/* Encabezado con pestañas en celular.
+   Al envolver, las pestañas dejan de estar contra el borde inferior del
+   header, así que el -13px que alineaba el subrayado con ese borde lo metía
+   dentro del renglón de los chips. Acá las pestañas pasan a ser una tira
+   propia a todo el ancho de la tarjeta, con su propia línea, y los chips
+   bajan abajo con aire. */
+@media (max-width: 720px) {
+  /* Sin sangrado a los bordes: la tarjeta de la ficha lleva
+     `overflow: visible`, así que nada recorta la tira y el subrayado se
+     pasaba del borde redondeado. Queda dentro del padding del header. */
+  .fr-tabs {
+    width: 100%;
+    margin: -12px 0 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .fr-tab {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    gap: 5px;
+    padding: 12px 6px 11px;
+    font-size: 13px;
+  }
+  /* Con tres pestañas y poco ancho, el número compite con el nombre y el
+     nombre importa más. La píldora se achica en vez de robarle letras. */
+  .fr-tab__n { font-size: 10px; padding: 1px 5px; }
+  .card__header:has(.fr-tabs) .fr-filtros { margin-top: 10px; }
 }
 .card__body { padding: 20px; }
 
@@ -1617,6 +1661,17 @@ table.tbl { width: 100%; border-collapse: collapse; }
   border-top: 0;
   padding-top: 10px;
   padding-bottom: 10px;
+}
+
+/* Celular: la barra de estado se achica para dejarle lugar a las tres hojas
+   de abajo. Se achican LOS DOS estados por igual, no solo "Al día": el
+   min-height de arriba está puesto justamente para que cobrar el último
+   trabajo no mueva la página, y bajarlo solo en un estado devolvería ese
+   salto en cada cobro que salda la cuenta. */
+@media (max-width: 767px) {
+  .lb-estado { min-height: 38px; padding: 7px 14px; font-size: 14px; gap: 8px; }
+  .lb-estado--anexo { padding-top: 6px; padding-bottom: 6px; }
+  .lb-estado__monto { font-size: 17px; }
 }
 
 @media (max-width: 767px) {
@@ -3269,11 +3324,18 @@ table.tbl { width: 100%; border-collapse: collapse; }
 
 /* Mientras el panel está abierto el botón queda marcado: si no, nada dice de
    dónde salió el bloque que apareció abajo. */
+/* Acciones del encabezado del paciente, en el mismo tono discreto que el pie
+   del panel de datos: son atajos a otras vistas, no la tarea de la pantalla.
+   Lo que importa acá es el nombre del paciente y cuánto falta cobrar. */
+.fr-headbtn { color: var(--text-tertiary); }
+.fr-headbtn:hover:not(:disabled) { color: var(--text-primary); }
+/* Sin borde que lo marque, el estado activo se lee por el fondo teñido y el
+   color de marca, que alcanza de sobra. */
 .fr-infobtn.is-on {
   background: var(--brand-primary-50);
-  border-color: var(--brand-primary-100);
   color: var(--brand-primary-600);
 }
+.fr-infobtn.is-on:hover:not(:disabled) { color: var(--brand-primary-600); }
 
 @keyframes fr-info-entra {
   from { opacity: 0; }
@@ -3336,11 +3398,19 @@ table.tbl { width: 100%; border-collapse: collapse; }
    datos que vino a acompañar. */
 .fr-info__pie {
   display: flex;
+  align-items: center;
+  gap: 8px;
   justify-content: flex-end;
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--border-subtle);
 }
+/* Las dos acciones del pie, en gris suave. El empuje va por posición y no
+   por clase, así cambiarlas de orden no obliga a tocar el CSS. */
+.fr-info__acc { color: var(--text-tertiary); }
+.fr-info__pie > :first-child { margin-right: auto; }
+/* El chevron apunta hacia arriba: es lo que va a pasar, el panel se pliega. */
+.fr-info__cerrar svg { transform: rotate(180deg); }
 /* Más bajo que un botón normal: al lado de una lista para leer, un botón de
    38px de alto pesa más que todo lo que hay arriba. */
 .fr-info__pie .btn { height: 30px; font-size: 12.5px; padding: 0 12px; }
@@ -4075,4 +4145,768 @@ table.tbl { width: 100%; border-collapse: collapse; }
   font-weight: 600;
   color: var(--info);
   white-space: nowrap;
+}
+
+
+/* ============================================================
+   Ficha clínica — pestañas de la hoja y hoja "Evolución"
+   ============================================================ */
+
+/* Las pestañas se comen el padding vertical del .card__header para que el
+   subrayado de la activa caiga exactamente sobre el borde inferior del
+   header, y no flotando encima. El -13px es padding (12) + borde (1). */
+.fr-tabs { display: flex; gap: 4px; flex-shrink: 0; margin: -12px 0 -13px; }
+.fr-tab {
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 12px 14px 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.fr-tab:hover { color: var(--text-secondary); }
+.fr-tab.is-active { color: var(--fr-accent); border-bottom-color: var(--fr-accent); }
+.fr-tab.is-active:hover { color: var(--fr-accent); }
+/* Las dos cajas con alto propio y centrado real. Sin esto el texto suelto
+   aportaba su alto de línea (con el espacio de las descendentes) y la
+   píldora quedaba centrada contra esa caja: visualmente, baja. */
+/* min-width:0 + ellipsis: sin esto el item de flex no baja de su contenido
+   y con tres pestañas la última se iba del borde de la tarjeta. */
+.fr-tab__lbl { line-height: 1.15; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fr-tab__n {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+.fr-tab.is-active .fr-tab__n { color: var(--fr-accent); background: var(--fr-accent-pill); }
+
+/* Las pestañas se quedan arriba al scrollear.
+   En celular scrollea la página entera (y así tiene que seguir: dos barras
+   bajo el mismo dedo es peor que cualquier cosa que esto resuelva), pero en
+   una lista larga quedaba el problema de tener que volver hasta arriba del
+   todo para cambiar de hoja. Pegar SOLO la tira —no la tarjeta del paciente,
+   no el estado— cuesta nada y no le come alto a la lista. */
+@media (max-width: 720px) {
+  /* Se pega el HEADER, no la tira: sticky solo funciona dentro de los límites
+     de su contenedor, y las pestañas viven adentro del header, que mide unos
+     90px — se habrían despegado a los dos dedos de scroll. El header, en
+     cambio, está dentro de la tarjeta, que es alta. Van juntos las pestañas y
+     los chips de filtro, que es correcto: los dos controlan la lista. */
+  .card__header:has(.fr-tabs) {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--bg-surface);
+  }
+}
+
+/* El header del odontograma no envuelve: el título se achica y las acciones
+   se quedan en su esquina. En angosto, solo íconos. */
+.odo-acts { flex-wrap: nowrap; }
+@media (max-width: 720px) {
+  .odo-acts__lbl { display: none; }
+}
+
+/* ---- pantalla de firma (modo bloqueado) ---- */
+
+/* Alto FIJO, no mínimo: la pantalla no scrollea, scrollea el texto adentro
+   de su caja. Es lo que permite saber si el paciente llegó al final — con la
+   página scrolleando, la caja crece con el contenido, nunca hay scroll
+   interno y el candado de "leé hasta el final" se abre solo. */
+.fi { height: 100vh; overflow: hidden; background: var(--bg-app); display: flex; flex-direction: column; }
+.fi-cargando {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  color: var(--text-secondary); font-size: 15px;
+}
+.fi-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+}
+.fi-head b { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+.fi-head small { display: block; font-size: 12px; color: var(--text-tertiary); }
+.fi-soy {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+  background: var(--bg-surface); color: var(--text-secondary);
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+
+.fi-cols {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 20px;
+  padding: 20px; max-width: 1200px; width: 100%; margin: 0 auto;
+}
+@media (max-width: 900px) {
+  /* Apilado: acá sí scrollea la columna entera, pero el texto conserva su
+     propia caja con alto acotado para no perder el scroll interno. */
+  .fi-cols { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .fi-texto { height: 46vh; flex: none; }
+}
+.fi-texto-col { display: flex; flex-direction: column; min-height: 0; }
+.fi-texto-col h1 { font-family: var(--font-display); font-size: 26px; font-weight: 600; }
+.fi-sub { margin: 2px 0 12px; font-size: 13.5px; color: var(--text-tertiary); }
+/* El texto scrollea en su propia caja y no con la página: así se puede saber
+   si el paciente llegó al final, que es lo que habilita el botón. */
+.fi-texto {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 18px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default); border-radius: var(--radius-lg);
+  font-family: var(--font-display); font-size: 16px; line-height: 1.6;
+  color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.fi-desliza { margin-top: 8px; text-align: center; font-size: 12.5px; color: var(--text-tertiary); }
+
+.fi-form {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default); border-radius: var(--radius-lg);
+  align-self: start;
+}
+.fi-campo { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-label); }
+.fi-campo input {
+  min-height: 46px; padding: 0 12px;
+  border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-sans); font-size: 16px; font-weight: 400;
+  letter-spacing: 0; text-transform: none; color: var(--text-primary);
+}
+.fi-campo input[readonly] { background: var(--bg-muted); color: var(--text-secondary); }
+.fi-campo input.mono { font-family: var(--font-mono); }
+.fi-check { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; font-size: 14px; line-height: 1.45; color: var(--text-primary); cursor: pointer; }
+.fi-check input { width: 22px; height: 22px; flex-shrink: 0; margin-top: 1px; }
+
+.fi-pad { position: relative; }
+.fi-pad__tit { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-label); }
+.fi-pad__tit button { border: 0; background: none; padding: 4px 6px; color: var(--text-tertiary); font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.fi-pad canvas {
+  display: block; width: 100%; height: 150px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  touch-action: none; /* sin esto el dedo scrollea la página en vez de firmar */
+  cursor: crosshair;
+}
+/* La línea sobre la que se firma, como en el papel. */
+.fi-pad__linea { position: absolute; left: 24px; right: 24px; bottom: 34px; height: 1px; background: var(--border-default); pointer-events: none; }
+
+.fi-firmar {
+  min-height: 52px;
+  border: 0; border-radius: var(--radius-sm);
+  background: var(--fr-accent); color: var(--text-inverse);
+  font-family: var(--font-sans); font-size: 16px; font-weight: 600; cursor: pointer;
+}
+.fi-firmar:disabled { opacity: .45; cursor: default; }
+/* Decir POR QUÉ no se puede firmar. Un botón apagado sin explicación deja al
+   paciente tocando la pantalla sin entender qué falta. */
+.fi-falta { margin: -6px 0 0; font-size: 12.5px; color: var(--text-tertiary); text-align: center; }
+.fi-pie { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-tertiary); }
+
+.fi-clave-fondo { position: fixed; inset: 0; background: rgba(60,52,34,.42); display: flex; align-items: center; justify-content: center; z-index: 1200; padding: 16px; }
+.fi-clave { width: 320px; max-width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px; background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+.fi-clave b { font-family: var(--font-display); font-size: 16px; }
+.fi-clave p { margin: 0; font-size: 13px; color: var(--text-tertiary); }
+.fi-clave input { min-height: 44px; padding: 0 12px; border: 1px solid var(--border-input); border-radius: var(--radius-sm); font-size: 16px; }
+.fi-clave__acc { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---- filas de configuración en la hoja de Cuenta ---- */
+
+.cu-sec { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 2px; }
+.cu-sec__tit {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-label);
+  margin-bottom: 4px;
+}
+.cu-fila {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; min-height: 52px; padding: 8px 10px;
+  border: 0; border-radius: var(--radius-sm);
+  background: none; cursor: pointer; text-align: left;
+  color: var(--text-primary);
+}
+.cu-fila:hover { background: var(--bg-hover); }
+.cu-fila__ic {
+  display: grid; place-items: center;
+  width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted); color: var(--ink-stamp);
+}
+/* Lo mío en el color de marca, lo del consultorio en marrón sello: se
+   distinguen las dos tarjetas de un vistazo. */
+.cu-fila__ic--mio { background: var(--fr-accent-soft); color: var(--fr-accent); }
+.cu-fila__txt { flex: 1; min-width: 0; }
+.cu-fila__txt b { display: block; font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+.cu-fila__txt small { display: block; font-size: 12px; color: var(--text-tertiary); }
+.cu-fila__v { font-size: 12px; color: var(--text-tertiary); }
+.cu-fila__owner {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
+  color: var(--ink-stamp);
+  border: 1px solid var(--border-default); border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* ---- modal de plantillas de consentimiento ---- */
+
+.ct-modal { width: 960px; max-width: 100%; max-height: 88vh; display: flex; flex-direction: column; }
+.ct-banda {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px;
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--warning-border);
+  color: var(--warning);
+  font-size: 12.5px;
+}
+.ct-cols { display: grid; grid-template-columns: 260px minmax(0, 1fr); flex: 1; min-height: 0; }
+.ct-lista {
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+  overflow-y: auto;
+  padding: 8px;
+}
+.ct-item {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 12px;
+  border: 0; border-left: 3px solid transparent; border-radius: var(--radius-sm);
+  background: none; cursor: pointer;
+}
+.ct-item:hover { background: var(--bg-hover); }
+.ct-item.is-active { border-left-color: var(--fr-accent); background: var(--bg-surface); }
+.ct-item__n { display: block; font-family: var(--font-display); font-size: 14.5px; font-weight: 600; color: var(--text-primary); }
+.ct-item__m { display: block; margin-top: 2px; font-size: 11px; color: var(--text-tertiary); }
+.ct-req { display: inline-block; margin-top: 4px; font-size: 9.5px; font-weight: 700; letter-spacing: .1em; color: var(--ink-stamp); }
+.ct-arch { display: inline-block; margin-top: 4px; margin-left: 6px; font-size: 10px; color: var(--text-placeholder); }
+.ct-nueva {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  margin-top: 6px; padding: 10px 12px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+  background: none; color: var(--text-secondary);
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+
+.ct-editor { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; overflow-y: auto; }
+.ct-campo { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-label); }
+.ct-campo input {
+  height: 38px; padding: 0 10px;
+  border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-sans); font-size: 14px; font-weight: 400;
+  letter-spacing: 0; text-transform: none; color: var(--text-primary);
+}
+.ct-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-secondary); }
+
+/* Las variables se insertan con un toque. Nadie tipea llaves dobles: un
+   {{pacinte}} mal escrito no falla, simplemente nunca se reemplaza. */
+.ct-vars { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-tertiary); }
+.ct-vars button {
+  padding: 3px 9px;
+  border: 0; border-radius: 20px;
+  background: var(--fr-accent-soft); color: var(--fr-accent);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ct-ta {
+  min-height: 240px; padding: 12px 14px;
+  border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-display); font-size: 14.5px; line-height: 1.6;
+  color: var(--text-primary); resize: vertical;
+}
+.ct-previa {
+  display: flex; align-items: center; gap: 6px; align-self: flex-start;
+  border: 0; background: none; padding: 0;
+  color: var(--text-secondary); font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.ct-prev { height: auto; max-height: 240px; }
+.ct-pie {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 4px; padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.ct-pie__meta { flex: 1; min-width: 0; font-size: 11.5px; color: var(--text-tertiary); }
+.ct-archivar { border: 0; background: none; padding: 8px 10px; color: var(--warning); font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer; }
+
+@media (max-width: 860px) {
+  .ct-cols { grid-template-columns: minmax(0, 1fr); }
+  .ct-lista { border-right: 0; border-bottom: 1px solid var(--border-subtle); max-height: 180px; }
+}
+
+/* ---- hoja Consentimientos ---- */
+
+.cs-bar { gap: 10px; flex-wrap: wrap; }
+.cs-barsel { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.cs-barsel > span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-label);
+  white-space: nowrap;
+}
+.cs-barsel select {
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+
+/* Panel a dos columnas: a la izquierda lo que el paciente va a leer, a la
+   derecha lo que hay que completar. En angosto se apila, con la vista previa
+   primero: es lo que hay que revisar antes de tocar nada. */
+.cs-cols { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+@media (max-width: 860px) {
+  .cs-cols { grid-template-columns: minmax(0, 1fr); }
+}
+.cs-prevtit {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 7px;
+}
+/* Lo que completó el sistema, resaltado: es la última oportunidad de ver un
+   dato mal antes de que el texto se congele. Y lo que falta va en terracota,
+   porque un `__________` perdido en dos páginas se pasa por alto. */
+.cs-prevmeta { font-size: 12px; color: var(--text-tertiary); margin-bottom: 7px; }
+.cs-prevmeta b { font-weight: 600; color: var(--text-secondary); }
+.cs-verplantilla { border: 0; background: none; padding: 0; color: var(--fr-accent); font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; }
+.cs-aviso svg { display: inline; vertical-align: -2px; margin-right: 5px; }
+.mp-nota { display: block; margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-tertiary); }
+.mp-nota svg { display: inline; vertical-align: -2px; margin-right: 4px; }
+.cs-preview mark { background: var(--fr-accent-pill); color: var(--fr-accent); border-radius: 3px; padding: 0 2px; }
+.cs-preview mark.falta { background: var(--warning-bg); color: var(--warning); }
+.cs-pasar { width: 100%; margin-top: 2px; }
+
+/* El punto de "hay uno sin firmar". Terracota y no color de marca: no cuenta
+   nada, avisa que algo quedó a medias. */
+.fr-tab__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex-shrink: 0;
+}
+
+.cs-nuevo { display: flex; flex-direction: column; gap: 12px; }
+.cs-form { display: flex; flex-direction: column; gap: 10px; }
+.cs-form label > small {
+  display: block;
+  margin-top: -2px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-placeholder);
+}
+.cs-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+.cs-form select,
+.cs-form input {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-primary);
+}
+.cs-form input.mono { font-family: var(--font-mono); }
+
+/* El aviso de plantilla de ejemplo. Va en terracota y arriba del texto: si
+   apareciera debajo, se lee después de haberlo dado por bueno. */
+/* `display: flex` convertía al <b> en un item de flex y el texto se partía
+   en columnas en vez de fluir. El ícono va en línea con el texto. */
+.cs-aviso {
+  display: block;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Vista previa del texto congelado. Alto fijo y scroll propio: el cuerpo de
+   un consentimiento es largo y, si creciera, el botón de generar quedaría
+   fuera de pantalla justo cuando hay que tocarlo. */
+.cs-preview {
+  height: 220px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cs-fila .cs-nombre { font-family: var(--font-display); font-size: 15.5px; font-weight: 600; }
+.cs-fila .ev-meta { display: flex; gap: 0; }
+/* La firma en chico, como se ve en el papel: tinta sobre la hoja. */
+.cs-firma {
+  display: block;
+  width: 96px;
+  height: 30px;
+  object-fit: contain;
+  object-position: left;
+  margin-top: 7px;
+}
+/* Sello hermano del HECHO de la hoja de trabajos, en azul tinta. */
+.cs-sello {
+  padding: 3px 8px 2px;
+  border: 1.5px solid var(--info);
+  border-radius: 4px;
+  color: var(--info);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  white-space: nowrap;
+}
+
+/* Barra de carga: misma forma que la de "Trabajos y pagos" (.lb-addrow), para
+   que cambiar de pestaña no mueva el ojo de lugar. */
+.ev-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-muted);
+  border-bottom: 2px solid var(--border-default);
+}
+/* Acción principal de una hoja de la ficha. Va OUTLINE, no rellena: adentro
+   de la hoja el relleno sólido queda reservado para los momentos de
+   compromiso —Firmar, Guardar, Guardar versión, + Agregar—, que son los que
+   dejan algo escrito. Con todo relleno, "Cobrar" y "Dictar" competían con
+   ellos y la hoja se volvía un semáforo. */
+.btn-hoja,
+.ev-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 16px;
+  white-space: nowrap;
+  border: 1.5px solid var(--fr-accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--fr-accent);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-hoja:disabled { opacity: .55; cursor: default; }
+/* minmax(0) por el de siempre: un item de flex no se achica abajo de su
+   contenido y aparece scroll lateral en celular. */
+.ev-in {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+.ev-in::placeholder { color: var(--text-placeholder); }
+.ev-in:focus { outline: none; border-color: var(--fr-accent); }
+.ev-save {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--fr-accent);
+  color: var(--text-inverse);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ev-save:disabled { opacity: .55; cursor: default; }
+.ev-ghost {
+  height: 38px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* El scroll NO se define acá: lo pone la ficha en línea, porque depende de
+   si está apilada (ahí scrollea la página) y ese dato vive en JS. */
+.ev-fila {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 100px;
+  column-gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ev-fila:last-child { border-bottom: 0; }
+
+/* Fecha y hora en mono y marrón sello: son datos, como las horas de la
+   agenda y los montos de la ficha. */
+.ev-fecha { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--ink-stamp); }
+.ev-fecha small {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.ev-cuerpo { min-width: 0; }
+/* El texto clínico va en serif: es prosa para leer, no interfaz. */
+.ev-texto {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  text-wrap: pretty;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ev-meta { margin-top: 7px; font-size: 12px; color: var(--text-tertiary); }
+.ev-ta {
+  width: 100%;
+  min-height: 92px;
+  padding: 10px 12px;
+  border: 1px solid var(--fr-accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  resize: vertical;
+}
+.ev-ta:focus { outline: none; border-color: var(--fr-accent); }
+.ev-acc { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+
+.ev-side { display: flex; justify-content: flex-end; align-items: flex-start; }
+.ev-mi { display: flex; gap: 4px; }
+.ev-mi button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--text-placeholder);
+  cursor: pointer;
+}
+.ev-mi button:hover { color: var(--text-secondary); background: var(--bg-hover); }
+
+/* Miniaturas de la nota. Mismo tamaño y radio que las de la fila de trabajo,
+   para que las dos listas se lean como el mismo sistema. */
+.ev-ths { display: flex; gap: 4px; margin-top: 7px; flex-wrap: wrap; }
+.ev-ths img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  cursor: zoom-in;
+  display: block;
+}
+/* El botón de fotos se enciende cuando hay alguna, con el contador al lado:
+   así se sabe que la nota tiene imágenes sin tener que mirar abajo. */
+.ev-mi button.is-on { color: var(--fr-accent); }
+.ev-mi button b { font-family: var(--font-mono); font-size: 10px; font-weight: 600; margin-left: 2px; }
+
+.ev-vacio { padding: 40px; text-align: center; font-size: 13px; color: var(--text-tertiary); }
+
+/* ---- dictado ---- */
+
+/* Grabando: el botón se vacía y se pasa a terracota. Es el mismo color que
+   usa la app para "ojo con esto", que es exactamente lo que significa tener
+   el micrófono abierto en un consultorio. */
+/* En angosto el botón queda solo con el ícono: la etiqueta se come el ancho
+   que necesita el campo de texto, y el micrófono se entiende sin leerlo. */
+@media (max-width: 560px) {
+  .ev-mic__lbl { display: none; }
+  .ev-mic { padding: 0 14px; }
+}
+/* Igualado al alto del campo, para que el borde derecho quede parejo. */
+.ev-save--bar { height: 42px; }
+
+.ev-mic--rec {
+  background: var(--bg-surface);
+  color: var(--warning);
+  border: 1.5px solid var(--warning);
+}
+.ev-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warning);
+  animation: ev-latido 1s infinite;
+}
+@keyframes ev-latido { 50% { opacity: .25; } }
+/* El latido es el único indicador de que el micrófono sigue abierto, así que
+   no se saca: se congela encendido. */
+@media (prefers-reduced-motion: reduce) {
+  .ev-dot { animation: none; }
+}
+
+/* El que empuja es el grupo, no la frase: así ocultar la frase en angosto
+   no mueve el botón de lugar. */
+.ev-grabando {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ev-oyendo-hint {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* En angosto la pista sobra: el punto latiendo y el reloj ya dicen que está
+   grabando, y el botón necesita el ancho más que la frase. */
+@media (max-width: 560px) {
+  .ev-oyendo-hint { display: none; }
+}
+
+/* Lo que va entendiendo, en vivo.
+   Alto FIJO, no mínimo: el texto crece palabra por palabra y con min-height
+   el panel seguiría empujando la lista en cada una. Scrollea solo hacia
+   abajo (lo hace el componente) porque lo último dicho es lo que importa.
+   Es el mismo alto que el textarea del borrador, así parar el dictado
+   reemplaza un panel por otro sin que nada se mueva de lugar. */
+.ev-vivo {
+  /* Seis renglones. Con cuatro se perdía de vista lo dictado hace diez
+     segundos y no se alcanzaba a leer mientras seguía hablando. */
+  height: 132px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border: 1px solid var(--fr-accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+/* Lo todavía no confirmado va más apagado: el motor lo puede corregir solo
+   en la palabra siguiente, y verlo cambiar de color avisa cuándo quedó firme. */
+.ev-vivo i { font-style: normal; color: var(--text-tertiary); }
+.ev-vivo em { font-style: normal; color: var(--text-placeholder); font-family: var(--font-sans); font-size: 13.5px; }
+.ev-timer { flex-shrink: 0; font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--warning); }
+
+/* Entrada y salida del panel de dictado.
+   Se anima con `grid-template-rows: 0fr -> 1fr` y no con un alto fijo: los dos
+   paneles que viven acá adentro (el de en vivo y el borrador, que suma la fila
+   de botones) miden distinto, y clavar un número obligaría a mantener dos
+   constantes sincronizadas con el CSS. Con fr el navegador mide solo.
+
+   La curva NO es la dramática de la casa. `cubic-bezier(.16,1,.3,1)` cubre el
+   90% del recorrido en el primer tercio y después se arrastra; acá el panel
+   empuja toda la lista hacia abajo, y esa cola larga se lee como un rebote en
+   cada fila que arrastra. Esta va cerca de la diagonal.
+
+   Entrar desacelera (algo llega y se acomoda); salir va parejo y más corto
+   (algo se va, no hay nada que aterrizar). */
+.ev-panel {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: ev-panel-entra 220ms cubic-bezier(.4, .4, .7, 1) both;
+}
+.ev-panel__in { overflow: hidden; }
+.ev-panel.is-saliendo { animation: ev-panel-sale 180ms cubic-bezier(.4, .2, 1, 1) both; }
+
+@keyframes ev-panel-entra {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to   { grid-template-rows: 1fr; opacity: 1; }
+}
+@keyframes ev-panel-sale {
+  from { grid-template-rows: 1fr; opacity: 1; }
+  to   { grid-template-rows: 0fr; opacity: 0; }
+}
+
+/* Hay gente a la que el movimiento le produce mareo, y acá además no se
+   pierde nada: el panel aparece y desaparece, sin recorrido. */
+@media (prefers-reduced-motion: reduce) {
+  .ev-panel, .ev-panel.is-saliendo { animation: none; }
+  .ev-panel.is-saliendo { display: none; }
+}
+
+/* Borrador: lo transcripto antes de entrar a la historia clínica. */
+.ev-draft {
+  padding: 14px 16px;
+  background: var(--fr-accent-soft);
+  border-bottom: 2px solid var(--fr-accent-border);
+}
+/* Solo el borrador del dictado va a alto fijo, igual que el panel en vivo:
+   es lo que lo reemplaza. Editar una nota vieja usa el alto flexible. */
+.ev-draft .ev-ta { height: 132px; min-height: 132px; }
+.ev-dur { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
+
+.ev-error {
+  padding: 10px 16px;
+  background: var(--danger-bg);
+  border-bottom: 1px solid var(--danger-border);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+/* Celular: la columna de acciones se va abajo del texto. A 92px + 100px fijos
+   no le queda ancho utilizable al medio. */
+@media (max-width: 720px) {
+  .ev-fila { grid-template-columns: 78px minmax(0, 1fr); }
+  .ev-side { grid-column: 2; justify-content: flex-start; margin-top: 8px; }
 }

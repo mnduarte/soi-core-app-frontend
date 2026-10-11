@@ -47,6 +47,10 @@ interface AuthStore {
     clinic: ClinicInfo;
     accessToken: string;
   }) => void;
+  /** Refresca solo los datos visibles del usuario (nombre, tratamiento) tras
+   *  editar el perfil. Aparte de setAuth a propósito: aquel reescribe el
+   *  refresh token, que no tiene nada que ver con cambiarse el nombre. */
+  setUser: (parche: Partial<AuthUser>) => void;
   clearAuth: () => void;
 }
 
@@ -74,6 +78,9 @@ export const useAuthStore = create<AuthStore>()(
         localStorage.removeItem('refreshToken');
         set({ user, clinic, accessToken, isImpersonating: true });
       },
+      setUser: parche =>
+        set(e => (e.user ? { user: { ...e.user, ...parche } } : {})),
+
       clearAuth: () => {
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('soi.lastActivityAt');

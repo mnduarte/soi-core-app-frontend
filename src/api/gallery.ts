@@ -29,6 +29,8 @@ export interface GalleryPhoto {
   description?: string;
   transactionId?: string;
   treatmentItemId?: string;
+  /** Nota de evolución que esta foto documenta. */
+  clinicalEntryId?: string;
   toothNumber?: number;
   uploadedAt: string;
   uploadedBy?: string;
@@ -93,7 +95,7 @@ export const galleryApi = {
     patientId: string,
     sessionId: string,
     photoId: string,
-    dto: { type?: PhotoType; caption?: string; description?: string; transactionId?: string; treatmentItemId?: string },
+    dto: { type?: PhotoType; caption?: string; description?: string; transactionId?: string; treatmentItemId?: string; clinicalEntryId?: string },
   ) =>
     apiClient
       .patch<{ data: GallerySession }>(
@@ -114,6 +116,7 @@ export const galleryApi = {
       description?: string;
       transactionId?: string;
       treatmentItemId?: string;
+      clinicalEntryId?: string;
     },
   ) =>
     apiClient

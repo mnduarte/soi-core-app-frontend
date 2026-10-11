@@ -1,3 +1,4 @@
+import type { ConsentTemplate } from '../lib/consentTemplates';
 import { apiClient } from './client';
 
 export interface ClinicSettings {
@@ -10,6 +11,9 @@ export interface ClinicSettings {
   quickTreatments?: string[];
   slotTimes?: string[];
   photoCategories?: string[];
+  /** Plantillas de consentimiento del consultorio. Vacío → se ofrecen las
+   *  de ejemplo que vienen en lib/consentTemplates.ts */
+  consentTemplates?: ConsentTemplate[];
   logoUrl?: string;
 }
 

@@ -48,6 +48,11 @@ export interface LoginResponse {
 }
 
 export const authApi = {
+  /** Confirma la identidad del profesional sin emitir tokens. Se usa para
+   *  salir del modo firma sin firmar. */
+  verifyPassword: (password: string) =>
+    apiClient.post('/auth/verify-password', { password }).then(r => r.data),
+
   login: (dto: LoginPayload) =>
     apiClient.post<{ data: LoginResponse }>('/auth/login', dto).then(r => r.data.data),
 

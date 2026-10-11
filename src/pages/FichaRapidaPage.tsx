@@ -16,6 +16,10 @@ import { Desplegable } from '../components/common/Desplegable';
 import { TarjetaPaciente } from '../components/patient/TarjetaPaciente';
 import { Avatar } from '../components/common/Avatar';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { EvolucionTab } from '../components/patient/EvolucionTab';
+import { ConsentimientosTab } from '../components/patient/ConsentimientosTab';
+import { consentsApi } from '../api/consents';
+import { clinicalEntriesApi } from '../api/clinical-entries';
 import { OdontogramCard } from '../components/patient/OdontogramCard';
 import { GalleryContainer } from '../components/gallery/GalleryContainer';
 import { CustomTreatmentsModal } from '../components/common/CustomTreatmentsModal';
@@ -120,6 +124,24 @@ let secuenciaTemp = 0;
 
 export default function FichaRapidaPage() {
   const { id } = useParams<{ id: string }>();
+
+  // Qué hoja de la ficha se está viendo. La ficha dejó de tener una sola.
+  const [hoja, setHoja] = useState<'trabajos' | 'evolucion' | 'consentimientos'>('trabajos');
+  // El contador de la pestaña necesita las entradas acá arriba. Es la misma
+  // queryKey que usa EvolucionTab, así que react-query sirve una sola
+  // request para las dos.
+  const { data: evolucion = [] } = useQuery({
+    queryKey: ['clinical-entries', id],
+    queryFn: () => clinicalEntriesApi.findAll(id!),
+    enabled: !!id,
+  });
+  const { data: consents = [] } = useQuery({
+    queryKey: ['consents', id],
+    queryFn: () => consentsApi.findAll(id!),
+    enabled: !!id,
+  });
+  // Punto de aviso en la pestaña: hay algo esperando una firma.
+  const consentPendiente = consents.some(c => c.status === 'PENDING');
   const navigate = useNavigate();
   const qc = useQueryClient();
   const isMobile = useIsMobile(760);
@@ -359,6 +381,22 @@ export default function FichaRapidaPage() {
         const list = m.get(p.treatmentItemId) ?? [];
         list.push({ photo: p, sessionId: s._id, title: s.title, description: s.notes });
         m.set(p.treatmentItemId, list);
+      }
+    }
+    return m;
+  }, [gallerySessions]);
+
+  // Fotos vinculadas a una nota de evolución. Mismo patrón que photosByItem:
+  // una nota ("Rx periapical de 36") y la imagen que la respalda se miran
+  // juntas o no sirven de mucho.
+  const photosByEntry = useMemo(() => {
+    const m = new Map<string, { photo: GalleryPhoto; sessionId: string; title: string; description?: string }[]>();
+    for (const s of gallerySessions) {
+      for (const p of s.photos) {
+        if (!p.clinicalEntryId) continue;
+        const list = m.get(p.clinicalEntryId) ?? [];
+        list.push({ photo: p, sessionId: s._id, title: s.title, description: s.notes });
+        m.set(p.clinicalEntryId, list);
       }
     }
     return m;
@@ -2647,8 +2685,51 @@ export default function FichaRapidaPage() {
               }}
             >
               <div className="card__header" style={{ alignItems: 'center' }}>
-                <div className="card__title">
-                  Trabajos y pagos
+                {/* Pestañas. Reemplazan al título porque el título pasó a
+                    ser redundante: el nombre de la hoja que estás viendo es
+                    justamente la pestaña activa. */}
+                <div className="fr-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={hoja === 'trabajos'}
+                    className={`fr-tab ${hoja === 'trabajos' ? 'is-active' : ''}`}
+                    onClick={() => setHoja('trabajos')}
+                  >
+                    <span className="fr-tab__lbl">Trabajos y pagos</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={hoja === 'evolucion'}
+                    className={`fr-tab ${hoja === 'evolucion' ? 'is-active' : ''}`}
+                    onClick={() => setHoja('evolucion')}
+                  >
+                    <span className="fr-tab__lbl">Evolución</span>
+                    {/* Sin número cuando está vacía: un "0" no le pide nada a
+                        nadie y mete ruido en el encabezado. */}
+                    {evolucion.length > 0 && (
+                      <span className="fr-tab__n">{evolucion.length}</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={hoja === 'consentimientos'}
+                    className={`fr-tab ${hoja === 'consentimientos' ? 'is-active' : ''}`}
+                    onClick={() => setHoja('consentimientos')}
+                  >
+                    <span className="fr-tab__lbl">Consentimientos</span>
+                    {/* El punto avisa que hay uno sin firmar. Va en terracota y
+                        no en el color de marca porque no es un contador: es
+                        algo que quedó a medias. */}
+                    {consentPendiente && (
+                      <span className="fr-tab__dot" aria-label="pendiente de firma" />
+                    )}
+                    {consents.length > 0 && (
+                      <span className="fr-tab__n">{consents.length}</span>
+                    )}
+                  </button>
                 </div>
                 {/* Los tres a la vista, no un interruptor que hay que apagar.
                     Con un solo chip había que descubrir que se destildaba para
@@ -2657,7 +2738,7 @@ export default function FichaRapidaPage() {
                     "Todos" va sin número a propósito: los otros dos cuentan
                     cosas que hay que hacer o cobrar, y ese número es una señal;
                     la cantidad total de trabajos no le pide nada a nadie. */}
-                {(pendientes.length > 0 || porCobrar.length > 0) && (
+                {hoja === 'trabajos' && (pendientes.length > 0 || porCobrar.length > 0) && (
                 <span className="fr-filtros">
                   <button
                     type="button"
@@ -2691,6 +2772,31 @@ export default function FichaRapidaPage() {
                 )}
               </div>
 
+              {/* El cuerpo de la hoja. La indentación de adentro queda como
+                  estaba a propósito: re-indentar doscientas líneas para
+                  envolverlas haría ilegible el diff de un cambio que, en
+                  realidad, no las toca. */}
+              {hoja === 'consentimientos' ? (
+                <ConsentimientosTab
+                  patientId={id!}
+                  pacienteNombre={patient ? `${patient.name} ${patient.lastName}` : ''}
+                  pacienteDni={patient?.dni}
+                  trabajos={todosLosTrabajos}
+                  stack={stack}
+                  onFirmar={c => navigate(`/firmar/${id}/${c._id}`)}
+                />
+              ) : hoja === 'evolucion' ? (
+                <EvolucionTab
+                  patientId={id!}
+                  stack={stack}
+                  photos={photosByEntry}
+                  onFotos={entryId =>
+                    openModal('uploadPhotos', { patientId: id, clinicalEntryId: entryId })
+                  }
+                  onZoom={abrirZoom}
+                />
+              ) : (
+                <>
               <div ref={workRef} className="lb-addrow" style={{ position: 'relative', display: 'block' }}>
                 {/* El formulario imita la forma de una fila: descripción a la
                     izquierda ocupando lo que sobra, después el precio, y el
@@ -2890,6 +2996,8 @@ export default function FichaRapidaPage() {
                   </button>
                 )}
               </div>
+                </>
+              )}
 
               {/* Sin total al pie: el único número de plata que se muestra es
                   "Falta cobrar" (arriba). No exponemos el total del plan ni lo

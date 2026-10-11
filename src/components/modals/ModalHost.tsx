@@ -31,6 +31,7 @@ export function ModalHost() {
         defaultPatientId={modal?.props?.patientId}
         transactionId={modal?.props?.transactionId}
         treatmentItemId={modal?.props?.treatmentItemId}
+        clinicalEntryId={modal?.props?.clinicalEntryId}
         onUploaded={modal?.props?.onUploaded}
       />
     </>

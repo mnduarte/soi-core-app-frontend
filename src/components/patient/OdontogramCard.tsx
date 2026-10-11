@@ -210,7 +210,7 @@ export function OdontogramCard({
         className="card__header"
         style={{ background: 'linear-gradient(180deg, #FAFBFD, var(--bg-surface))' }}
       >
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div className="card__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="tooth" size={14} style={{ color: 'var(--brand-primary)' }} />
             Odontograma{patientName ? ` · ${patientName}` : ''}
@@ -219,13 +219,16 @@ export function OdontogramCard({
             Click una cara para marcar (M/D/V/L/O) · doble-tap mismo botón = borrar
           </div>
         </div>
-        <div className="row" style={{ gap: 6 }}>
-          <button className="btn btn--ghost btn--sm" onClick={() => window.print()}>
-            <Icon name="download" size={12} /> Imprimir
+        {/* Arriba a la derecha y sin envolver: en toda la app la ✕ vive en
+            esa esquina, y acá se caía a un renglón propio cuando el header
+            envuelve en celular. En angosto quedan solo los íconos. */}
+        <div className="row odo-acts" style={{ gap: 6, flexShrink: 0, marginLeft: 'auto' }}>
+          <button className="btn btn--ghost btn--sm" title="Imprimir" onClick={() => window.print()}>
+            <Icon name="download" size={12} /> <span className="odo-acts__lbl">Imprimir</span>
           </button>
           {onClose && (
-            <button className="btn btn--secondary btn--sm" onClick={onClose}>
-              <Icon name="x" size={13} /> Cerrar
+            <button className="btn btn--ghost btn--icon btn--sm" title="Cerrar" onClick={onClose}>
+              <Icon name="x" size={15} />
             </button>
           )}
         </div>

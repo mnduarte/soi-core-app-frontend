@@ -1,7 +1,15 @@
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Icon } from '../common/Icon';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Avatar } from '../common/Avatar';
+import { clinicsApi } from '../../api/clinics';
+import { CustomTreatmentsModal } from '../common/CustomTreatmentsModal';
+import { CustomSlotsModal } from '../common/CustomSlotsModal';
+import { CustomCategoriesModal } from '../common/CustomCategoriesModal';
+import { ConsentTemplatesModal } from '../common/ConsentTemplatesModal';
+import { MiPerfilModal } from '../common/MiPerfilModal';
 import { useAuthStore } from '../../store/auth.store';
 import { authApi } from '../../api/auth';
 import { withTitle } from '../../lib/format';
@@ -23,8 +31,25 @@ function rolLabel(role?: string, isClinical?: boolean) {
   return isClinical ? 'Profesional' : 'Asistente';
 }
 
+type Editor = 'perfil' | 'trabajos' | 'horarios' | 'categorias' | 'plantillas' | null;
+
 export function CuentaSheet({ onClose }: { onClose: () => void }) {
   const { user, clinic, clearAuth } = useAuthStore();
+  const [editor, setEditor] = useState<Editor>(null);
+  // Los cuatro editores de configuración del consultorio viven acá. Tres ya
+  // existían sueltos (se abrían desde donde se usan); esto les da una casa
+  // sin reescribirlos. El cuarto, las plantillas, no tenía ninguna.
+  const { data: settings } = useQuery({
+    queryKey: ['clinic-settings'],
+    queryFn: clinicsApi.getSettings,
+  });
+  const esDueno = user?.role === 'OWNER';
+  const filas = [
+    { k: 'trabajos' as const, ic: 'list' as const, t: 'Trabajos frecuentes', s: 'Los chips de la agenda y la ficha', v: settings?.quickTreatments?.length },
+    { k: 'horarios' as const, ic: 'clock' as const, t: 'Horarios de atención', s: 'Los turnos que ofrece la libreta', v: settings?.slotTimes?.length },
+    { k: 'categorias' as const, ic: 'image' as const, t: 'Categorías de fotos', s: 'Cómo se clasifican las imágenes', v: settings?.photoCategories?.length },
+    { k: 'plantillas' as const, ic: 'clipboard' as const, t: 'Plantillas de consentimiento', s: esDueno ? 'El texto legal que firma el paciente' : 'Solo el dueño puede editarlas', v: settings?.consentTemplates?.length },
+  ];
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -56,6 +81,40 @@ export function CuentaSheet({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
+        {/* Mi cuenta. Por ahora una sola fila, pero es la que importa para
+            los consentimientos: el nombre y la matrícula de acá son los que
+            quedan congelados en un documento que firma un paciente. */}
+        <div className="cu-sec">
+          <div className="cu-sec__tit">Mi cuenta</div>
+          <button type="button" className="cu-fila" onClick={() => setEditor('perfil')}>
+            <span className="cu-fila__ic cu-fila__ic--mio"><Icon name="user" size={16} /></span>
+            <span className="cu-fila__txt">
+              <b>Mi perfil</b>
+              <small>Nombre, matrícula y especialidad</small>
+            </span>
+            <Icon name="chevronRight" size={14} />
+          </button>
+        </div>
+
+        {/* Configuración del consultorio. Las filas abren los modales que ya
+            existen: no se reescribió ninguno, solo se les dio un lugar desde
+            donde llegar sin tener que pasar por la pantalla que los usa. */}
+        <div className="cu-sec">
+          <div className="cu-sec__tit">Consultorio</div>
+          {filas.map(f => (
+            <button key={f.k} type="button" className="cu-fila" onClick={() => setEditor(f.k)}>
+              <span className="cu-fila__ic"><Icon name={f.ic} size={16} /></span>
+              <span className="cu-fila__txt">
+                <b>{f.t}</b>
+                <small>{f.s}</small>
+              </span>
+              {f.v ? <span className="cu-fila__v mono">{f.v}</span> : null}
+              {f.k === 'plantillas' && !esDueno && <span className="cu-fila__owner">OWNER</span>}
+              <Icon name="chevronRight" size={14} />
+            </button>
+          ))}
+        </div>
+
         {/* Primero consultar, después salir: es lo que más se va a usar de acá,
             y además evita que el único botón de la hoja sea el de irse. */}
         <a
@@ -75,6 +134,24 @@ export function CuentaSheet({ onClose }: { onClose: () => void }) {
           Cancelar
         </button>
       </div>
+
+      <CustomTreatmentsModal
+        open={editor === 'trabajos'}
+        initial={settings?.quickTreatments ?? []}
+        onClose={() => setEditor(null)}
+      />
+      <CustomSlotsModal
+        open={editor === 'horarios'}
+        initial={settings?.slotTimes ?? []}
+        onClose={() => setEditor(null)}
+      />
+      <CustomCategoriesModal
+        open={editor === 'categorias'}
+        initial={settings?.photoCategories ?? []}
+        onClose={() => setEditor(null)}
+      />
+      {editor === 'plantillas' && <ConsentTemplatesModal onClose={() => setEditor(null)} />}
+      {editor === 'perfil' && <MiPerfilModal onClose={() => setEditor(null)} />}
     </div>,
     document.body,
   );

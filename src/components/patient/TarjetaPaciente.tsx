@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '../common/Avatar';
 import { Icon } from '../common/Icon';
 import { Desplegable } from '../common/Desplegable';
@@ -38,6 +38,20 @@ export function TarjetaPaciente({
   onCerrar: () => void;
 }) {
   const [infoOpen, setInfoOpen] = useState(infoInicial);
+  // En celular las tres acciones se guardan en un menú: ocupaban un renglón
+  // entero con un borde arriba, y ahora la parte de abajo de la ficha tiene
+  // tres hojas. La ✕ NO entra acá — es cómo se sale, y esconder la salida
+  // atrás de un menú es de las pocas cosas que siempre se pagan caro.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const fuera = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', fuera);
+    return () => document.removeEventListener('pointerdown', fuera);
+  }, [menuOpen]);
 
   const alergias = patient.medicalHistory?.allergies ?? [];
   const otrosAnte = [
@@ -111,15 +125,66 @@ export function TarjetaPaciente({
                     distintos, no una botonera). Escritorio: a la derecha del
                     nombre, con texto. */}
                 <div className="row" style={isMobile
-                  ? { gap: 12, flexBasis: '100%', flexWrap: 'nowrap', marginTop: 4, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }
+                  ? { gap: 6, marginLeft: 'auto', flexWrap: 'nowrap', flexShrink: 0, position: 'relative' }
                   : { gap: 8, marginLeft: 'auto', flexWrap: 'nowrap', flexShrink: 0 }}>
+                {isMobile ? (
+                  <div ref={menuRef} style={{ position: 'relative' }}>
+                    <button
+                      className="btn btn--ghost btn--icon btn--sm fr-headbtn"
+                      title="Más acciones"
+                      aria-expanded={menuOpen}
+                      onClick={() => setMenuOpen(o => !o)}
+                      style={{ width: 40, height: 38, paddingInline: 0 }}
+                    >
+                      <Icon name="more" size={17} />
+                    </button>
+                    {menuOpen && (
+                      <div
+                        className="lb-menupop"
+                        style={{
+                          transformOrigin: 'top right',
+                          position: 'absolute',
+                          top: 'calc(100% + 4px)',
+                          right: 0,
+                          zIndex: 50,
+                          minWidth: 200,
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border-input)',
+                          borderRadius: 'var(--radius-md)',
+                          boxShadow: 'var(--shadow-md)',
+                          padding: 5,
+                        }}
+                      >
+                        {([
+                          ['user', 'Info personal', () => setInfoOpen(v => !v)],
+                          ['image', 'Galería de fotos', onGaleria],
+                          ['tooth', 'Odontograma', onOdontograma],
+                        ] as const).map(([ic, label, accion]) => (
+                          <button
+                            key={label}
+                            onClick={() => { setMenuOpen(false); accion(); }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                              padding: '10px 12px', minHeight: 44, border: 0, borderRadius: 'var(--radius-sm)',
+                              background: 'none', color: 'var(--text-primary)', fontSize: 14,
+                              fontFamily: 'var(--font-sans)', cursor: 'pointer', textAlign: 'left',
+                            }}
+                          >
+                            <Icon name={ic} size={16} /> {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
                   {/* Antes acá estaba "Editar", que abría el formulario. Para
                       MIRAR un dato —el DNI, el domicilio— había que entrar a la
                       pantalla de escribir, con el riesgo de tocar algo sin
                       querer. Ahora esto muestra los datos y editar es un botón
                       adentro: primero se lee, editar es la excepción. */}
                   <button
-                    className={`btn btn--secondary btn--sm fr-infobtn ${isMobile ? 'btn--icon' : ''} ${infoOpen ? 'is-on' : ''}`}
+                    className={`btn btn--ghost btn--sm fr-headbtn fr-infobtn ${isMobile ? 'btn--icon' : ''} ${infoOpen ? 'is-on' : ''}`}
                     title="Info personal del paciente"
                     aria-expanded={infoOpen}
                     onClick={() => setInfoOpen(v => !v)}
@@ -127,13 +192,15 @@ export function TarjetaPaciente({
                   >
                     <Icon name="user" size={isMobile ? 16 : 14} /> {!isMobile && 'Info'}
                   </button>
-                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Galería de fotos" onClick={onGaleria} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
+                  <button className={`btn btn--ghost btn--sm fr-headbtn ${isMobile ? 'btn--icon' : ''}`} title="Galería de fotos" onClick={onGaleria} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
                     <Icon name="image" size={isMobile ? 16 : 14} /> {!isMobile && 'Galería'}
                   </button>
-                  <button className={`btn btn--secondary btn--sm ${isMobile ? 'btn--icon' : ''}`} title="Odontograma" onClick={onOdontograma} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
+                  <button className={`btn btn--ghost btn--sm fr-headbtn ${isMobile ? 'btn--icon' : ''}`} title="Odontograma" onClick={onOdontograma} style={{ ...(isMobile ? { width: 48, height: 38, paddingInline: 0 } : {}) }}>
                     <Icon name="tooth" size={isMobile ? 16 : 14} /> {!isMobile && 'Odontograma'}
                   </button>
-                  <button className="btn btn--ghost btn--icon btn--sm" title="Cambiar paciente" onClick={onCerrar} style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                  </>
+                )}
+                  <button className="btn btn--ghost btn--icon btn--sm" title="Cambiar paciente" onClick={onCerrar} style={{ marginLeft: isMobile ? 0 : 'auto', flexShrink: 0 }}>
                     <Icon name="x" size={15} />
                   </button>
                 </div>
@@ -217,8 +284,22 @@ export function TarjetaPaciente({
                       bloque: suelto a la izquierda parecía un botón más de la
                       lista de datos y no el cierre del panel. */}
                   <div className="fr-info__pie">
-                    <button className="btn btn--secondary btn--sm" onClick={onEditar}>
+                    {/* Las dos al pie y las dos sutiles: adentro del panel
+                        de datos, editar es la excepción y contraer es la
+                        salida. Ninguna de las dos compite con lo que el
+                        panel vino a mostrar, que son los datos. */}
+                    <button className="btn btn--ghost btn--sm fr-info__acc" onClick={onEditar}>
                       <Icon name="edit" size={14} /> Editar datos
+                    </button>
+                    {/* Cerrar desde el propio panel: desde que "Info" vive
+                        adentro del menú ⋯ en celular, contraerlo costaba dos
+                        toques —abrir el menú y volver a tocar Info—. Un panel
+                        tiene que poder cerrarse donde está abierto. */}
+                    <button
+                      className="btn btn--ghost btn--sm fr-info__acc fr-info__cerrar"
+                      onClick={() => setInfoOpen(false)}
+                    >
+                      <Icon name="chevronDown" size={14} /> Contraer
                     </button>
                   </div>
                 </div>

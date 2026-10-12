@@ -282,6 +282,27 @@ a { color: inherit; text-decoration: none; }
 .sidebar__contacto { margin-top: auto; }
 .sidebar__contacto:hover { color: var(--success); }
 
+/* El bloque del usuario es la puerta a Cuenta en escritorio. Borde suave y
+   engranaje al pasar el mouse: tiene que leerse como algo que se toca y no
+   como una etiqueta con el nombre. */
+.sidebar__cuenta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar__cuenta:hover { border-color: var(--brand-primary-100); background: var(--brand-primary-50); }
+.sidebar__cuenta > svg { color: var(--text-tertiary); flex-shrink: 0; }
+.sidebar__cuenta:hover > svg { color: var(--brand-primary); }
+
 .sidebar__user {
   margin-top: 0;
   padding: 10px 12px;
@@ -721,8 +742,14 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .sidebar__group-label,
   .nav-item span,
   .nav-item__kbd,
+  /* El texto y la ✕ se esconden en angosto; queda el avatar. El selector
+     apunta a la clase y no a `> div` porque el texto pasó a vivir adentro
+     del botón que abre Cuenta. */
   .sidebar__user > div,
+  .sidebar__user-txt,
+  .sidebar__cuenta > svg,
   .sidebar__user .btn { display: none; }
+  .sidebar__cuenta { justify-content: center; padding: 6px 0; }
   .nav-item {
     width: 40px;
     height: 40px;
@@ -743,7 +770,10 @@ table.tbl { width: 100%; border-collapse: collapse; }
   }
   .sidebar--wide .sidebar__brand { padding: 0 4px 18px; }
   .sidebar--wide .sidebar__brand > div:last-child,
-  .sidebar--wide .sidebar__user > div { display: block; }
+  .sidebar--wide .sidebar__user > div,
+  .sidebar--wide .sidebar__user-txt { display: block; }
+  .sidebar--wide .sidebar__cuenta > svg { display: block; }
+  .sidebar--wide .sidebar__cuenta { justify-content: flex-start; padding: 6px 8px; }
   .sidebar--wide .nav-item span { display: inline; }
   .sidebar--wide .nav-item__kbd,
   .sidebar--wide .sidebar__user .btn { display: inline-flex; }
@@ -1324,6 +1354,34 @@ table.tbl { width: 100%; border-collapse: collapse; }
 }
 .cuenta-hoja__nombre { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
 .cuenta-hoja__rol { font-size: 12.5px; color: var(--text-tertiary); margin-top: 1px; }
+
+/* En escritorio no es una hoja que sube desde abajo: eso es un gesto de
+   celular y acá se leía como fuera de lugar. Va centrada, más ancha y con
+   más aire entre las filas, que es lo que la diferencia de una lista de
+   botones apilados. */
+@media (min-width: 768px) {
+  .cuenta-fondo { align-items: center; }
+  .cuenta-hoja {
+    max-width: 560px;
+    margin: 0;
+    padding: 22px 24px;
+    gap: 14px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    /* Aparece donde está, no viene de ningún lado: no hay recorrido que
+       explicar. 140ms, que es lo que vale una respuesta a un toque. */
+    animation: cuenta-aparece 140ms cubic-bezier(.4, .4, .7, 1);
+  }
+  .cuenta-hoja .cu-fila { min-height: 56px; padding: 10px 12px; }
+  .cuenta-hoja__quien { padding-bottom: 14px; }
+}
+@keyframes cuenta-aparece {
+  from { opacity: 0; transform: scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cuenta-hoja { animation: none; }
+}
 
 @keyframes cuenta-sube {
   from { opacity: 0; transform: translateY(16px); }
@@ -2392,7 +2450,9 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .sidebar--rail .sidebar__brand-txt,
 .sidebar--rail .nav-item__lbl,
 .sidebar--rail .nav-item__kbd,
-.sidebar--rail .sidebar__user-txt { display: none; }
+.sidebar--rail .sidebar__user-txt,
+.sidebar--rail .sidebar__cuenta > svg { display: none; }
+.sidebar--rail .sidebar__cuenta { justify-content: center; padding: 6px 0; }
 .sidebar--rail .sidebar__brand { justify-content: center; padding-inline: 0; }
 .sidebar--rail .nav-item { justify-content: center; padding-inline: 0; width: 44px; }
 .sidebar--rail .sidebar__user { justify-content: center; gap: 6px; flex-wrap: wrap; }
@@ -4241,13 +4301,18 @@ table.tbl { width: 100%; border-collapse: collapse; }
 }
 .fi-head b { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 600; }
 .fi-head small { display: block; font-size: 12px; color: var(--text-tertiary); }
+/* Pegado arriba: si el paciente devuelve la tablet a mitad del texto, la
+   salida no puede estar a diez pantallas de scroll. */
+.fi-head { position: sticky; top: 0; z-index: 10; }
 .fi-soy {
-  display: inline-flex; align-items: center; gap: 7px;
+  display: inline-flex; align-items: baseline; gap: 7px;
   min-height: 44px; padding: 0 14px;
   border: 1px solid var(--border-input); border-radius: var(--radius-sm);
   background: var(--bg-surface); color: var(--text-secondary);
   font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
 }
+.fi-soy small { font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
+.fi-soy svg { align-self: center; }
 
 .fi-cols {
   flex: 1; min-height: 0;
@@ -4296,14 +4361,47 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .fi-check input { width: 22px; height: 22px; flex-shrink: 0; margin-top: 1px; }
 
 .fi-pad { position: relative; }
-.fi-pad__tit { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-label); }
-.fi-pad__tit button { border: 0; background: none; padding: 4px 6px; color: var(--text-tertiary); font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: 0; }
+/* Alto FIJO, no automático: "Borrar" aparece recién cuando hay trazo, y es
+   más alto que la etiqueta sola. Sin reservar el lugar, el recuadro entero
+   pegaba un salto en el momento exacto en que alguien está firmando — que es
+   lo peor que puede moverse. */
+.fi-pad__tit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+.fi-pad__tit button {
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.fi-pad__caja { position: relative; }
 .fi-pad canvas {
   display: block; width: 100%; height: 150px;
   border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
   background: var(--bg-surface);
   touch-action: none; /* sin esto el dedo scrollea la página en vez de firmar */
-  cursor: crosshair;
+  /* Lapicera en vez de la cruz. CSS no trae un cursor de pluma, así que va un
+     SVG propio con el punto activo en la punta (2 22) — si el punto quedara
+     en el centro, el trazo saldría corrido de donde apuntás.
+     Solo importa en escritorio: en tablet, que es donde se firma de verdad,
+     no hay cursor. */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%232C4A9E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E") 2 22, crosshair;
 }
 /* La línea sobre la que se firma, como en el papel. */
 .fi-pad__linea { position: absolute; left: 24px; right: 24px; bottom: 34px; height: 1px; background: var(--border-default); pointer-events: none; }
@@ -4365,7 +4463,17 @@ table.tbl { width: 100%; border-collapse: collapse; }
 
 /* ---- modal de plantillas de consentimiento ---- */
 
-.ct-modal { width: 960px; max-width: 100%; max-height: 88vh; display: flex; flex-direction: column; }
+/* Alto PROPIO, no derivado del contenido: al pasar a vista previa
+   desaparecen los chips y la ayuda —medio centenar de píxeles— y el modal
+   encogía, moviendo el pie con los botones justo donde está la mano. Con
+   alto fijo, cambiar de modo no mueve nada. */
+.ct-modal {
+  width: 960px;
+  max-width: 100%;
+  height: min(88vh, 820px);
+  display: flex;
+  flex-direction: column;
+}
 .ct-banda {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 20px;
@@ -4381,14 +4489,19 @@ table.tbl { width: 100%; border-collapse: collapse; }
   overflow-y: auto;
   padding: 8px;
 }
+/* Aire entre plantillas: pegadas, dos nombres largos se leían como uno
+   solo partido en dos renglones. */
 .ct-item {
   display: block; width: 100%; text-align: left;
-  padding: 10px 12px;
+  margin-bottom: 4px;
+  padding: 11px 12px;
   border: 0; border-left: 3px solid transparent; border-radius: var(--radius-sm);
   background: none; cursor: pointer;
 }
 .ct-item:hover { background: var(--bg-hover); }
-.ct-item.is-active { border-left-color: var(--fr-accent); background: var(--bg-surface); }
+.ct-item + .ct-item { border-top: 1px solid var(--border-subtle); }
+.ct-item.is-active { border-left-color: var(--fr-accent); background: var(--bg-surface); border-top-color: transparent; }
+.ct-item.is-active + .ct-item { border-top-color: transparent; }
 .ct-item__n { display: block; font-family: var(--font-display); font-size: 14.5px; font-weight: 600; color: var(--text-primary); }
 .ct-item__m { display: block; margin-top: 2px; font-size: 11px; color: var(--text-tertiary); }
 .ct-req { display: inline-block; margin-top: 4px; font-size: 9.5px; font-weight: 700; letter-spacing: .1em; color: var(--ink-stamp); }
@@ -4401,7 +4514,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
   font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
 }
 
-.ct-editor { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; overflow-y: auto; }
+.ct-editor { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; min-height: 0; overflow-y: auto; }
 .ct-campo { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-label); }
 .ct-campo input {
   height: 38px; padding: 0 10px;
@@ -4410,30 +4523,72 @@ table.tbl { width: 100%; border-collapse: collapse; }
   font-family: var(--font-sans); font-size: 14px; font-weight: 400;
   letter-spacing: 0; text-transform: none; color: var(--text-primary);
 }
-.ct-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-secondary); }
+.ct-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+.ct-check input { margin-top: 2px; flex-shrink: 0; }
+.ct-check small { display: block; font-size: 11.5px; line-height: 1.4; color: var(--text-tertiary); }
 
 /* Las variables se insertan con un toque. Nadie tipea llaves dobles: un
    {{pacinte}} mal escrito no falla, simplemente nunca se reemplaza. */
+/* Explicado con palabras, no solo con llaves. */
+.ct-ayuda { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-tertiary); }
+.ct-ayuda b { color: var(--text-secondary); font-weight: 600; }
 .ct-vars { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-tertiary); }
+/* Dictar la plantilla: escribir dos páginas de texto legal tipeando en una
+   tablet es inviable. Mismo motor que la evolución. */
+.ct-dic {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: auto;
+  padding: 4px 11px;
+  border: 1.5px solid var(--fr-accent) !important;
+  border-radius: 20px;
+  background: var(--bg-surface) !important;
+  color: var(--fr-accent) !important;
+  font-family: var(--font-sans) !important; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ct-dic--rec { border-color: var(--warning) !important; color: var(--warning) !important; }
+.ct-oyendo {
+  height: 48px; overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--warning-border); border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  font-family: var(--font-display); font-size: 13.5px; line-height: 1.4;
+  color: var(--text-primary);
+}
+.ct-oyendo i { font-style: normal; color: var(--text-tertiary); }
+.ct-oyendo em { font-style: normal; color: var(--text-placeholder); font-family: var(--font-sans); font-size: 12.5px; }
 .ct-vars button {
   padding: 3px 9px;
   border: 0; border-radius: 20px;
   background: var(--fr-accent-soft); color: var(--fr-accent);
   font-family: var(--font-mono); font-size: 12px; font-weight: 600; cursor: pointer;
 }
+/* Ocupa lo que sobre, en vez de un alto clavado: así el recuadro aprovecha
+   toda la pantalla disponible y es el mismo en los dos modos. */
 .ct-ta {
-  min-height: 240px; padding: 12px 14px;
+  flex: 1;
+  min-height: 200px; padding: 12px 14px;
   border: 1px solid var(--border-input); border-radius: var(--radius-sm);
   background: var(--bg-surface);
   font-family: var(--font-display); font-size: 14.5px; line-height: 1.6;
   color: var(--text-primary); resize: vertical;
 }
-.ct-previa {
-  display: flex; align-items: center; gap: 6px; align-self: flex-start;
-  border: 0; background: none; padding: 0;
-  color: var(--text-secondary); font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
+/* Editar / Vista previa: dos modos del mismo recuadro. */
+.ct-modo { display: flex; align-items: center; gap: 4px; }
+.ct-modo button {
+  padding: 5px 12px;
+  border: 1px solid transparent; border-radius: 20px;
+  background: none; color: var(--text-tertiary);
+  font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
-.ct-prev { height: auto; max-height: 240px; }
+.ct-modo button:hover { color: var(--text-secondary); }
+.ct-modo button.is-on {
+  border-color: var(--fr-accent-border);
+  background: var(--fr-accent-soft);
+  color: var(--fr-accent);
+}
+.ct-modo__nota { margin-left: 6px; font-size: 12px; color: var(--text-tertiary); }
+/* Mismo comportamiento que el editor: cambiar de modo no mueve nada. */
+.ct-prev { flex: 1; min-height: 200px; height: auto; max-height: none; }
 .ct-pie {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 4px; padding-top: 12px;
@@ -4581,15 +4736,11 @@ table.tbl { width: 100%; border-collapse: collapse; }
 
 .cs-fila .cs-nombre { font-family: var(--font-display); font-size: 15.5px; font-weight: 600; }
 .cs-fila .ev-meta { display: flex; gap: 0; }
-/* La firma en chico, como se ve en el papel: tinta sobre la hoja. */
-.cs-firma {
-  display: block;
-  width: 96px;
-  height: 30px;
-  object-fit: contain;
-  object-position: left;
-  margin-top: 7px;
-}
+/* Las firmas en chico, como en el papel: tinta sobre la hoja. */
+.cs-firmas { display: flex; gap: 22px; margin-top: 8px; flex-wrap: wrap; }
+.cs-firmas figure { margin: 0; }
+.cs-firmas img { display: block; width: 96px; height: 30px; object-fit: contain; object-position: left; }
+.cs-firmas figcaption { font-size: 10.5px; color: var(--text-tertiary); margin-top: 1px; }
 /* Sello hermano del HECHO de la hoja de trabajos, en azul tinta. */
 .cs-sello {
   padding: 3px 8px 2px;

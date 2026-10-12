@@ -429,6 +429,12 @@ export default function FichaRapidaPage() {
 
   // Montos/trabajos rápidos del consultorio (personalizables).
   const { data: settings } = useQuery({ queryKey: ['clinic-settings'], queryFn: clinicsApi.getSettings });
+  // Las hojas nuevas se encienden consultorio por consultorio. Apagadas, la
+  // ficha se ve exactamente como antes: ni pestañas ni título cambiado.
+  const verEvolucion = settings?.features?.evolucion === true;
+  const verConsentimientos = settings?.features?.consentimientos === true;
+  const hayPestanas = verEvolucion || verConsentimientos;
+
   const quickAmounts = settings?.quickAmounts?.length ? settings.quickAmounts : DEFAULT_QUICK_AMOUNTS;
   const treatments = settings?.quickTreatments?.length ? settings.quickTreatments : QUICK_CHIPS;
   const [customAmountsOpen, setCustomAmountsOpen] = useState(false);
@@ -2685,9 +2691,13 @@ export default function FichaRapidaPage() {
               }}
             >
               <div className="card__header" style={{ alignItems: 'center' }}>
-                {/* Pestañas. Reemplazan al título porque el título pasó a
-                    ser redundante: el nombre de la hoja que estás viendo es
-                    justamente la pestaña activa. */}
+                {/* Sin ninguna hoja nueva encendida, la ficha se ve igual que
+                    siempre. Con alguna, el título se vuelve redundante —el
+                    nombre de la hoja que estás viendo es la pestaña activa— y
+                    lo reemplazan las pestañas. */}
+                {!hayPestanas ? (
+                  <div className="card__title">Trabajos y pagos</div>
+                ) : (
                 <div className="fr-tabs" role="tablist">
                   <button
                     type="button"
@@ -2698,6 +2708,7 @@ export default function FichaRapidaPage() {
                   >
                     <span className="fr-tab__lbl">Trabajos y pagos</span>
                   </button>
+                  {verEvolucion && (
                   <button
                     type="button"
                     role="tab"
@@ -2712,6 +2723,8 @@ export default function FichaRapidaPage() {
                       <span className="fr-tab__n">{evolucion.length}</span>
                     )}
                   </button>
+                  )}
+                  {verConsentimientos && (
                   <button
                     type="button"
                     role="tab"
@@ -2730,7 +2743,9 @@ export default function FichaRapidaPage() {
                       <span className="fr-tab__n">{consents.length}</span>
                     )}
                   </button>
+                  )}
                 </div>
+                )}
                 {/* Los tres a la vista, no un interruptor que hay que apagar.
                     Con un solo chip había que descubrir que se destildaba para
                     volver a la lista completa — una acción que no se anuncia en
@@ -2776,7 +2791,7 @@ export default function FichaRapidaPage() {
                   estaba a propósito: re-indentar doscientas líneas para
                   envolverlas haría ilegible el diff de un cambio que, en
                   realidad, no las toca. */}
-              {hoja === 'consentimientos' ? (
+              {hoja === 'consentimientos' && verConsentimientos ? (
                 <ConsentimientosTab
                   patientId={id!}
                   pacienteNombre={patient ? `${patient.name} ${patient.lastName}` : ''}
@@ -2785,7 +2800,7 @@ export default function FichaRapidaPage() {
                   stack={stack}
                   onFirmar={c => navigate(`/firmar/${id}/${c._id}`)}
                 />
-              ) : hoja === 'evolucion' ? (
+              ) : hoja === 'evolucion' && verEvolucion ? (
                 <EvolucionTab
                   patientId={id!}
                   stack={stack}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import { authApi } from '../../api/auth';
@@ -7,6 +8,7 @@ import { BrandLogo } from '../common/BrandLogo';
 import { Avatar } from '../common/Avatar';
 import { useVeClinico } from '../../lib/permisos';
 import { linkSoporte } from '../../lib/soporte';
+import { CuentaSheet } from './CuentaSheet';
 
 interface NavItem {
   to: string;
@@ -52,6 +54,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapsed }: Sideb
   const navigate = useNavigate();
   const clinico = useVeClinico();
   const { pathname } = useLocation();
+  const [cuentaAbierta, setCuentaAbierta] = useState(false);
 
   const handleLogout = async () => {
     const refreshToken = localStorage.getItem('refreshToken');
@@ -120,17 +123,33 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapsed }: Sideb
       </a>
 
       <div className="sidebar__user">
-        <Avatar name={user?.name ?? '?'} id={user?.id} size="md" />
-        <div className="sidebar__user-txt" style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {withTitle(user?.name, user?.title)}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{rolLabel(user?.role, user?.isClinical)}</div>
-        </div>
+        {/* En celular la configuración vive en el tab "Cuenta"; en escritorio
+            no tenía puerta, así que el bloque del usuario es la puerta. Sin
+            ítem nuevo en el menú: no es un destino más, es dónde está lo
+            tuyo. */}
+        <button
+          type="button"
+          className="sidebar__cuenta"
+          title="Tu cuenta y la configuración del consultorio"
+          onClick={() => setCuentaAbierta(true)}
+        >
+          <Avatar name={user?.name ?? '?'} id={user?.id} size="md" />
+          <span className="sidebar__user-txt" style={{ minWidth: 0, flex: 1 }}>
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {withTitle(user?.name, user?.title)}
+            </span>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-tertiary)' }}>
+              {rolLabel(user?.role, user?.isClinical)}
+            </span>
+          </span>
+          <Icon name="settings" size={15} />
+        </button>
         <button className="btn btn--ghost btn--icon" onClick={handleLogout} title="Salir">
           <Icon name="x" />
         </button>
       </div>
+
+      {cuentaAbierta && <CuentaSheet onClose={() => setCuentaAbierta(false)} />}
     </aside>
   );
 }

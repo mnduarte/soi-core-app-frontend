@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usersApi } from '../../api/users';
 import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { Icon } from './Icon';
+import { FirmaPad, type FirmaPadHandle } from './FirmaPad';
 
 /**
  * "Mi perfil": los datos con los que el profesional aparece en la app y,
@@ -21,33 +22,39 @@ export function MiPerfilModal({ onClose }: { onClose: () => void }) {
   const { data: me, isPending } = useQuery({ queryKey: ['me'], queryFn: usersApi.me });
 
   const [nombre, setNombre] = useState<string | null>(null);
-  const [titulo, setTitulo] = useState<string | null>(null);
   const [matricula, setMatricula] = useState<string | null>(null);
-  const [especialidad, setEspecialidad] = useState<string | null>(null);
+  const [documento, setDocumento] = useState<string | null>(null);
+  const padRef = useRef<FirmaPadHandle>(null);
+  const [firmaNueva, setFirmaNueva] = useState(false);
 
   const nombreAct = nombre ?? me?.name ?? '';
-  const tituloAct = titulo ?? me?.title ?? 'NONE';
   const matriculaAct = matricula ?? me?.clinicalProfile?.license ?? '';
-  const especialidadAct = especialidad ?? me?.clinicalProfile?.specialty ?? '';
+  const documentoAct = documento ?? me?.clinicalProfile?.dni ?? '';
   const sucio =
-    nombre !== null || titulo !== null || matricula !== null || especialidad !== null;
+    nombre !== null || matricula !== null || documento !== null || firmaNueva;
 
   const guardar = useMutation({
     mutationFn: () =>
       usersApi.updateMe(me!._id, {
         name: nombreAct.trim(),
-        title: tituloAct as 'DR' | 'DRA' | 'NONE',
+
         clinicalProfile: {
           ...me?.clinicalProfile,
           license: matriculaAct.trim() || undefined,
-          specialty: especialidadAct.trim() || undefined,
+          dni: documentoAct.trim() || undefined,
+          // No se edita acá, pero se reenvía para no borrarlo sin querer.
+          specialty: me?.clinicalProfile?.specialty,
+          // Solo si dibujaron una nueva: si no, se conserva la que había.
+          signaturePng: firmaNueva
+            ? (padRef.current?.toPng() ?? undefined)
+            : me?.clinicalProfile?.signaturePng,
         },
       }),
     onSuccess: actualizado => {
       qc.invalidateQueries({ queryKey: ['me'] });
       // La sesión guarda el nombre para el sidebar y los encabezados: si no se
       // refresca, seguís viendo el anterior hasta volver a entrar.
-      setUser({ name: actualizado.name, title: actualizado.title });
+      setUser({ name: actualizado.name });
       showToast('Perfil guardado');
       onClose();
     },
@@ -82,15 +89,6 @@ export function MiPerfilModal({ onClose }: { onClose: () => void }) {
               </label>
 
               <label className="ct-campo">
-                Cómo te tratan
-                <select value={tituloAct} onChange={e => setTitulo(e.target.value)}>
-                  <option value="NONE">Sin tratamiento</option>
-                  <option value="DR">Dr.</option>
-                  <option value="DRA">Dra.</option>
-                </select>
-              </label>
-
-              <label className="ct-campo">
                 Matrícula
                 <input
                   className="mono"
@@ -101,18 +99,28 @@ export function MiPerfilModal({ onClose }: { onClose: () => void }) {
               </label>
 
               <label className="ct-campo">
-                Especialidad
+                Documento
                 <input
-                  value={especialidadAct}
-                  placeholder="ej: Cirugía oral"
-                  onChange={e => setEspecialidad(e.target.value)}
+                  className="mono"
+                  value={documentoAct}
+                  placeholder="ej: 28.456.789"
+                  onChange={e => setDocumento(e.target.value)}
                 />
               </label>
 
+              {/* Sin etiqueta propia: el pad ya trae la suya ("Firmá con el
+                  dedo") y dos títulos encima del mismo recuadro se leen como
+                  un error. */}
+              <FirmaPad
+                ref={padRef}
+                inicial={me?.clinicalProfile?.signaturePng}
+                onCambio={setFirmaNueva}
+              />
+
               <p className="mp-nota">
-                <Icon name="alert" size={13} /> Tu nombre y tu matrícula se escriben
+                <Icon name="alert" size={13} /> Tu nombre, tu matrícula y tu firma se estampan
                 dentro de los consentimientos que firman tus pacientes, y ahí quedan
-                congelados. Revisá que estén como corresponde.
+                congelados: cambiarlos acá no toca los que ya están firmados.
               </p>
             </>
           )}

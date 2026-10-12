@@ -18,8 +18,13 @@ export interface Consent {
   origin: ConsentOrigin;
   professionalId?: string;
   signedAt?: string;
-  /** PNG de la firma en data URI. Solo viene si está firmado. */
+  /** PNG de la firma del paciente, en data URI. Solo si está firmado. */
   signaturePng?: string;
+  /** Identidad y firma del profesional, congeladas al firmar. */
+  professionalName?: string;
+  professionalLicense?: string;
+  professionalDni?: string;
+  professionalSignaturePng?: string;
   /** SHA-256 que calcula el servidor al firmar. */
   hash?: string;
   createdAt: string;

@@ -48,14 +48,14 @@ export const versionVigente = (p: ConsentTemplate): ConsentTemplateVersion | und
  * cualquier otra fórmula sin pelearse con un prefijo que vino pegado.
  */
 export const VARIABLES = [
-  'paciente', 'dni', 'profesional', 'matricula', 'trabajo', 'fecha',
+  'paciente', 'dni', 'profesional', 'matricula', 'documento', 'trabajo', 'fecha',
 ] as const;
 
 const CIRUGIA = `CONSENTIMIENTO INFORMADO — CIRUGÍA ORAL / EXTRACCIÓN DENTARIA
 
 Paciente: {{paciente}}
 DNI: {{dni}}
-Profesional: {{profesional}} — matrícula {{matricula}}
+Profesional: {{profesional}} — matrícula {{matricula}} — DNI {{documento}}
 Práctica: {{trabajo}}
 Fecha: {{fecha}}
 

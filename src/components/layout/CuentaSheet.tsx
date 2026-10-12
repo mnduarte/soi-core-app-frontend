@@ -44,11 +44,14 @@ export function CuentaSheet({ onClose }: { onClose: () => void }) {
     queryFn: clinicsApi.getSettings,
   });
   const esDueno = user?.role === 'OWNER';
+  // Plantillas primero: es lo único de esta lista que puede frenar la
+  // atención de un paciente, y además lo más nuevo. Los otros tres se
+  // configuran una vez y no se vuelven a tocar.
   const filas = [
+    { k: 'plantillas' as const, ic: 'clipboard' as const, t: 'Plantillas de consentimiento', s: esDueno ? 'El texto legal que firma el paciente' : 'Solo el dueño puede editarlas', v: settings?.consentTemplates?.length },
     { k: 'trabajos' as const, ic: 'list' as const, t: 'Trabajos frecuentes', s: 'Los chips de la agenda y la ficha', v: settings?.quickTreatments?.length },
     { k: 'horarios' as const, ic: 'clock' as const, t: 'Horarios de atención', s: 'Los turnos que ofrece la libreta', v: settings?.slotTimes?.length },
     { k: 'categorias' as const, ic: 'image' as const, t: 'Categorías de fotos', s: 'Cómo se clasifican las imágenes', v: settings?.photoCategories?.length },
-    { k: 'plantillas' as const, ic: 'clipboard' as const, t: 'Plantillas de consentimiento', s: esDueno ? 'El texto legal que firma el paciente' : 'Solo el dueño puede editarlas', v: settings?.consentTemplates?.length },
   ];
   const navigate = useNavigate();
   const { pathname } = useLocation();

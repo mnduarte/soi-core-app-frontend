@@ -108,6 +108,7 @@ export function ConsentimientosTab({
       // Sin "Dr." adelante: ese tratamiento lo escribe la plantilla.
       profesional: me?.name ?? user?.name ?? '',
       matricula: me?.clinicalProfile?.license ?? '',
+      documento: me?.clinicalProfile?.dni ?? '',
       trabajo: nombreTrabajo,
       fecha: fechaCorta(new Date().toISOString()),
     }),
@@ -323,8 +324,26 @@ export function ConsentimientosTab({
                     {c.dni && <span className="mono">DNI {c.dni}</span>}
                     {c.hash && <span className="mono"> · {c.hash.slice(0, 8)}…</span>}
                   </div>
-                  {firmado && c.signaturePng && (
-                    <img className="cs-firma" src={c.signaturePng} alt="Firma del paciente" />
+                  {/* Las dos firmas: un consentimiento informado lo firman el
+                      paciente y el profesional. */}
+                  {firmado && (c.signaturePng || c.professionalSignaturePng) && (
+                    <div className="cs-firmas">
+                      {c.signaturePng && (
+                        <figure>
+                          <img src={c.signaturePng} alt="Firma del paciente" />
+                          <figcaption>paciente</figcaption>
+                        </figure>
+                      )}
+                      {c.professionalSignaturePng && (
+                        <figure>
+                          <img src={c.professionalSignaturePng} alt="Firma del profesional" />
+                          <figcaption>
+                            {c.professionalName ?? 'profesional'}
+                            {c.professionalLicense ? ` · ${c.professionalLicense}` : ''}
+                          </figcaption>
+                        </figure>
+                      )}
+                    </div>
                   )}
                 </div>
 

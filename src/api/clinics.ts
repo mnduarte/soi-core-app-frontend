@@ -14,6 +14,8 @@ export interface ClinicSettings {
   /** Plantillas de consentimiento del consultorio. Vacío → se ofrecen las
    *  de ejemplo que vienen en lib/consentTemplates.ts */
   consentTemplates?: ConsentTemplate[];
+  /** Features encendidas por consultorio. Ausente = todo apagado. */
+  features?: { evolucion?: boolean; consentimientos?: boolean };
   logoUrl?: string;
 }
 

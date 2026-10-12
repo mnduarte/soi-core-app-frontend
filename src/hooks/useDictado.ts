@@ -78,6 +78,9 @@ export function useDictado(idioma = 'es-AR') {
   const motor = useRef<MotorSR | null>(null);
   const quiereGrabar = useRef(false);
   const finalRef = useRef('');
+  // Lo que todavía está interpretando. Va en un ref además del estado porque
+  // `parar` necesita leerlo en el momento, no en el próximo render.
+  const parcialRef = useRef('');
 
   // Timer del contador. Va aparte del motor porque la API no informa duración.
   useEffect(() => {
@@ -86,10 +89,23 @@ export function useDictado(idioma = 'es-AR') {
     return () => clearInterval(t);
   }, [estado]);
 
-  const parar = useCallback(() => {
+  /** Devuelve TODO lo dictado, ya consolidado. Hace falta que lo devuelva:
+   *  quien llama no puede leer el estado recién actualizado hasta el próximo
+   *  render, y para entonces ya quiere insertar el texto. */
+  const parar = useCallback((): string => {
     quiereGrabar.current = false;
+    // Lo que estaba a medio confirmar también cuenta. El motor marca como
+    // "firme" recién cada tanto, así que en un dictado corto TODO lo dicho
+    // vive en el parcial: tomar solo lo firme perdía la frase entera.
+    if (parcialRef.current.trim()) {
+      finalRef.current += parcialRef.current;
+      parcialRef.current = '';
+      setTexto(finalRef.current);
+      setParcial('');
+    }
     motor.current?.stop();
     setEstado(finalRef.current.trim() ? 'listo' : 'inactivo');
+    return finalRef.current;
   }, []);
 
   const empezar = useCallback(() => {
@@ -97,6 +113,7 @@ export function useDictado(idioma = 'es-AR') {
     if (!SR || bloqueado) return;
 
     finalRef.current = '';
+    parcialRef.current = '';
     setTexto('');
     setParcial('');
     setSegundos(0);
@@ -114,6 +131,7 @@ export function useDictado(idioma = 'es-AR') {
         if (r.isFinal) finalRef.current += r[0].transcript;
         else enCurso += r[0].transcript;
       }
+      parcialRef.current = enCurso;
       setTexto(finalRef.current);
       setParcial(enCurso);
     };
@@ -159,6 +177,7 @@ export function useDictado(idioma = 'es-AR') {
     quiereGrabar.current = false;
     motor.current?.abort();
     finalRef.current = '';
+    parcialRef.current = '';
     setTexto('');
     setParcial('');
     setSegundos(0);

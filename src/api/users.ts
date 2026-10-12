@@ -4,6 +4,10 @@ export interface ClinicalProfile {
   /** Matrícula profesional. Es el identificador que corresponde en un
    *  consentimiento informado, más que el DNI. */
   license?: string;
+  /** Documento del profesional. */
+  dni?: string;
+  /** Firma dibujada una sola vez, en data URI. */
+  signaturePng?: string;
   specialty?: string;
   agendaColor?: string;
 }

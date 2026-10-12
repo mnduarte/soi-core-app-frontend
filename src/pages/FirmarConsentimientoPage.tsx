@@ -7,6 +7,7 @@ import { authApi } from '../api/auth';
 import { useAuthStore } from '../store/auth.store';
 import { useUIStore } from '../store/ui.store';
 import { Icon } from '../components/common/Icon';
+import { FirmaPad, type FirmaPadHandle } from '../components/common/FirmaPad';
 
 /**
  * Pantalla de firma — modo bloqueado.
@@ -58,8 +59,7 @@ export default function FirmarConsentimientoPage() {
   const [clave, setClave] = useState('');
 
   const textoRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dibujando = useRef(false);
+  const padRef = useRef<FirmaPadHandle>(null);
 
   // Avisar antes de cerrar la pestaña: si el paciente la cierra sin querer,
   // el consentimiento queda pendiente y hay que rehacerlo delante de él.
@@ -95,56 +95,10 @@ export default function FirmarConsentimientoPage() {
     return () => { cancelAnimationFrame(t); ro.disconnect(); };
   }, [consent?.finalText]);
 
-  const ctx = () => {
-    const c = canvasRef.current;
-    if (!c) return null;
-    const g = c.getContext('2d');
-    if (!g) return null;
-    g.lineWidth = 2.2;
-    g.lineCap = 'round';
-    g.lineJoin = 'round';
-    g.strokeStyle = '#2C4A9E';
-    return g;
-  };
-
-  const punto = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const c = canvasRef.current!;
-    const r = c.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * (c.width / r.width), y: (e.clientY - r.top) * (c.height / r.height) };
-  };
-
-  const empezarTrazo = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const g = ctx();
-    if (!g) return;
-    dibujando.current = true;
-    const p = punto(e);
-    g.beginPath();
-    g.moveTo(p.x, p.y);
-    setTrazo(true);
-  };
-  const seguirTrazo = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!dibujando.current) return;
-    e.preventDefault();
-    const g = ctx();
-    if (!g) return;
-    const p = punto(e);
-    g.lineTo(p.x, p.y);
-    g.stroke();
-  };
-  const terminarTrazo = () => { dibujando.current = false; };
-
-  const borrarFirma = () => {
-    const c = canvasRef.current;
-    const g = c?.getContext('2d');
-    if (c && g) g.clearRect(0, 0, c.width, c.height);
-    setTrazo(false);
-  };
-
   const firmar = useMutation({
     mutationFn: () =>
       consentsApi.sign(patientId!, id!, {
-        signaturePng: canvasRef.current!.toDataURL('image/png'),
+        signaturePng: padRef.current!.toPng()!,
         dni: dni.trim() || undefined,
       }),
     onSuccess: () => {
@@ -185,8 +139,12 @@ export default function FirmarConsentimientoPage() {
           <b>{clinic?.name}</b>
           <small>{user?.name}</small>
         </div>
+        {/* El nombre del handoff era "Soy el profesional", que dice QUIÉN sos
+            y no QUÉ hace el botón. En la prueba nadie encontró cómo salir.
+            El verbo primero y la aclaración después. */}
         <button type="button" className="fi-soy" onClick={() => setPidiendoClave(true)}>
-          <Icon name="user" size={14} /> Soy el profesional
+          <Icon name="arrowLeft" size={14} /> Salir
+          <small>soy el profesional</small>
         </button>
       </header>
 
@@ -223,24 +181,7 @@ export default function FirmarConsentimientoPage() {
             hacer preguntas.
           </label>
 
-          <div className="fi-pad">
-            <div className="fi-pad__tit">
-              Firmá con el dedo
-              {trazo && (
-                <button type="button" onClick={borrarFirma}>Borrar</button>
-              )}
-            </div>
-            <canvas
-              ref={canvasRef}
-              width={760}
-              height={240}
-              onPointerDown={empezarTrazo}
-              onPointerMove={seguirTrazo}
-              onPointerUp={terminarTrazo}
-              onPointerLeave={terminarTrazo}
-            />
-            <span className="fi-pad__linea" />
-          </div>
+          <FirmaPad ref={padRef} onCambio={setTrazo} />
 
           <button
             type="button"

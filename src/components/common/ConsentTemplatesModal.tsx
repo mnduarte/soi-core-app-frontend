@@ -4,6 +4,7 @@ import { clinicsApi } from '../../api/clinics';
 import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { Icon } from '../common/Icon';
+import { useDictado } from '../../hooks/useDictado';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import {
   PLANTILLAS_EJEMPLO,
@@ -59,13 +60,26 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
     return propias.length ? propias : PLANTILLAS_EJEMPLO;
   }, [settings]);
 
+  // Plantilla nueva que todavía NO se guardó. Antes "+ Nueva plantilla"
+  // persistía al instante una vacía llamada "Plantilla nueva": quedaba basura
+  // en el consultorio si te arrepentías, y guardar algo que nadie escribió
+  // todavía no es lo que nadie espera de un botón que dice "nueva".
+  const [borrador, setBorrador] = useState<ConsentTemplate | null>(null);
   const [selId, setSelId] = useState<string>('');
-  const sel = plantillas.find(p => p.id === selId) ?? plantillas[0];
+  const lista = borrador ? [...plantillas, borrador] : plantillas;
+  const sel = lista.find(p => p.id === selId) ?? lista[0];
+  const esBorrador = !!borrador && sel?.id === borrador.id;
+
 
   const [nombre, setNombre] = useState<string | null>(null);
   const [cuerpo, setCuerpo] = useState<string | null>(null);
   const [requerida, setRequerida] = useState<boolean | null>(null);
+  // Editar y ver son dos modos del MISMO recuadro, no dos cajas apiladas.
+  // Apiladas competían por el espacio y encima invitaban a escribir sobre la
+  // vista previa, que es de solo lectura. Arranca en edición: es a lo que
+  // viniste.
   const [previa, setPrevia] = useState(false);
+  const dic = useDictado();
   const [aArchivar, setAArchivar] = useState<ConsentTemplate | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -100,6 +114,7 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
 
   const guardarVersion = () => {
     if (!sel || !cuerpoAct.trim()) { showToast('El texto no puede quedar vacío', 'error'); return; }
+    if (!nombreAct.trim()) { showToast('Ponele un nombre a la plantilla', 'error'); return; }
     persistir(lista => {
       const i = lista.findIndex(p => p.id === sel.id);
       const prev = i >= 0 ? lista[i] : { ...sel, versions: [] };
@@ -123,22 +138,12 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
       if (i >= 0) { lista[i] = actualizada; return lista; }
       return [...lista, actualizada];
     });
+    setBorrador(null);
   };
 
   const nuevaPlantilla = () => {
     const id = nuevoId();
-    persistir(lista => [
-      ...lista,
-      {
-        id,
-        name: 'Plantilla nueva',
-        required: false,
-        archived: false,
-        versions: [
-          { id: `${id}-v1`, n: 1, body: '', createdAt: new Date().toISOString(), createdByName: user?.name },
-        ],
-      },
-    ]);
+    setBorrador({ id, name: '', required: false, archived: false, versions: [] });
     setSelId(id);
     limpiar();
   };
@@ -148,19 +153,31 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
     setAArchivar(null);
   };
 
-  /** Inserta la variable donde está el cursor. Nadie tipea las llaves. */
-  const insertar = (v: string) => {
+  /** Mete texto donde está el cursor. Lo usan los chips y el dictado. */
+  const insertarEnCursor = (texto: string) => {
     const ta = taRef.current;
-    const marca = `{{${v}}}`;
-    if (!ta) { setCuerpo(cuerpoAct + marca); return; }
+    if (!ta) { setCuerpo(cuerpoAct + texto); return; }
     const a = ta.selectionStart ?? cuerpoAct.length;
     const b = ta.selectionEnd ?? a;
-    const nuevo = cuerpoAct.slice(0, a) + marca + cuerpoAct.slice(b);
-    setCuerpo(nuevo);
+    setCuerpo(cuerpoAct.slice(0, a) + texto + cuerpoAct.slice(b));
     requestAnimationFrame(() => {
       ta.focus();
-      ta.setSelectionRange(a + marca.length, a + marca.length);
+      ta.setSelectionRange(a + texto.length, a + texto.length);
     });
+  };
+
+  /** Inserta la variable donde está el cursor. Nadie tipea las llaves. */
+  const insertar = (v: string) => insertarEnCursor(`{{${v}}}`);
+
+  /** Para el dictado y mete lo transcripto en el texto. Dictar dos páginas
+   *  de texto legal es mucho más llevadero que tipearlas en una tablet. */
+  const pararYMeter = () => {
+    // El texto lo devuelve `parar`, no se lee del estado: al parar se
+    // consolida lo que estaba a medio confirmar, y eso no está en el estado
+    // hasta el próximo render.
+    const t = dic.parar().trim();
+    if (t) insertarEnCursor((cuerpoAct ? ' ' : '') + t);
+    dic.descartar();
   };
 
   // Sin useMemo a propósito: el React Compiler no podía preservarlo (el
@@ -198,7 +215,7 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
         <div className="ct-cols">
           {/* Izquierda: la biblioteca del consultorio. */}
           <aside className="ct-lista">
-            {plantillas.map(p => {
+            {lista.map(p => {
               const v = versionVigente(p);
               return (
                 <button
@@ -207,9 +224,9 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
                   className={`ct-item ${sel?.id === p.id ? 'is-active' : ''}`}
                   onClick={() => elegir(p.id)}
                 >
-                  <span className="ct-item__n">{p.name}</span>
+                  <span className="ct-item__n">{p.name || 'Plantilla nueva'}</span>
                   <span className="ct-item__m mono">
-                    {v ? `v${v.n} · ${fechaCorta(v.createdAt)}` : 'sin versiones'}
+                    {v ? `v${v.n} · ${fechaCorta(v.createdAt)}` : 'sin guardar'}
                   </span>
                   {p.required && <span className="ct-req">REQUERIDA</span>}
                   {p.archived && <span className="ct-arch">archivada</span>}
@@ -238,6 +255,9 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
                   />
                 </label>
 
+                {/* Chiquita y con la consecuencia dicha: "requerida" solo
+                    no dice nada, y el tilde no debería pesar tanto como el
+                    nombre de la plantilla. */}
                 <label className="ct-check">
                   <input
                     type="checkbox"
@@ -245,32 +265,75 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
                     disabled={!puedeEditar}
                     onChange={e => setRequerida(e.target.checked)}
                   />
-                  Requerida antes de hacer el trabajo
+                  <span>
+                    Hay que firmarla antes de hacer el trabajo
+                    <small>
+                      Los trabajos por hacer que la necesiten y no la tengan
+                      firmada van a mostrar un aviso en la ficha.
+                    </small>
+                  </span>
                 </label>
 
-                {puedeEditar && (
-                  <div className="ct-vars">
-                    <span>Insertar:</span>
-                    {VARIABLES.map(v => (
-                      <button key={v} type="button" onClick={() => insertar(v)}>{v}</button>
-                    ))}
-                  </div>
+                {puedeEditar && !previa && (
+                  <>
+                    {/* Explicarlo con palabras: alguien que no programa ve
+                        {{paciente}} y no tiene por qué saber qué significa. */}
+                    <p className="ct-ayuda">
+                      Tocá un dato para meterlo en el texto. Donde lo pongas va a
+                      aparecer <b>el valor real</b> de cada paciente — mirá cómo
+                      queda en la vista previa de abajo.
+                    </p>
+                    <div className="ct-vars">
+                      {VARIABLES.map(v => (
+                        <button key={v} type="button" onClick={() => insertar(v)}>{v}</button>
+                      ))}
+                      {dic.soportado && !dic.bloqueado && (
+                        dic.estado === 'grabando' ? (
+                          <button type="button" className="ct-dic ct-dic--rec" onClick={pararYMeter}>
+                            <span className="ev-dot" /> Parar y poner
+                          </button>
+                        ) : (
+                          <button type="button" className="ct-dic" onClick={dic.empezar}>
+                            <Icon name="mic" size={13} /> Dictar
+                          </button>
+                        )
+                      )}
+                    </div>
+                    {dic.estado === 'grabando' && (
+                      <div className="ct-oyendo">
+                        {dic.texto}
+                        {dic.parcial && <i>{dic.parcial}</i>}
+                        {!dic.texto && !dic.parcial && <em>Escuchando…</em>}
+                      </div>
+                    )}
+                  </>
                 )}
 
-                <textarea
-                  ref={taRef}
-                  className="ct-ta"
-                  value={cuerpoAct}
-                  disabled={!puedeEditar}
-                  placeholder="Escribí el texto del consentimiento. Usá los chips de arriba para insertar los datos que se completan solos."
-                  onChange={e => setCuerpo(e.target.value)}
-                />
+                {/* Interruptor y no dos cajas: la vista previa ocupa el mismo
+                    lugar, a tamaño completo, y no se puede escribir encima. */}
+                <div className="ct-modo">
+                  <button
+                    type="button"
+                    className={!previa ? 'is-on' : ''}
+                    onClick={() => setPrevia(false)}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className={previa ? 'is-on' : ''}
+                    onClick={() => setPrevia(true)}
+                  >
+                    Vista previa
+                  </button>
+                  {previa && (
+                    <span className="ct-modo__nota">
+                      Así lo va a ver el paciente, con datos de ejemplo
+                    </span>
+                  )}
+                </div>
 
-                <button type="button" className="ct-previa" onClick={() => setPrevia(v => !v)}>
-                  <Icon name={previa ? 'chevronDown' : 'chevronRight'} size={13} />
-                  Vista previa con datos de muestra
-                </button>
-                {previa && (
+                {previa ? (
                   <div className="cs-preview ct-prev">
                     {trozos.map((t, i) =>
                       t.variable ? (
@@ -280,19 +343,30 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
                       ),
                     )}
                   </div>
+                ) : (
+                  <textarea
+                    ref={taRef}
+                    className="ct-ta"
+                    value={cuerpoAct}
+                    disabled={!puedeEditar}
+                    placeholder="Escribí el texto del consentimiento. Tocá los datos de arriba para insertar lo que se completa solo, o dictalo."
+                    onChange={e => setCuerpo(e.target.value)}
+                  />
                 )}
 
                 <div className="ct-pie">
                   <span className="ct-pie__meta mono">
                     {vig
                       ? `Última edición ${fechaCorta(vig.createdAt)}${vig.createdByName ? ` · ${vig.createdByName}` : ''} · ${sel.versions.length} ${sel.versions.length === 1 ? 'versión' : 'versiones'}`
-                      : 'sin versiones'}
+                      : 'Todavía no se guardó'}
                   </span>
                   {puedeEditar && (
                     <>
+                      {!esBorrador && (
                       <button type="button" className="ct-archivar" onClick={() => setAArchivar(sel)}>
                         {sel.archived ? 'Desarchivar' : 'Archivar'}
                       </button>
+                      )}
                       <button type="button" className="ev-ghost" onClick={onClose}>Cancelar</button>
                       <button
                         type="button"
@@ -300,9 +374,10 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
                         disabled={!sucio || guardar.isPending}
                         onClick={guardarVersion}
                       >
-                        {guardar.isPending
-                          ? 'Guardando…'
-                          : `Guardar versión ${(vig?.n ?? 0) + 1}`}
+                        {/* Dice "Guardar" y nada más. El versionado existe
+                            por abajo —y el pie lo muestra— pero no es asunto
+                            de quien está escribiendo el texto. */}
+                        {guardar.isPending ? 'Guardando…' : 'Guardar'}
                       </button>
                     </>
                   )}

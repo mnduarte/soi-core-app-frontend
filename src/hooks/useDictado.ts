@@ -81,6 +81,14 @@ export function useDictado(idioma = 'es-AR') {
   // Lo que todavía está interpretando. Va en un ref además del estado porque
   // `parar` necesita leerlo en el momento, no en el próximo render.
   const parcialRef = useRef('');
+  /**
+   * Lo dictado en tandas ANTERIORES de reconocimiento.
+   *
+   * Chrome corta solo cada tanto y lo reanudamos (ver `onend`). Cada tanda
+   * arranca con su lista de resultados vacía, así que lo de las tandas
+   * previas se guarda acá y se le suma lo de la tanda actual.
+   */
+  const baseRef = useRef('');
 
   // Timer del contador. Va aparte del motor porque la API no informa duración.
   useEffect(() => {
@@ -99,6 +107,7 @@ export function useDictado(idioma = 'es-AR') {
     // vive en el parcial: tomar solo lo firme perdía la frase entera.
     if (parcialRef.current.trim()) {
       finalRef.current += parcialRef.current;
+      baseRef.current = finalRef.current;
       parcialRef.current = '';
       setTexto(finalRef.current);
       setParcial('');
@@ -114,6 +123,7 @@ export function useDictado(idioma = 'es-AR') {
 
     finalRef.current = '';
     parcialRef.current = '';
+    baseRef.current = '';
     setTexto('');
     setParcial('');
     setSegundos(0);
@@ -125,12 +135,22 @@ export function useDictado(idioma = 'es-AR') {
     m.interimResults = true;
 
     m.onresult = e => {
+      // Se RECONSTRUYE el texto entero en cada evento en vez de ir sumando
+      // lo nuevo. Parece más caro y es lo único correcto: Android vuelve a
+      // entregar resultados que ya había entregado, y sumando cada entrega
+      // el texto se duplicaba ("HolaHolaHola hola..."). Reconstruir da el
+      // mismo resultado sin importar cuántas veces llegue cada cosa.
+      //
+      // Se recorre desde 0 y no desde `e.resultIndex` por lo mismo: ese
+      // índice no es confiable entre implementaciones.
+      let firme = '';
       let enCurso = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalRef.current += r[0].transcript;
+        if (r.isFinal) firme += r[0].transcript;
         else enCurso += r[0].transcript;
       }
+      finalRef.current = baseRef.current + firme;
       parcialRef.current = enCurso;
       setTexto(finalRef.current);
       setParcial(enCurso);
@@ -152,6 +172,10 @@ export function useDictado(idioma = 'es-AR') {
       // silencio a mitad de una frase y parece que la app se colgó.
       if (quiereGrabar.current) {
         try {
+          // La tanda que viene arranca con resultados vacíos, así que lo de
+          // esta pasa a ser la base. Sin esto, al reanudar se perdía todo lo
+          // dicho antes del corte.
+          baseRef.current = finalRef.current;
           m.start();
           return;
         } catch {
@@ -178,6 +202,7 @@ export function useDictado(idioma = 'es-AR') {
     motor.current?.abort();
     finalRef.current = '';
     parcialRef.current = '';
+    baseRef.current = '';
     setTexto('');
     setParcial('');
     setSegundos(0);

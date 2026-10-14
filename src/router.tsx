@@ -28,6 +28,12 @@ const router = createBrowserRouter([
     lazy: () => import('./pages/AcceptInvitationPage').then(m => ({ Component: m.default })),
   },
   {
+    // Pública de verdad: sin `loader`, porque quien entra es un paciente sin
+    // cuenta. Lo único que la protege es el token del link.
+    path: '/firmar-invitado/:token',
+    lazy: () => import('./pages/FirmarInvitadoPage').then(m => ({ Component: m.default })),
+  },
+  {
     // Fuera del AppLayout a propósito: en modo firma la tablet se la queda el
     // paciente, así que no puede haber sidebar ni forma de llegar a la ficha
     // de nadie. Salir sin firmar pide la contraseña del profesional.

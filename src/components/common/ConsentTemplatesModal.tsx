@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { clinicsApi } from '../../api/clinics';
 import { useUIStore } from '../../store/ui.store';
@@ -42,7 +42,16 @@ const MUESTRA = {
 
 const nuevoId = () => `pl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
+export function ConsentTemplatesModal({
+  onClose,
+  abrirEnNueva = false,
+}: {
+  onClose: () => void;
+  /** Entra directo a una plantilla en blanco, para el "Crear plantilla" de la
+   *  hoja de consentimientos: si cayeras en la lista habría que buscar el
+   *  botón de nueva, que es exactamente lo que ya pediste al entrar. */
+  abrirEnNueva?: boolean;
+}) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
   const user = useAuthStore(s => s.user);
@@ -148,6 +157,20 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
     limpiar();
   };
 
+  /* Va después de `nuevaPlantilla` a propósito: declarada con const, llamarla
+     antes es un error de zona muerta. El ref evita que StrictMode cree dos
+     borradores al montar en desarrollo. */
+  const yaAbrio = useRef(false);
+  useEffect(() => {
+    if (!abrirEnNueva || yaAbrio.current || !puedeEditar) return;
+    yaAbrio.current = true;
+    nuevaPlantilla();
+    // Corre una sola vez: el ref de arriba es la garantía, no la lista de
+    // dependencias. Incluir `nuevaPlantilla` obligaría a memoizarla junto con
+    // todo lo que usa, para un efecto que de todas formas no se repite.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirEnNueva, puedeEditar]);
+
   const archivar = (p: ConsentTemplate) => {
     persistir(lista => lista.map(x => (x.id === p.id ? { ...x, archived: !x.archived } : x)));
     setAArchivar(null);
@@ -241,7 +264,10 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
           </aside>
 
           {/* Derecha: el editor. */}
-          <section className="ct-editor">
+          {/* La `key` remonta el editor al cambiar de plantilla, y con eso
+              corre el fundido. Solo se desvanece, sin desplazamiento: el panel
+              no viene de ningún lado, es el mismo lugar con otro contenido. */}
+          <section className="ct-editor ct-editor--entra" key={sel?.id ?? 'vacio'}>
             {!sel ? (
               <div className="ev-vacio">Elegí una plantilla de la izquierda.</div>
             ) : (
@@ -274,30 +300,26 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
                   </span>
                 </label>
 
-                {puedeEditar && !previa && (
+                {puedeEditar && (
                   <>
                     {/* Explicarlo con palabras: alguien que no programa ve
                         {{paciente}} y no tiene por qué saber qué significa. */}
-                    <p className="ct-ayuda">
+                    <p className={`ct-ayuda ${previa ? 'is-off' : ''}`}>
                       Tocá un dato para meterlo en el texto. Donde lo pongas va a
                       aparecer <b>el valor real</b> de cada paciente — mirá cómo
                       queda en la vista previa de abajo.
                     </p>
-                    <div className="ct-vars">
+                    <div className={`ct-vars ${previa ? 'is-off' : ''}`}>
                       {VARIABLES.map(v => (
-                        <button key={v} type="button" onClick={() => insertar(v)}>{v}</button>
+                        <button
+                          key={v}
+                          type="button"
+                          disabled={previa}
+                          onClick={() => insertar(v)}
+                        >
+                          {v}
+                        </button>
                       ))}
-                      {dic.soportado && !dic.bloqueado && (
-                        dic.estado === 'grabando' ? (
-                          <button type="button" className="ct-dic ct-dic--rec" onClick={pararYMeter}>
-                            <span className="ev-dot" /> Parar y poner
-                          </button>
-                        ) : (
-                          <button type="button" className="ct-dic" onClick={dic.empezar}>
-                            <Icon name="mic" size={13} /> Dictar
-                          </button>
-                        )
-                      )}
                     </div>
                     {dic.estado === 'grabando' && (
                       <div className="ct-oyendo">
@@ -331,17 +353,45 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
                       Así lo va a ver el paciente, con datos de ejemplo
                     </span>
                   )}
+                  {/* Dictar vive en la barra de modo y no entre los chips: es
+                      una acción sobre el editor, no un dato para insertar. */}
+                  {dic.soportado && !dic.bloqueado && (
+                    <>
+                      <span className="ct-sep" aria-hidden="true" />
+                      {dic.estado === 'grabando' ? (
+                        <button type="button" className="ct-dic ct-dic--rec" onClick={pararYMeter}>
+                          <span className="ev-dot" /> Parar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ct-dic"
+                          disabled={previa}
+                          title="Dictar el texto en vez de escribirlo"
+                          onClick={dic.empezar}
+                        >
+                          <Icon name="mic" size={14} /> Dictar
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 {previa ? (
-                  <div className="cs-preview ct-prev">
-                    {trozos.map((t, i) =>
-                      t.variable ? (
-                        <mark key={i} className={t.falta ? 'falta' : undefined}>{t.texto}</mark>
-                      ) : (
-                        <span key={i}>{t.texto}</span>
-                      ),
-                    )}
+                  <div className="ct-prev">
+                    {/* Una hoja sobre una mesa: margen generoso, ancho de
+                        lectura acotado y renglón más suelto. Es lo que hace
+                        que se lea como un documento y no como un campo de
+                        texto de solo lectura. */}
+                    <div className="ct-hoja">
+                      {trozos.map((t, i) =>
+                        t.variable ? (
+                          <mark key={i} className={t.falta ? 'falta' : undefined}>{t.texto}</mark>
+                        ) : (
+                          <span key={i}>{t.texto}</span>
+                        ),
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <textarea
@@ -356,9 +406,10 @@ export function ConsentTemplatesModal({ onClose }: { onClose: () => void }) {
 
                 <div className="ct-pie">
                   <span className="ct-pie__meta mono">
-                    {vig
-                      ? `Última edición ${fechaCorta(vig.createdAt)}${vig.createdByName ? ` · ${vig.createdByName}` : ''} · ${sel.versions.length} ${sel.versions.length === 1 ? 'versión' : 'versiones'}`
-                      : 'Todavía no se guardó'}
+                    {/* Solo la fecha. El autor y el número de versión están
+                        guardados y se muestran en una línea si algún día hace
+                        falta rastrear quién tocó el texto legal. */}
+                    {vig ? `Última edición ${fechaCorta(vig.createdAt)}` : 'Todavía no se guardó'}
                   </span>
                   {puedeEditar && (
                     <>

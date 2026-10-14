@@ -4111,6 +4111,29 @@ table.tbl { width: 100%; border-collapse: collapse; }
   font-weight: 700;
   letter-spacing: 0.14em;
 }
+
+/* Sellos del consentimiento. Misma geometría que "hecho" —son hermanos— pero
+   con la inclinación al otro lado, para que dos sellos seguidos no se lean
+   como uno torcido. El firmado va en azul tinta, que es el color de una
+   firma. */
+.fr-sello--firmado {
+  color: var(--info);
+  border-color: rgba(44, 74, 158, 0.45);
+  transform: rotate(-1.2deg);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+/* El pendiente es un botón: lleva a la hoja donde se resuelve. Un aviso que
+   no te lleva a arreglarlo solo molesta. */
+.fr-sello--sinfirma {
+  background: none;
+  cursor: pointer;
+  color: var(--warning);
+  border-color: var(--warning-border);
+  transform: rotate(-1.2deg);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
 .fr-sello i { font-style: normal; font-weight: 500; letter-spacing: 0.04em; }
 
 
@@ -4304,15 +4327,19 @@ table.tbl { width: 100%; border-collapse: collapse; }
 /* Pegado arriba: si el paciente devuelve la tablet a mitad del texto, la
    salida no puede estar a diez pantallas de scroll. */
 .fi-head { position: sticky; top: 0; z-index: 10; }
+/* Ícono y texto en columnas separadas: con todo en línea y alineado a la
+   base, "soy el profesional" se descolgaba y en angosto partía el botón en
+   dos renglones. */
 .fi-soy {
-  display: inline-flex; align-items: baseline; gap: 7px;
+  display: inline-flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 0 14px;
   border: 1px solid var(--border-input); border-radius: var(--radius-sm);
   background: var(--bg-surface); color: var(--text-secondary);
   font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
 }
-.fi-soy small { font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
-.fi-soy svg { align-self: center; }
+.fi-soy > span { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+.fi-soy small { font-size: 10.5px; font-weight: 500; color: var(--text-tertiary); white-space: nowrap; }
+
 
 .fi-cols {
   flex: 1; min-height: 0;
@@ -4328,6 +4355,21 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .fi-texto-col { display: flex; flex-direction: column; min-height: 0; }
 .fi-texto-col h1 { font-family: var(--font-display); font-size: 26px; font-weight: 600; }
 .fi-sub { margin: 2px 0 12px; font-size: 13.5px; color: var(--text-tertiary); }
+/* La regla de lectura, dicha antes de que alguien toque el botón. */
+.fi-regla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-sm);
+  background: var(--info-bg);
+  color: var(--info);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
 /* El texto scrollea en su propia caja y no con la página: así se puede saber
    si el paciente llegó al final, que es lo que habilita el botón. */
 .fi-texto {
@@ -4339,6 +4381,29 @@ table.tbl { width: 100%; border-collapse: collapse; }
   color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .fi-desliza { margin-top: 8px; text-align: center; font-size: 12.5px; color: var(--text-tertiary); }
+
+/* Avance de lectura. El candado de "leé hasta el final" es correcto, pero sin
+   decir cuánto falta se vive como un botón roto. Con la barra, pasa a ser una
+   tarea con final visible. */
+.fi-avance { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin: -6px 0 0; }
+.fi-avance__barra {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--border-default);
+  overflow: hidden;
+}
+.fi-avance__barra span {
+  display: block;
+  height: 100%;
+  background: var(--fr-accent);
+  /* Acompaña al dedo en vez de saltar. Es transform-free a propósito: animar
+     el ancho de una barra de 4px no mueve ningún layout alrededor. */
+  transition: width 120ms linear;
+}
+.fi-avance > span { font-size: 12.5px; color: var(--text-tertiary); text-align: center; }
+@media (prefers-reduced-motion: reduce) { .fi-avance__barra span { transition: none; } }
 
 .fi-form {
   display: flex; flex-direction: column; gap: 14px;
@@ -4396,12 +4461,11 @@ table.tbl { width: 100%; border-collapse: collapse; }
   border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
   background: var(--bg-surface);
   touch-action: none; /* sin esto el dedo scrollea la página en vez de firmar */
-  /* Lapicera en vez de la cruz. CSS no trae un cursor de pluma, así que va un
-     SVG propio con el punto activo en la punta (2 22) — si el punto quedara
-     en el centro, el trazo saldría corrido de donde apuntás.
-     Solo importa en escritorio: en tablet, que es donde se firma de verdad,
-     no hay cursor. */
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%232C4A9E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E") 2 22, crosshair;
+  /* Lapicera dibujada en relleno y no en contorno: a 24px un trazo fino se
+     ve sucio y se pierde contra el fondo claro. El punto activo va en la
+     PUNTA (3 21) — si fuera el centro del ícono, el trazo saldría corrido de
+     donde apuntás. Solo importa en escritorio: en tablet no hay cursor. */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M2.6 21.4l1.3-4.6L15.4 5.3l3.3 3.3L7.2 20.1l-4.6 1.3z' fill='%232C4A9E'/%3E%3Cpath d='M16.6 4.1l1.5-1.5a1.9 1.9 0 0 1 2.7 0l.6.6a1.9 1.9 0 0 1 0 2.7l-1.5 1.5-3.3-3.3z' fill='%232C4A9E' opacity='.6'/%3E%3C/svg%3E") 3 21, crosshair;
 }
 /* La línea sobre la que se firma, como en el papel. */
 .fi-pad__linea { position: absolute; left: 24px; right: 24px; bottom: 34px; height: 1px; background: var(--border-default); pointer-events: none; }
@@ -4515,6 +4579,11 @@ table.tbl { width: 100%; border-collapse: collapse; }
 }
 
 .ct-editor { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; min-height: 0; overflow-y: auto; }
+/* Reusa `panelIn`, el fundido que ya tiene el proyecto para contenido que se
+   reemplaza en el mismo lugar. Sin escala ni desplazamiento: no hay recorrido
+   que contar, solo que lo que estás viendo es otra cosa. */
+.ct-editor--entra { animation: panelIn 0.18s ease-out; }
+@media (prefers-reduced-motion: reduce) { .ct-editor--entra { animation: none; } }
 .ct-campo { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-label); }
 .ct-campo input {
   height: 38px; padding: 0 10px;
@@ -4535,16 +4604,22 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .ct-vars { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-tertiary); }
 /* Dictar la plantilla: escribir dos páginas de texto legal tipeando en una
    tablet es inviable. Mismo motor que la evolución. */
+/* Empuja a Dictar contra el borde derecho y marca el corte: de un lado los
+   datos para insertar, del otro la acción. */
+.ct-sep { flex: 1; min-width: 12px; }
+/* Forma de BOTÓN, no de píldora: con las esquinas redondas de los chips se
+   leía como un dato más de la fila. */
 .ct-dic {
-  display: inline-flex; align-items: center; gap: 6px;
-  margin-left: auto;
-  padding: 4px 11px;
+  display: inline-flex; align-items: center; gap: 7px;
+  flex-shrink: 0;
+  padding: 5px 13px;
   border: 1.5px solid var(--fr-accent) !important;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   background: var(--bg-surface) !important;
   color: var(--fr-accent) !important;
-  font-family: var(--font-sans) !important; font-size: 12px; font-weight: 600; cursor: pointer;
+  font-family: var(--font-sans) !important; font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
+.ct-dic:disabled { opacity: .4; cursor: default; }
 .ct-dic--rec { border-color: var(--warning) !important; color: var(--warning) !important; }
 .ct-oyendo {
   height: 48px; overflow-y: auto;
@@ -4586,9 +4661,54 @@ table.tbl { width: 100%; border-collapse: collapse; }
   background: var(--fr-accent-soft);
   color: var(--fr-accent);
 }
-.ct-modo__nota { margin-left: 6px; font-size: 12px; color: var(--text-tertiary); }
-/* Mismo comportamiento que el editor: cambiar de modo no mueve nada. */
-.ct-prev { flex: 1; min-height: 200px; height: auto; max-height: none; }
+.ct-modo__nota { margin-left: 6px; min-width: 0; font-size: 12px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* La vista previa es una HOJA sobre una mesa, no un campo de solo lectura.
+   El fondo apagado hace de escritorio y la hoja se recorta al ancho de
+   lectura cómoda; eso solo ya la hace leer como documento, sin cambiarle el
+   formato al texto. */
+.ct-prev {
+  flex: 1;
+  min-height: 200px;
+  height: auto;
+  max-height: none;
+  overflow-y: auto;
+  padding: 16px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+}
+/* NO lleva la clase `cs-preview`: aquella tiene alto fijo con scroll propio y
+   dejaba la hoja recortada en 220px con todo el fondo vacío abajo. Acá la
+   hoja crece con el texto y el que scrollea es el fondo, como una hoja sobre
+   un escritorio. */
+.ct-hoja {
+  max-width: 78ch;
+  margin: 0 auto;
+  padding: 36px 44px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px; /* una hoja no tiene las esquinas redondeadas */
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-display);
+  font-size: 14px;
+  /* Renglón más suelto que en la edición: es para leer, no para corregir. */
+  line-height: 1.75;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Las variables resaltadas también acá: la hoja ya no hereda de cs-preview. */
+.ct-hoja mark { background: var(--fr-accent-pill); color: var(--fr-accent); border-radius: 3px; padding: 0 2px; }
+.ct-hoja mark.falta { background: var(--warning-bg); color: var(--warning); }
+@media (max-width: 720px) {
+  .ct-prev { padding: 10px 6px; }
+  .ct-hoja { padding: 22px 20px; }
+}
+
+/* Apagados en vista previa, pero presentes: sacarlos movía toda la fila de
+   abajo justo al cambiar de modo. */
+.ct-vars.is-off button { opacity: .4; cursor: default; }
+.ct-ayuda.is-off { opacity: .4; }
 .ct-pie {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 4px; padding-top: 12px;
@@ -4614,16 +4734,37 @@ table.tbl { width: 100%; border-collapse: collapse; }
   color: var(--text-label);
   white-space: nowrap;
 }
-.cs-barsel select {
-  min-width: 0;
-  height: 38px;
-  padding: 0 10px;
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  color: var(--text-primary);
+/* El Select propio trae su propia caja; acá solo se le da el ancho. */
+.cs-barsel > div { min-width: 170px; }
+
+/* En celular la barra entraba en TRES renglones: plantilla, trabajo y el
+   botón solo abajo. El culpable es el `min-width: 170px` de arriba — con la
+   etiqueta "TRABAJO" delante, al botón ya no le quedaba lugar al lado.
+
+   Acá cada uno declara su papel: la plantilla se queda el renglón entero
+   (su texto es largo: "Cirugía oral / extracción (ejemplo)") y el trabajo
+   comparte el siguiente con el botón, que es donde sobraba aire. El select
+   del trabajo absorbe lo que quede (`flex: 1 1 0`) y el botón conserva su
+   ancho natural, así el reparto sale solo sin números mágicos.
+
+   El `min-width: 0` va en los dos `.cs-barsel`: un item de flex arranca en
+   `min-width: auto` —"nunca más angosto que mi contenido"— y sin esto se
+   niegan a achicarse y vuelve el scroll lateral.
+
+   Ojo con el `> div`, que es el `<div>` del componente Select: ese trae
+   `minWidth: 0` INLINE, y un estilo inline le gana a la hoja de estilos. O
+   sea que el `min-width: 170px` de arriba nunca llegó a aplicarse, y
+   cualquier `min-width` que pongamos acá tampoco. Lo único que sirve sobre
+   él es `flex`. Medido a 430, 390 y 360px: entra en dos renglones y a 360 el
+   select trunca a "Sin vincul…" en vez de empujar el botón abajo. */
+@media (max-width: 720px) {
+  .cs-barsel--plantilla { flex: 1 1 100%; min-width: 0; }
+  .cs-barsel--plantilla > div { flex: 1; }
+  .cs-barsel--trabajo { flex: 1 1 0; min-width: 0; }
+  .cs-barsel--trabajo > div { flex: 1; }
+  /* Más angosto para que el reparto cierre, sin tocar el alto: 42px de
+     blanco táctil se respetan igual. */
+  .cs-bar .btn-hoja { flex: 0 0 auto; gap: 6px; padding: 0 12px; font-size: 13.5px; }
 }
 
 /* Panel a dos columnas: a la izquierda lo que el paciente va a leer, a la
@@ -4684,7 +4825,18 @@ table.tbl { width: 100%; border-collapse: collapse; }
   text-transform: uppercase;
   color: var(--text-label);
 }
-.cs-form select,
+/* Mismo encabezado chico que los labels, pero en un div porque adentro va
+   un Select propio y no un control nativo. */
+.cs-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-label);
+}
 .cs-form input {
   height: 38px;
   padding: 0 10px;
@@ -4716,6 +4868,34 @@ table.tbl { width: 100%; border-collapse: collapse; }
   line-height: 1.45;
 }
 
+/* Lo que falta del perfil del profesional. Terracota como el resto de los
+   avisos: no es un error, es algo que todavía no se cargó.
+
+   Es una fila entera tocable y no un link dentro del texto: el Dr. lo usa en
+   tablet, y un blanco de 40px de alto se acierta con el dedo a la primera.
+   La columna del medio va en `minmax(0, 1fr)` porque un item de grid arranca
+   en `min-width: auto` y el texto largo empujaría el chevron fuera de la
+   caja. */
+.cs-perfil {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cs-perfil > span { font-size: 12.5px; line-height: 1.45; }
+.cs-perfil b { display: block; font-weight: 600; }
+.cs-perfil:hover { border-color: var(--warning); }
+
 /* Vista previa del texto congelado. Alto fijo y scroll propio: el cuerpo de
    un consentimiento es largo y, si creciera, el botón de generar quedaría
    fuera de pantalla justo cuando hay que tocarlo. */
@@ -4734,6 +4914,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
   overflow-wrap: anywhere;
 }
 
+.cs-wsp { color: var(--success) !important; }
 .cs-fila .cs-nombre { font-family: var(--font-display); font-size: 15.5px; font-weight: 600; }
 .cs-fila .ev-meta { display: flex; gap: 0; }
 /* Las firmas en chico, como en el papel: tinta sobre la hoja. */
@@ -4742,6 +4923,40 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .cs-firmas img { display: block; width: 96px; height: 30px; object-fit: contain; object-position: left; }
 .cs-firmas figcaption { font-size: 10.5px; color: var(--text-tertiary); margin-top: 1px; }
 /* Sello hermano del HECHO de la hoja de trabajos, en azul tinta. */
+/* Leyenda de los íconos de la lista. Discreta a propósito: hace falta la
+   primera semana y después se mira de reojo. Envuelve en vez de recortar —en
+   la ficha en una columna angosta no entra en un renglón— y los ítems van en
+   `inline-flex` para que el ícono y su nombre no se separen al envolver. */
+.cs-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  /* Mismo margen lateral que las filas: la leyenda arranca donde arrancan
+     ellas. Sin borde propio — al quedar la leyenda como última hija, la
+     última fila recupera su `border-bottom` y esa ya es la separación; poner
+     otra daría doble raya. */
+  padding: 10px 16px 12px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.cs-leyenda span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cs-leyenda svg { opacity: .8; }
+
+/* Anulado: la fila se apaga pero NO se tacha ni se esconde. Sigue siendo
+   documentación —hay que poder leer qué decía y descargarla—, solo que dejó
+   de valer. Bajarle el contraste alcanza para que no se confunda con los
+   vigentes; tacharla la volvería ilegible justo cuando hay que consultarla. */
+.cs-fila--anulado { opacity: .62; }
+.cs-fila--anulado .cs-nombre { text-decoration: line-through; text-decoration-thickness: 1px; }
+.cs-anulado {
+  margin-top: 3px;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+
 .cs-sello {
   padding: 3px 8px 2px;
   border: 1.5px solid var(--info);
@@ -4753,6 +4968,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
   letter-spacing: .14em;
   white-space: nowrap;
 }
+/* Despues de .cs-sello a proposito: misma especificidad, gana el ultimo. */
+.cs-sello--anulado { border-color: var(--danger); color: var(--danger); }
 
 /* Barra de carga: misma forma que la de "Trabajos y pagos" (.lb-addrow), para
    que cambiar de pestaña no mueva el ojo de lugar. */

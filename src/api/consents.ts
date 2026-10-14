@@ -27,6 +27,13 @@ export interface Consent {
   professionalSignaturePng?: string;
   /** SHA-256 que calcula el servidor al firmar. */
   hash?: string;
+  /**
+   * Anulado: sigue estando y se sigue pudiendo descargar, pero ya no vale.
+   * Lo firmado no se toca — texto, firmas y hash quedan verificables.
+   */
+  annulledAt?: string;
+  annulledBy?: string;
+  annulledReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -57,8 +64,31 @@ export const consentsApi = {
       .post<{ data: Consent }>(`/patients/${patientId}/consents/${id}/sign`, dto)
       .then(r => r.data.data),
 
+  /** Genera el link de un solo uso. El token viene en claro UNA vez. */
+  crearLink: (patientId: string, id: string) =>
+    apiClient
+      .post<{ data: { token: string; expiresAt: string } }>(
+        `/patients/${patientId}/consents/${id}/link`,
+      )
+      .then(r => r.data.data),
+
   remove: (patientId: string, id: string) =>
     apiClient.delete(`/patients/${patientId}/consents/${id}`),
+
+  /**
+   * Da de baja un firmado sin borrarlo. Un pendiente usa `remove`.
+   *
+   * La contraseña viaja en el mismo pedido y la verifica el servidor: pedirla
+   * antes, por separado, dejaría un "ya verifiqué" del lado del cliente que
+   * no prueba nada.
+   */
+  anular: (patientId: string, id: string, password: string, reason?: string) =>
+    apiClient
+      .post<{ data: Consent }>(`/patients/${patientId}/consents/${id}/annul`, {
+        password,
+        reason,
+      })
+      .then(r => r.data.data),
 
   /** Ids de trabajos con consentimiento firmado, para el sello en la hoja
    *  de Trabajos y pagos. */

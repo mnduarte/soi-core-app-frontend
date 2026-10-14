@@ -3,10 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { consentsApi } from '../api/consents';
 import { patientsApi } from '../api/patients';
-import { authApi } from '../api/auth';
 import { useAuthStore } from '../store/auth.store';
 import { useUIStore } from '../store/ui.store';
 import { Icon } from '../components/common/Icon';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { FirmaPad, type FirmaPadHandle } from '../components/common/FirmaPad';
 
 /**
@@ -54,9 +54,12 @@ export default function FirmarConsentimientoPage() {
   const dni = dniTocado ?? consentDni ?? '';
   const [leyo, setLeyo] = useState(false);
   const [alFinal, setAlFinal] = useState(false);
+  // Cuánto del texto se leyó, de 0 a 1. El candado de "leé hasta el final" es
+  // correcto, pero sin mostrar cuánto falta se vive como un botón roto: se
+  // firma, no se habilita, y nadie entiende por qué.
+  const [leido, setLeido] = useState(0);
   const [trazo, setTrazo] = useState(false);
-  const [pidiendoClave, setPidiendoClave] = useState(false);
-  const [clave, setClave] = useState('');
+  const [confirmandoSalida, setConfirmandoSalida] = useState(false);
 
   const textoRef = useRef<HTMLDivElement>(null);
   const padRef = useRef<FirmaPadHandle>(null);
@@ -75,6 +78,8 @@ export default function FirmarConsentimientoPage() {
   const alScrollear = () => {
     const el = textoRef.current;
     if (!el) return;
+    const total = el.scrollHeight - el.clientHeight;
+    setLeido(total <= 0 ? 1 : Math.min(1, (el.scrollTop + 24) / total));
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) setAlFinal(true);
   };
 
@@ -87,7 +92,7 @@ export default function FirmarConsentimientoPage() {
     const el = textoRef.current;
     if (!el) return;
     const medir = () => {
-      if (el.scrollHeight <= el.clientHeight + 4) setAlFinal(true);
+      if (el.scrollHeight <= el.clientHeight + 4) { setAlFinal(true); setLeido(1); }
     };
     const t = requestAnimationFrame(medir);
     const ro = new ResizeObserver(medir);
@@ -104,15 +109,9 @@ export default function FirmarConsentimientoPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['consents', patientId] });
       showToast('Consentimiento firmado ✓');
-      navigate(`/patients/${patientId}`, { replace: true });
+      navigate(`/patients/${patientId}?hoja=consentimientos`, { replace: true });
     },
     onError: () => showToast('No se pudo guardar la firma', 'error'),
-  });
-
-  const salir = useMutation({
-    mutationFn: () => authApi.verifyPassword(clave),
-    onSuccess: () => navigate(`/patients/${patientId}`, { replace: true }),
-    onError: () => showToast('Contraseña incorrecta', 'error'),
   });
 
   const puedeFirmar = alFinal && leyo && trazo && !firmar.isPending;
@@ -142,9 +141,12 @@ export default function FirmarConsentimientoPage() {
         {/* El nombre del handoff era "Soy el profesional", que dice QUIÉN sos
             y no QUÉ hace el botón. En la prueba nadie encontró cómo salir.
             El verbo primero y la aclaración después. */}
-        <button type="button" className="fi-soy" onClick={() => setPidiendoClave(true)}>
-          <Icon name="arrowLeft" size={14} /> Salir
-          <small>soy el profesional</small>
+        <button type="button" className="fi-soy" onClick={() => setConfirmandoSalida(true)}>
+          <Icon name="arrowLeft" size={14} />
+          <span>
+            Salir
+            <small>soy el profesional</small>
+          </span>
         </button>
       </header>
 
@@ -153,6 +155,13 @@ export default function FirmarConsentimientoPage() {
           <h1>Consentimiento informado</h1>
           <p className="fi-sub">
             {consent.templateName} · {fechaCorta(new Date())}
+          </p>
+          {/* La regla, ANTES de tocar nada. Enterarse de que el botón no
+              anda y recién ahí descubrir por qué se vive como un error de la
+              app, aunque el candado esté funcionando bien. */}
+          <p className="fi-regla">
+            Leé el consentimiento completo: el botón para firmar se habilita
+            cuando llegues al final del texto.
           </p>
           <div className="fi-texto" ref={textoRef} onScroll={alScrollear}>
             {consent.finalText}
@@ -191,14 +200,24 @@ export default function FirmarConsentimientoPage() {
           >
             {firmar.isPending ? 'Guardando…' : 'Firmar'}
           </button>
+          {/* El aviso de qué falta va ACÁ, pegado al botón: es donde se mira
+              cuando el botón no responde. Debajo del texto quedaba fuera de
+              pantalla justo en el momento en que hacía falta. */}
           {!puedeFirmar && !firmar.isPending && (
-            <p className="fi-falta">
-              {!alFinal
-                ? 'Leé el texto hasta el final para poder firmar.'
-                : !leyo
+            !alFinal ? (
+              <div className="fi-avance">
+                <div className="fi-avance__barra">
+                  <span style={{ width: `${Math.round(leido * 100)}%` }} />
+                </div>
+                <span>Leé el texto hasta el final · {Math.round(leido * 100)}%</span>
+              </div>
+            ) : (
+              <p className="fi-falta">
+                {!leyo
                   ? 'Marcá la casilla para confirmar que lo leíste.'
                   : 'Firmá en el recuadro.'}
-            </p>
+              </p>
+            )
           )}
 
           <p className="fi-pie">
@@ -208,34 +227,22 @@ export default function FirmarConsentimientoPage() {
         </section>
       </div>
 
-      {pidiendoClave && (
-        <div className="fi-clave-fondo" onClick={() => setPidiendoClave(false)}>
-          <div className="fi-clave" onClick={e => e.stopPropagation()}>
-            <b>Salir sin firmar</b>
-            <p>Poné tu contraseña para volver a la ficha.</p>
-            <input
-              type="password"
-              autoFocus
-              value={clave}
-              onChange={e => setClave(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') salir.mutate(); }}
-            />
-            <div className="fi-clave__acc">
-              <button type="button" className="ev-ghost" onClick={() => setPidiendoClave(false)}>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="ev-save"
-                disabled={!clave || salir.isPending}
-                onClick={() => salir.mutate()}
-              >
-                {salir.isPending ? 'Verificando…' : 'Salir'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirmación, no contraseña.
+          Lo que había antes era pedir la contraseña del profesional, y en la
+          práctica se paga en cada aborto —que pasa seguido: el paciente se
+          arrepiente, suena el teléfono— mientras que proteger de verdad la
+          ficha mientras el paciente tiene la tablet es trabajo del sistema
+          operativo (Acceso Guiado en iPad, Anclar pantalla en Android), no de
+          un formulario que igual se puede saltear cerrando la pestaña. */}
+      <ConfirmDialog
+        open={confirmandoSalida}
+        title="¿Salir sin firmar?"
+        message="El consentimiento queda pendiente y vas a poder retomarlo desde la ficha."
+        confirmLabel="Salir"
+        cancelLabel="Seguir acá"
+        onConfirm={() => navigate(`/patients/${patientId}?hoja=consentimientos`, { replace: true })}
+        onCancel={() => setConfirmandoSalida(false)}
+      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ export interface ClinicChanges {
   gallery: number;
   odontograms: number;
   clinicalEntries: number;
+  consents: number;
 }
 
 /** Escalera de mora. La calcula el backend, en el mismo lugar donde corta el

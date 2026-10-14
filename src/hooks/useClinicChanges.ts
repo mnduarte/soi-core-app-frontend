@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/auth.store';
 
 // Sync cross-device (Opción 2 — heartbeat de versiones).
 //
-// Se monta una sola vez en AppLayout. Pollea GET /changes cada ~12s (una
+// Se monta una sola vez en AppLayout. Pollea GET /changes (una
 // request liviana: 1 doc por colección) y compara contra el mapa anterior.
 // Cuando el updatedAt de un recurso sube, invalida SOLO las queryKeys de ese
 // recurso → react-query refetchea las que estén activas en la página actual.
@@ -27,9 +27,29 @@ const RESOURCE_QUERY_KEYS: Record<keyof ClinicChanges, string[][]> = {
   gallery: [['gallery-sessions']],
   odontograms: [['odontogram']],
   clinicalEntries: [['clinical-entries']],
+  // La lista de la hoja y el contador de la pestaña usan
+  // ['consents', patientId]; el prefijo las alcanza a las dos. Va
+  // también ['consent'] (singular), que es la pantalla de firma: si el
+  // paciente firmó por link mientras estaba abierta, tiene que enterarse.
+  consents: [['consents'], ['consent']],
 };
 
-const POLL_MS = 10_000;
+/**
+ * Cada cuánto late.
+ *
+ * Es el techo de lo que puede tardar un cambio hecho en otro dispositivo en
+ * aparecer acá. A 10s se notaba la espera cuando dos personas miran la misma
+ * ficha, o cuando el paciente firma por link y el profesional está esperando
+ * verlo. A 5s se lee como "casi instantáneo" sin cambiar nada de la
+ * arquitectura.
+ *
+ * Lo que cuesta: el doble de requests. Cada una son ~9 findOne (uno por
+ * colección), así que a 5s son ~108 queries por minuto por pestaña abierta.
+ * Con el tamaño actual es nada. Si algún día hay muchos consultorios a la vez,
+ * lo primero NO es volver a subirlo: es el índice { clinicId: 1, updatedAt: -1 }
+ * en las colecciones que crezcan, que convierte cada findOne en O(1).
+ */
+const POLL_MS = 5_000;
 
 export function useClinicChanges() {
   const qc = useQueryClient();

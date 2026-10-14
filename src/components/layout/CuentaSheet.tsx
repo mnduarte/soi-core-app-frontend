@@ -75,13 +75,19 @@ export function CuentaSheet({ onClose }: { onClose: () => void }) {
       >
         <div className="cuenta-hoja__quien">
           <Avatar name={user?.name ?? ''} id={user?.id ?? ''} size="lg" />
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div className="cuenta-hoja__nombre">{withTitle(user?.name, user?.title)}</div>
             <div className="cuenta-hoja__rol">
               {rolLabel(user?.role, user?.isClinical)}
               {clinic?.name ? ` · ${clinic.name}` : ''}
             </div>
           </div>
+          {/* Arriba a la derecha, como en todo el resto de la app. Antes
+              cerrar era un "Cancelar" al pie, que además mentía: acá no hay
+              ninguna acción en curso que cancelar. */}
+          <button className="btn btn--ghost btn--icon btn--sm" title="Cerrar" onClick={onClose}>
+            <Icon name="x" size={15} />
+          </button>
         </div>
 
         {/* Mi cuenta. Por ahora una sola fila, pero es la que importa para
@@ -93,7 +99,7 @@ export function CuentaSheet({ onClose }: { onClose: () => void }) {
             <span className="cu-fila__ic cu-fila__ic--mio"><Icon name="user" size={16} /></span>
             <span className="cu-fila__txt">
               <b>Mi perfil</b>
-              <small>Nombre, matrícula y especialidad</small>
+              <small>Nombre, matrícula, DNI y firma</small>
             </span>
             <Icon name="chevronRight" size={14} />
           </button>
@@ -132,9 +138,6 @@ export function CuentaSheet({ onClose }: { onClose: () => void }) {
 
         <button className="btn btn--secondary" onClick={() => void salir()}>
           <Icon name="undo" size={15} /> Cerrar sesión
-        </button>
-        <button className="btn btn--ghost" onClick={onClose}>
-          Cancelar
         </button>
       </div>
 

@@ -6,6 +6,7 @@ import { useAuthStore } from '../../store/auth.store';
 import { Icon } from '../common/Icon';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useDictado } from '../../hooks/useDictado';
+import { useFlip } from '../../hooks/useFlip';
 
 /**
  * Hoja "Evolución" de la ficha clínica.
@@ -120,6 +121,16 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
   };
 
   const refrescar = () => qc.invalidateQueries({ queryKey: ['clinical-entries', patientId] });
+
+  /**
+   * Al borrar una nota, las de abajo suben acompañando en vez de saltar.
+   * `soloAltaYBaja` es imprescindible acá: editar una nota abre un textarea
+   * que cambia el alto de su fila, y sin esa guarda el hook lo tomaría por un
+   * reordenamiento y animaría las filas de abajo encima de su propia
+   * animación.
+   */
+  const listaRef = useRef<HTMLDivElement>(null);
+  useFlip(listaRef, { insert: true, soloAltaYBaja: true });
 
   const crear = useMutation({
     mutationFn: (content: string) => clinicalEntriesApi.create(patientId, { content, type: 'NOTE' }),
@@ -293,8 +304,13 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
       {dic.error && <div className="ev-error">{dic.error}</div>}
 
       <div
+        ref={listaRef}
         className="ev-lista"
-        style={stack ? undefined : { flex: 1, minHeight: 0, overflowY: 'auto' }}
+        style={
+          stack
+            ? { isolation: 'isolate' }
+            : { flex: 1, minHeight: 0, overflowY: 'auto', isolation: 'isolate' }
+        }
       >
         {isPending ? (
           <div className="ev-vacio">Trayendo la evolución…</div>
@@ -310,7 +326,7 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
             const mio = !!user && e.professionalId === user.id;
             const fotos = photos?.get(e._id) ?? [];
             return (
-              <div key={e._id} className="ev-fila">
+              <div key={e._id} data-flip={e._id} className="ev-fila">
                 <div className="ev-fecha">
                   {fechaCorta(e.createdAt)}
                   <small>

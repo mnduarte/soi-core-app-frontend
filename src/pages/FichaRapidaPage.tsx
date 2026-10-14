@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appointmentsApi } from '../api/appointments';
 import { patientsApi, type Patient } from '../api/patients';
@@ -126,7 +126,45 @@ export default function FichaRapidaPage() {
   const { id } = useParams<{ id: string }>();
 
   // Qué hoja de la ficha se está viendo. La ficha dejó de tener una sola.
-  const [hoja, setHoja] = useState<'trabajos' | 'evolucion' | 'consentimientos'>('trabajos');
+  /**
+   * La hoja abierta vive en la URL, no en estado local.
+   *
+   * Volver de la pantalla de firma es un cambio de ruta: la ficha se remonta y
+   * un `useState` arrancaría de cero, devolviéndote a Trabajos justo después
+   * de firmar un consentimiento. En la URL sobrevive, y además la pantalla de
+   * firma puede devolverte exactamente a la hoja de la que saliste.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const hojaUrl = searchParams.get('hoja');
+  const hoja: 'trabajos' | 'evolucion' | 'consentimientos' =
+    hojaUrl === 'evolucion' || hojaUrl === 'consentimientos' ? hojaUrl : 'trabajos';
+  /**
+   * De qué lado entra la hoja nueva. Reusa la animación del cambio de día de
+   * la agenda (`lb-day-next` / `lb-day-prev`): es el mismo gesto —contenido
+   * que se reemplaza y viene de un lado— y hablar dos idiomas visuales para
+   * lo mismo sería peor que no animar.
+   *
+   * No es un FLIP y no finge que algo sobrevivió: al cambiar de hoja no queda
+   * ningún objeto en pantalla para seguir con la vista. Solo dice de dónde
+   * vino lo que estás viendo.
+   */
+  const ORDEN_HOJAS = ['trabajos', 'evolucion', 'consentimientos'] as const;
+  const [hojaMove, setHojaMove] = useState({ n: 0, dir: 'next' as 'next' | 'prev' });
+  const cambiarHoja = (nueva: typeof hoja) => {
+    if (nueva === hoja) return;
+    const dir = ORDEN_HOJAS.indexOf(nueva) > ORDEN_HOJAS.indexOf(hoja) ? 'next' : 'prev';
+    setHojaMove(m => ({ n: m.n + 1, dir }));
+    // `replace` para que el botón de atrás no recorra pestaña por pestaña.
+    setSearchParams(
+      p => {
+        const q = new URLSearchParams(p);
+        if (nueva === 'trabajos') q.delete('hoja');
+        else q.set('hoja', nueva);
+        return q;
+      },
+      { replace: true },
+    );
+  };
   // El contador de la pestaña necesita las entradas acá arriba. Es la misma
   // queryKey que usa EvolucionTab, así que react-query sirve una sola
   // request para las dos.
@@ -142,6 +180,23 @@ export default function FichaRapidaPage() {
   });
   // Punto de aviso en la pestaña: hay algo esperando una firma.
   const consentPendiente = consents.some(c => c.status === 'PENDING');
+  /**
+   * Estado del consentimiento de cada trabajo, para los sellos de la hoja de
+   * Trabajos y pagos. Sale de los consentimientos que ya se trajeron para el
+   * contador de la pestaña, así que no cuesta una request más.
+   * Firmado gana sobre pendiente: si hay dos, el que vale es el firmado.
+   */
+  const consentPorTrabajo = useMemo(() => {
+    const m = new Map<string, 'SIGNED' | 'PENDING'>();
+    for (const c of consents) {
+      if (!c.workId) continue;
+      // Un anulado no cubre el trabajo: ese es exactamente el punto de
+      // anularlo. El trabajo vuelve a quedar sin consentimiento.
+      if (c.annulledAt) continue;
+      if (c.status === 'SIGNED' || !m.has(c.workId)) m.set(c.workId, c.status);
+    }
+    return m;
+  }, [consents]);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const isMobile = useIsMobile(760);
@@ -431,8 +486,16 @@ export default function FichaRapidaPage() {
   const { data: settings } = useQuery({ queryKey: ['clinic-settings'], queryFn: clinicsApi.getSettings });
   // Las hojas nuevas se encienden consultorio por consultorio. Apagadas, la
   // ficha se ve exactamente como antes: ni pestañas ni título cambiado.
-  const verEvolucion = settings?.features?.evolucion === true;
-  const verConsentimientos = settings?.features?.consentimientos === true;
+  /**
+   * Prendidas salvo que el consultorio las tenga apagadas explícitamente.
+   *
+   * Era `=== true` mientras se probaban en un solo consultorio. Ahora es
+   * `!== false`, que habilita a todos SIN escribir un flag en cada clínica:
+   * los que nunca lo tuvieron (`features: null`) pasan a verlas, y el
+   * interruptor queda para apagárselas a alguien puntual si hiciera falta.
+   */
+  const verEvolucion = settings?.features?.evolucion !== false;
+  const verConsentimientos = settings?.features?.consentimientos !== false;
   const hayPestanas = verEvolucion || verConsentimientos;
 
   const quickAmounts = settings?.quickAmounts?.length ? settings.quickAmounts : DEFAULT_QUICK_AMOUNTS;
@@ -2047,6 +2110,26 @@ export default function FichaRapidaPage() {
                       Si no convence, se borra este bloque y se restituye:
                         {!done && paid > 0 && <span className="fr-pend">por hacer</span>} */}
                   {!done && <span className="fr-sello fr-sello--pend">sin hacer</span>}
+
+                  {/* Sellos del consentimiento, hermanos del de "hecho" y con
+                      la misma geometría. El firmado va en azul tinta —el color
+                      de una firma— y el pendiente en terracota, que es como la
+                      app marca lo que quedó a medias. */}
+                  {verConsentimientos && consentPorTrabajo.get(it._id) === 'SIGNED' && (
+                    <span className="fr-sello fr-sello--firmado">
+                      <b>firmado</b>
+                    </span>
+                  )}
+                  {verConsentimientos && consentPorTrabajo.get(it._id) === 'PENDING' && (
+                    <button
+                      type="button"
+                      className="fr-sello fr-sello--sinfirma"
+                      title="Pasale la pantalla al paciente para que lo firme"
+                      onClick={() => cambiarHoja('consentimientos')}
+                    >
+                      <b>sin firmar</b>
+                    </button>
+                  )}
                   {/* Acá había un chip "✓ pagado" para los pendientes ya
                       cobrados. Existía porque los pendientes NO tenían botón de
                       cobro y era la única forma de ver el estado. Ahora lo
@@ -2697,7 +2780,7 @@ export default function FichaRapidaPage() {
                     role="tab"
                     aria-selected={hoja === 'trabajos'}
                     className={`fr-tab ${hoja === 'trabajos' ? 'is-active' : ''}`}
-                    onClick={() => setHoja('trabajos')}
+                    onClick={() => cambiarHoja('trabajos')}
                   >
                     <span className="fr-tab__lbl">Trabajos y pagos</span>
                   </button>
@@ -2707,7 +2790,7 @@ export default function FichaRapidaPage() {
                     role="tab"
                     aria-selected={hoja === 'evolucion'}
                     className={`fr-tab ${hoja === 'evolucion' ? 'is-active' : ''}`}
-                    onClick={() => setHoja('evolucion')}
+                    onClick={() => cambiarHoja('evolucion')}
                   >
                     <span className="fr-tab__lbl">Evolución</span>
                     {/* Sin número cuando está vacía: un "0" no le pide nada a
@@ -2723,7 +2806,7 @@ export default function FichaRapidaPage() {
                     role="tab"
                     aria-selected={hoja === 'consentimientos'}
                     className={`fr-tab ${hoja === 'consentimientos' ? 'is-active' : ''}`}
-                    onClick={() => setHoja('consentimientos')}
+                    onClick={() => cambiarHoja('consentimientos')}
                   >
                     <span className="fr-tab__lbl">Consentimientos</span>
                     {/* El punto avisa que hay uno sin firmar. Va en terracota y
@@ -2784,14 +2867,25 @@ export default function FichaRapidaPage() {
                   estaba a propósito: re-indentar doscientas líneas para
                   envolverlas haría ilegible el diff de un cambio que, en
                   realidad, no las toca. */}
+              {/* Envoltorio transparente al layout —flex en columna, crece y
+                  puede achicarse— para no romper el scroll interno de la
+                  lista. Existe solo para colgarle la animación y la `key` que
+                  la vuelve a disparar en cada cambio. */}
+              <div
+                key={`${hoja}-${hojaMove.n}`}
+                className={hojaMove.n > 0 ? `lb-day-${hojaMove.dir}` : undefined}
+                style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 }}
+              >
               {hoja === 'consentimientos' && verConsentimientos ? (
                 <ConsentimientosTab
                   patientId={id!}
                   pacienteNombre={patient ? `${patient.name} ${patient.lastName}` : ''}
                   pacienteDni={patient?.dni}
+                  pacienteTelefono={patient?.phone}
                   trabajos={todosLosTrabajos}
                   stack={stack}
                   onFirmar={c => navigate(`/firmar/${id}/${c._id}`)}
+                  // (la vuelta a esta hoja la resuelve la pantalla de firma)
                 />
               ) : hoja === 'evolucion' && verEvolucion ? (
                 <EvolucionTab
@@ -3006,6 +3100,7 @@ export default function FichaRapidaPage() {
               </div>
                 </>
               )}
+              </div>
 
               {/* Sin total al pie: el único número de plata que se muestra es
                   "Falta cobrar" (arriba). No exponemos el total del plan ni lo

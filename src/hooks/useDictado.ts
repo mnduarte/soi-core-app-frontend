@@ -85,6 +85,28 @@ const unir = (a: string, b: string) => {
   return /\s$/.test(a) ? a + b : `${a} ${b}`;
 };
 
+/**
+ * Suma un tramo a lo acumulado, pero distinguiendo CORRECCIÓN de contenido
+ * nuevo.
+ *
+ * Android no corrige un resultado en su lugar: por cada ajuste agrega una
+ * entrada nueva con la frase un poco más completa. La lista termina siendo
+ * ["Hola", "Hola hola", "Hola hola se", …] y pegarlas todas daba la frase
+ * creciendo en pantalla.
+ *
+ * La regla no asume nada de la plataforma: si el tramo empieza con lo que ya
+ * tengo, es el mismo texto mejorado y REEMPLAZA; si ya lo tengo al final, se
+ * ignora; y si no se parece, es contenido nuevo y se suma.
+ */
+const agregar = (acumulado: string, tramo: string) => {
+  const t = tramo.trim();
+  if (!t) return acumulado;
+  if (!acumulado) return t;
+  if (t.startsWith(acumulado)) return t;
+  if (acumulado.endsWith(t)) return acumulado;
+  return unir(acumulado, t);
+};
+
 export function useDictado(idioma = 'es-AR') {
   const [soportado] = useState(() => getSR() !== null);
   const [estado, setEstado] = useState<EstadoDictado>('inactivo');
@@ -135,10 +157,10 @@ export function useDictado(idioma = 'es-AR') {
           const r = e.results[i];
           const t = r[0].transcript.trim();
           if (!t) continue;
-          if (r.isFinal) firme = unir(firme, t);
-          else enCurso = unir(enCurso, t);
+          if (r.isFinal) firme = agregar(firme, t);
+          else enCurso = agregar(enCurso, t);
         }
-        finalRef.current = unir(baseRef.current, firme);
+        finalRef.current = agregar(baseRef.current, firme);
         parcialRef.current = enCurso;
         setTexto(finalRef.current);
         setParcial(enCurso);
@@ -161,7 +183,7 @@ export function useDictado(idioma = 'es-AR') {
         if (quiereGrabar.current) {
           // Lo que estaba a medio confirmar se pierde al cortar la tanda, así
           // que se arrastra como parte de la base de la siguiente.
-          const acumulado = unir(finalRef.current, parcialRef.current);
+          const acumulado = agregar(finalRef.current, parcialRef.current);
           try {
             arrancarRef.current(acumulado);
             return;
@@ -211,7 +233,7 @@ export function useDictado(idioma = 'es-AR') {
     // "firme" recién cada tanto, así que en un dictado corto TODO lo dicho
     // vive en el parcial: tomar solo lo firme perdía la frase entera.
     if (parcialRef.current) {
-      finalRef.current = unir(finalRef.current, parcialRef.current);
+      finalRef.current = agregar(finalRef.current, parcialRef.current);
       baseRef.current = finalRef.current;
       parcialRef.current = '';
       setTexto(finalRef.current);

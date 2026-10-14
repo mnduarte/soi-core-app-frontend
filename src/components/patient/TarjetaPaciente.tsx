@@ -22,7 +22,6 @@ import type { Patient } from '../../api/patients';
 export function TarjetaPaciente({
   patient,
   isMobile,
-  infoInicial = false,
   onEditar,
   onGaleria,
   onOdontograma,
@@ -30,14 +29,15 @@ export function TarjetaPaciente({
 }: {
   patient: Patient;
   isMobile: boolean;
-  /** Llega en true desde el nombre del turno en la agenda (`?info=1`). */
-  infoInicial?: boolean;
   onEditar: () => void;
   onGaleria: () => void;
   onOdontograma: () => void;
   onCerrar: () => void;
 }) {
-  const [infoOpen, setInfoOpen] = useState(infoInicial);
+  // Siempre cerrada al abrir la ficha. Antes se abría sola al llegar desde el
+  // nombre del turno en la agenda; ahora los datos personales se ven solo si
+  // se piden desde el menú de la ficha.
+  const [infoOpen, setInfoOpen] = useState(false);
   // En celular las tres acciones se guardan en un menú: ocupaban un renglón
   // entero con un borde arriba, y ahora la parte de abajo de la ficha tiene
   // tres hojas. La ✕ NO entra acá — es cómo se sale, y esconder la salida

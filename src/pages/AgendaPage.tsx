@@ -543,7 +543,7 @@ export default function AgendaPage() {
           onReschedule={handleReschedule}
           onDelete={handleDelete}
           onEditPatient={handleEditPatient}
-          onVerPaciente={clinico ? id => navigate(`/ficha-rapida/${id}?info=1`) : undefined}
+          onVerPaciente={clinico ? id => navigate(`/ficha-rapida/${id}`) : undefined}
           // Solo la PRIMERA carga de cada día: cuando el heartbeat refresca en
           // segundo plano los datos ya están, así que la hoja no parpadea.
           cargando={turnosPendientes}

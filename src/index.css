@@ -5046,6 +5046,13 @@ table.tbl { width: 100%; border-collapse: collapse; }
    es lo que lo reemplaza. Editar una nota vieja usa el alto flexible. */
 .ev-draft .ev-ta { height: 132px; min-height: 132px; }
 .ev-dur { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
+.ev-seguir {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 38px; padding: 0 12px;
+  border: 1px solid var(--fr-accent-border); border-radius: var(--radius-sm);
+  background: var(--bg-surface); color: var(--fr-accent);
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
+}
 
 .ev-error {
   padding: 10px 16px;

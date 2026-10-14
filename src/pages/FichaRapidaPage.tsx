@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appointmentsApi } from '../api/appointments';
 import { patientsApi, type Patient } from '../api/patients';
@@ -1247,12 +1247,6 @@ export default function FichaRapidaPage() {
   const [odoOpen, setOdoOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
 
-  // `?info=1`: se llega desde el nombre del turno en la agenda, que es un
-  // pedido explícito de ver los datos del paciente. La tarjeta nace con la info
-  // abierta (y sin animarla: no hay que mirar cómo se abre algo que se vino a
-  // leer). El estado vive adentro de TarjetaPaciente para que abrirlo no
-  // redibuje la ficha entera.
-  const [searchParams] = useSearchParams();
   // "Ver todos" de trabajos hechos / pagos (historial completo con buscador).
   const [hechosModalOpen, setHechosModalOpen] = useState(false);
   const [pagosModalOpen, setPagosModalOpen] = useState(false);
@@ -2542,7 +2536,6 @@ export default function FichaRapidaPage() {
               <TarjetaPaciente
                 patient={patient}
                 isMobile={isMobile}
-                infoInicial={searchParams.get('info') === '1'}
                 onEditar={() => openModal('newPatient', { patientId: patient._id })}
                 onGaleria={() => setGalleryOpen(true)}
                 onOdontograma={() => setOdoOpen(true)}

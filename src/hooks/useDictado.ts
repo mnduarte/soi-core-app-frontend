@@ -207,15 +207,24 @@ export function useDictado(idioma = 'es-AR') {
     arrancarRef.current = arrancar;
   }, [arrancar]);
 
+  /**
+   * Arranca o RETOMA. Si ya hay texto dictado sin guardar, sigue desde ahí en
+   * vez de borrarlo: parar para pensar la frase siguiente es lo más natural
+   * del mundo, y perder lo dicho por eso era inaceptable. Para empezar de
+   * cero está "Descartar".
+   */
   const empezar = useCallback(() => {
     if (!getSR() || bloqueado) return;
-    setTexto('');
+    const previo = finalRef.current;
     setParcial('');
-    setSegundos(0);
+    if (!previo) {
+      setTexto('');
+      setSegundos(0);
+    }
     setError(null);
     quiereGrabar.current = true;
     try {
-      arrancar('');
+      arrancar(previo);
       setEstado('grabando');
     } catch {
       setError('No se pudo abrir el micrófono.');

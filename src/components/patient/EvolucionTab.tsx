@@ -179,7 +179,7 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
           <span className="ev-grabando">
             <span className="ev-dot" aria-hidden="true" />
             <span className="ev-timer">{mmss(dic.segundos)}</span>
-            <span className="ev-oyendo-hint">Hablá tranquilo, se escribe solo</span>
+            <span className="ev-oyendo-hint">Cerca del micrófono, fuerte y claro</span>
           </span>
           <button
             type="button"
@@ -239,7 +239,9 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
                 <div className="ev-vivo" ref={vivoRef}>
                   {dic.texto}
                   {dic.parcial && <i>{dic.parcial}</i>}
-                  {!dic.texto && !dic.parcial && <em>Escuchando…</em>}
+                  {!dic.texto && !dic.parcial && (
+              <em>Escuchando… hablá cerca del micrófono, fuerte y claro.</em>
+            )}
                 </div>
               ) : (
                 <>
@@ -255,6 +257,12 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
                   <div className="ev-acc">
                     <span className="ev-dur">{mmss(dic.segundos)} dictados</span>
                     <span style={{ flex: 1 }} />
+                    {/* Parar para pensar la frase que sigue es lo normal.
+                        Sin esto, volver a tocar el micrófono arrancaba de cero
+                        y se perdía lo dictado. */}
+                    <button type="button" className="ev-seguir" onClick={dic.empezar}>
+                      <Icon name="mic" size={13} /> Seguir dictando
+                    </button>
                     <button
                       type="button"
                       className="ev-ghost"

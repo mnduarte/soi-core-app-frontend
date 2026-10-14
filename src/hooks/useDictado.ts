@@ -5,8 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *
  * Hoy el motor es la Web Speech API del navegador: es gratis, no necesita
  * backend y soporta español. Como las entradas de evolución guardan solo el
- * texto y el audio se descarta, no hace falta subir nada a ningún lado — el
- * navegador devuelve la transcripción y listo.
+ * texto y el audio se descarta, no hace falta subir nada a ningún lado.
  *
  * El motor está detrás de esta interfaz a propósito. Si la precisión con
  * vocabulario odontológico no alcanza, se reemplaza por un endpoint que mande
@@ -19,6 +18,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   · Chrome manda el audio a los servidores de Google para reconocerlo.
  * Por eso el consumidor tiene que mirar `bloqueado` además de `soportado`, y
  * dejar siempre disponible la nota escrita como camino alternativo.
+ *
+ * ── Por qué el acumulado es tan defensivo ──
+ * Android no se comporta como el escritorio: vuelve a entregar resultados ya
+ * entregados, y `e.resultIndex` no es confiable. Tres reglas, las tres
+ * salidas de ver el texto duplicado en pantalla ("HolaHolaHola hola…"):
+ *
+ *  1. El texto de una tanda se RECONSTRUYE entero en cada evento, recorriendo
+ *     `e.results` desde 0. Nunca se suma lo nuevo a lo que había: así el
+ *     resultado es el mismo por más veces que llegue cada cosa.
+ *  2. Cada reanudación usa una instancia NUEVA del reconocedor. Reusando la
+ *     misma no hay garantía de que su lista de resultados se vacíe, y si no
+ *     se vacía, lo ya acumulado se cuenta dos veces.
+ *  3. Lo acumulado de tandas previas vive en `baseRef` y SOLO cambia al
+ *     arrancar una tanda. Si se tocara dentro de `onresult`, cada evento lo
+ *     volvería a inflar.
  */
 
 export type EstadoDictado = 'inactivo' | 'grabando' | 'listo';
@@ -64,6 +78,13 @@ const MENSAJES: Record<string, string> = {
   network: 'El dictado necesita internet y no hay conexión.',
 };
 
+/** Pega dos tramos sin dejarlos pegoteados ni meter espacios de más. */
+const unir = (a: string, b: string) => {
+  if (!a) return b;
+  if (!b) return a;
+  return /\s$/.test(a) ? a + b : `${a} ${b}`;
+};
+
 export function useDictado(idioma = 'es-AR') {
   const [soportado] = useState(() => getSR() !== null);
   const [estado, setEstado] = useState<EstadoDictado>('inactivo');
@@ -77,18 +98,14 @@ export function useDictado(idioma = 'es-AR') {
 
   const motor = useRef<MotorSR | null>(null);
   const quiereGrabar = useRef(false);
-  const finalRef = useRef('');
-  // Lo que todavía está interpretando. Va en un ref además del estado porque
-  // `parar` necesita leerlo en el momento, no en el próximo render.
-  const parcialRef = useRef('');
-  /**
-   * Lo dictado en tandas ANTERIORES de reconocimiento.
-   *
-   * Chrome corta solo cada tanto y lo reanudamos (ver `onend`). Cada tanda
-   * arranca con su lista de resultados vacía, así que lo de las tandas
-   * previas se guarda acá y se le suma lo de la tanda actual.
-   */
+  /** Lo dictado en tandas anteriores (cada corte de Chrome abre una nueva). */
   const baseRef = useRef('');
+  /** Base + lo firme de la tanda actual. Es el texto que vale. */
+  const finalRef = useRef('');
+  /** Lo que todavía está interpretando. En ref porque `parar` lo lee ya. */
+  const parcialRef = useRef('');
+  /** Se reasigna en cada render para que `onend` llame a la versión viva. */
+  const arrancarRef = useRef<(base: string) => void>(() => {});
 
   // Timer del contador. Va aparte del motor porque la API no informa duración.
   useEffect(() => {
@@ -96,6 +113,94 @@ export function useDictado(idioma = 'es-AR') {
     const t = setInterval(() => setSegundos(s => s + 1), 1000);
     return () => clearInterval(t);
   }, [estado]);
+
+  const arrancar = useCallback(
+    (base: string) => {
+      const SR = getSR();
+      if (!SR) return;
+
+      // Instancia nueva en cada tanda: ver regla 2 del comentario de arriba.
+      const m = new SR();
+      baseRef.current = base;
+      finalRef.current = base;
+      parcialRef.current = '';
+      m.lang = idioma;
+      m.continuous = true;
+      m.interimResults = true;
+
+      m.onresult = e => {
+        let firme = '';
+        let enCurso = '';
+        for (let i = 0; i < e.results.length; i++) {
+          const r = e.results[i];
+          const t = r[0].transcript.trim();
+          if (!t) continue;
+          if (r.isFinal) firme = unir(firme, t);
+          else enCurso = unir(enCurso, t);
+        }
+        finalRef.current = unir(baseRef.current, firme);
+        parcialRef.current = enCurso;
+        setTexto(finalRef.current);
+        setParcial(enCurso);
+      };
+
+      m.onerror = e => {
+        // "no-speech" pasa todo el tiempo cuando el Dr. hace una pausa larga;
+        // no es un error que haya que mostrarle a nadie.
+        if (e.error === 'no-speech' || e.error === 'aborted') return;
+        setError(MENSAJES[e.error] ?? 'No se pudo dictar. Probá escribiendo la nota.');
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setBloqueado(true);
+        quiereGrabar.current = false;
+        setEstado(finalRef.current.trim() ? 'listo' : 'inactivo');
+      };
+
+      m.onend = () => {
+        // Chrome corta solo cada tanto aunque `continuous` esté puesto. Si el
+        // usuario no pidió parar, se reanuda con una instancia nueva: si no, el
+        // dictado se muere en silencio a mitad de una frase.
+        if (quiereGrabar.current) {
+          // Lo que estaba a medio confirmar se pierde al cortar la tanda, así
+          // que se arrastra como parte de la base de la siguiente.
+          const acumulado = unir(finalRef.current, parcialRef.current);
+          try {
+            arrancarRef.current(acumulado);
+            return;
+          } catch {
+            quiereGrabar.current = false;
+          }
+        }
+        setEstado(finalRef.current.trim() ? 'listo' : 'inactivo');
+      };
+
+      motor.current = m;
+      m.start();
+    },
+    [idioma],
+  );
+  // En un efecto y no en el render: escribir un ref durante el render está
+  // prohibido por el compilador. Alcanza, porque `onend` solo puede dispararse
+  // después de que el usuario arrancó el dictado, o sea mucho después de que
+  // este efecto corrió.
+  useEffect(() => {
+    arrancarRef.current = arrancar;
+  }, [arrancar]);
+
+  const empezar = useCallback(() => {
+    if (!getSR() || bloqueado) return;
+    setTexto('');
+    setParcial('');
+    setSegundos(0);
+    setError(null);
+    quiereGrabar.current = true;
+    try {
+      arrancar('');
+      setEstado('grabando');
+    } catch {
+      setError('No se pudo abrir el micrófono.');
+      setBloqueado(true);
+      quiereGrabar.current = false;
+    }
+  }, [arrancar, bloqueado]);
 
   /** Devuelve TODO lo dictado, ya consolidado. Hace falta que lo devuelva:
    *  quien llama no puede leer el estado recién actualizado hasta el próximo
@@ -105,8 +210,8 @@ export function useDictado(idioma = 'es-AR') {
     // Lo que estaba a medio confirmar también cuenta. El motor marca como
     // "firme" recién cada tanto, así que en un dictado corto TODO lo dicho
     // vive en el parcial: tomar solo lo firme perdía la frase entera.
-    if (parcialRef.current.trim()) {
-      finalRef.current += parcialRef.current;
+    if (parcialRef.current) {
+      finalRef.current = unir(finalRef.current, parcialRef.current);
       baseRef.current = finalRef.current;
       parcialRef.current = '';
       setTexto(finalRef.current);
@@ -117,92 +222,12 @@ export function useDictado(idioma = 'es-AR') {
     return finalRef.current;
   }, []);
 
-  const empezar = useCallback(() => {
-    const SR = getSR();
-    if (!SR || bloqueado) return;
-
-    finalRef.current = '';
-    parcialRef.current = '';
-    baseRef.current = '';
-    setTexto('');
-    setParcial('');
-    setSegundos(0);
-    setError(null);
-
-    const m = new SR();
-    m.lang = idioma;
-    m.continuous = true;
-    m.interimResults = true;
-
-    m.onresult = e => {
-      // Se RECONSTRUYE el texto entero en cada evento en vez de ir sumando
-      // lo nuevo. Parece más caro y es lo único correcto: Android vuelve a
-      // entregar resultados que ya había entregado, y sumando cada entrega
-      // el texto se duplicaba ("HolaHolaHola hola..."). Reconstruir da el
-      // mismo resultado sin importar cuántas veces llegue cada cosa.
-      //
-      // Se recorre desde 0 y no desde `e.resultIndex` por lo mismo: ese
-      // índice no es confiable entre implementaciones.
-      let firme = '';
-      let enCurso = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) firme += r[0].transcript;
-        else enCurso += r[0].transcript;
-      }
-      finalRef.current = baseRef.current + firme;
-      parcialRef.current = enCurso;
-      setTexto(finalRef.current);
-      setParcial(enCurso);
-    };
-
-    m.onerror = e => {
-      // "no-speech" pasa todo el tiempo cuando el Dr. hace una pausa larga; no
-      // es un error que haya que mostrarle a nadie.
-      if (e.error === 'no-speech' || e.error === 'aborted') return;
-      setError(MENSAJES[e.error] ?? 'No se pudo dictar. Probá escribiendo la nota.');
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setBloqueado(true);
-      quiereGrabar.current = false;
-      setEstado(finalRef.current.trim() ? 'listo' : 'inactivo');
-    };
-
-    m.onend = () => {
-      // Chrome corta solo cada tanto aunque `continuous` esté puesto. Si el
-      // usuario no pidió parar, se reanuda: si no, el dictado se muere en
-      // silencio a mitad de una frase y parece que la app se colgó.
-      if (quiereGrabar.current) {
-        try {
-          // La tanda que viene arranca con resultados vacíos, así que lo de
-          // esta pasa a ser la base. Sin esto, al reanudar se perdía todo lo
-          // dicho antes del corte.
-          baseRef.current = finalRef.current;
-          m.start();
-          return;
-        } catch {
-          quiereGrabar.current = false;
-        }
-      }
-      setEstado(finalRef.current.trim() ? 'listo' : 'inactivo');
-    };
-
-    motor.current = m;
-    quiereGrabar.current = true;
-    try {
-      m.start();
-      setEstado('grabando');
-    } catch {
-      setError('No se pudo abrir el micrófono.');
-      setBloqueado(true);
-      quiereGrabar.current = false;
-    }
-  }, [idioma, bloqueado]);
-
   const descartar = useCallback(() => {
     quiereGrabar.current = false;
     motor.current?.abort();
+    baseRef.current = '';
     finalRef.current = '';
     parcialRef.current = '';
-    baseRef.current = '';
     setTexto('');
     setParcial('');
     setSegundos(0);
@@ -212,6 +237,7 @@ export function useDictado(idioma = 'es-AR') {
 
   /** Para cuando el usuario corrige el texto transcripto antes de guardarlo. */
   const corregir = useCallback((valor: string) => {
+    baseRef.current = valor;
     finalRef.current = valor;
     setTexto(valor);
   }, []);
@@ -231,7 +257,7 @@ export function useDictado(idioma = 'es-AR') {
     estado,
     /** Lo transcripto en firme. */
     texto,
-    /** Lo que todavía está interpretando, para mostrarlo en gris mientras habla. */
+    /** Lo que todavía está interpretando, para mostrarlo en gris. */
     parcial,
     segundos,
     error,

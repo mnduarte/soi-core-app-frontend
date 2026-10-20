@@ -13,6 +13,8 @@ import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { useFlip } from '../../hooks/useFlip';
 import { Icon } from '../common/Icon';
+import { SelectorHorario } from './SelectorHorario';
+import { HORARIOS as TIMES } from './horarios';
 import { FilasFantasma } from '../common/FilasFantasma';
 import { Avatar } from '../common/Avatar';
 import { StatusBadge } from '../common/StatusBadge';
@@ -26,13 +28,6 @@ import { AppointmentReminderModal } from './AppointmentReminderModal';
 import { hhmm } from '../../lib/appointment';
 import { QUICK_CHIPS } from '../../lib/quickWork';
 
-const DURATIONS = [15, 30, 45, 60, 90];
-const TIMES = [
-  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-  '11:00', '11:30', '12:00', '12:30', '14:00', '14:30',
-  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-  '18:00', '18:30',
-];
 
 function toYMD(d: Date): string {
   const y = d.getFullYear();
@@ -92,6 +87,8 @@ interface LibretaViewProps {
   onVerPaciente?: (patientId: string) => void;
   /** Asignar o cambiar el trabajo del turno. */
   onSetTrabajo: (appt: Appointment, title: string) => void;
+  /** Abre la hoja de dictado. Sin esto no se muestra el botón. */
+  onDictar?: () => void;
 }
 
 export function LibretaView({
@@ -112,6 +109,7 @@ export function LibretaView({
   onEditPatient,
   onVerPaciente,
   onSetTrabajo,
+  onDictar,
 }: LibretaViewProps) {
   const qc = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
@@ -502,79 +500,23 @@ export function LibretaView({
                   <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>{duration}m</span>
                 </button>
                 {slotOpen && (
-                  <div
-                    className="lb-menupop"
-                    style={{
-                      transformOrigin: 'top left',
-                      position: 'absolute',
-                      top: 'calc(100% + 4px)',
-                      left: 0,
-                      zIndex: 30,
-                      width: 420,
-                      maxWidth: '92vw',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: 10,
-                      boxShadow: 'var(--shadow-lg)',
-                      padding: 14,
+                  <SelectorHorario
+                    style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 30 }}
+                    time={time}
+                    duration={duration}
+                    slots={slots}
+                    taken={takenSet}
+                    onDuration={setDuration}
+                    onTime={t => {
+                      setTime(t);
+                      setSlotOpen(false);
+                      // Elegida la hora, lo siguiente es el paciente: el foco
+                      // va solo para no tener que volver a apuntar.
+                      setSearchOpen(true);
+                      setTimeout(() => nameRef.current?.focus(), 60);
                     }}
-                  >
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                      Duración
-                    </div>
-                    <div className="seg" style={{ flexWrap: 'wrap', marginBottom: 12 }}>
-                      {DURATIONS.map(d => (
-                        <button
-                          key={d}
-                          type="button"
-                          className={`seg__btn ${duration === d ? 'is-active' : ''}`}
-                          onClick={() => setDuration(d)}
-                        >
-                          {d}m
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                      Slots del día
-                    </div>
-                    <div className="slot-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-                      {slots.map(t => {
-                        const taken = takenSet.has(t);
-                        const sel = t === time;
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => {
-                              setTime(t);
-                              setSlotOpen(false);
-                              setSearchOpen(true);
-                              setTimeout(() => nameRef.current?.focus(), 60);
-                            }}
-                            className={`mono slot ${taken ? 'slot--taken' : ''} ${sel ? 'slot--sel' : ''}`}
-                            title={taken ? 'Ya hay turno — se anota como sobreturno' : 'Libre'}
-                          >
-                            {t}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {/* La referencia de la leyenda es el mismo cuadrado pintado
-                        que se ve en la grilla, no otro símbolo: si el ejemplo no
-                        se parece a lo que hay que buscar, no explica nada. */}
-                    <div className="slot-leyenda">
-                      <span className="slot-leyenda__box" />
-                      ocupado (se apila como sobreturno)
-                    </div>
-                    <button
-                      type="button"
-                      onMouseDown={e => { e.preventDefault(); setSlotOpen(false); setCustomSlotsOpen(true); }}
-                      className="lb-chip lb-chip--add"
-                      style={{ width: '100%', marginTop: 10, justifyContent: 'center' }}
-                    >
-                      <Icon name="settings" size={13} /> Personalizar horarios
-                    </button>
-                  </div>
+                    onPersonalizar={() => { setSlotOpen(false); setCustomSlotsOpen(true); }}
+                  />
                 )}
               </div>
 
@@ -796,22 +738,47 @@ export function LibretaView({
                 )}
               </div>
 
-              <button
-                className="btn btn--primary"
-                onClick={() => anotar()}
-                disabled={createMut.isPending}
-                style={{
-                  flexShrink: 0,
-                  minWidth: 132,
-                  justifyContent: 'center',
-                  ...(isSobreturno
-                    ? { background: 'var(--warning)', borderColor: 'var(--warning)', color: '#fff' }
-                    : {}),
-                }}
-              >
-                <Icon name={isSobreturno ? 'alert' : 'plus'} size={14} />{' '}
-                {isSobreturno ? 'Sobreturno' : 'Anotar'}
-              </button>
+              {/*
+                Anotar y dictar, pegados.
+
+                Son el mismo trabajo por dos caminos: completar la fila a mano
+                o decirlo. Juntos se eligen por lo que querés conseguir y no
+                por dónde quedó cada botón — el micrófono estaba arriba, en la
+                barra, lejos de donde mirás cuando vas a anotar.
+
+                Dictar NO toca lo que haya escrito en la fila: abre su propia
+                hoja y, al cerrarla, la fila sigue como estaba.
+              */}
+              <div className="lb-anotar">
+                <button
+                  className="btn btn--primary lb-anotar__ppal"
+                  onClick={() => anotar()}
+                  disabled={createMut.isPending}
+                  style={
+                    isSobreturno
+                      ? { background: 'var(--warning)', borderColor: 'var(--warning)', color: '#fff' }
+                      : undefined
+                  }
+                >
+                  <Icon name={isSobreturno ? 'alert' : 'plus'} size={14} />{' '}
+                  {isSobreturno ? 'Sobreturno' : 'Anotar'}
+                </button>
+                {onDictar && (
+                  <button
+                    className="btn btn--primary lb-anotar__mic"
+                    onClick={onDictar}
+                    title="Anotar diciendo una frase"
+                    aria-label="Anotar dictando"
+                    style={
+                      isSobreturno
+                        ? { background: 'var(--warning)', borderColor: 'var(--warning)', color: '#fff' }
+                        : undefined
+                    }
+                  >
+                    <Icon name="mic" size={16} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

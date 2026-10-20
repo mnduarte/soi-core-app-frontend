@@ -15,6 +15,15 @@ interface DatePickerProps {
    * aunque el calendario salte de año.
    */
   editable?: boolean;
+  /**
+   * Nace con el calendario abierto.
+   *
+   * Para cuando el control aparece PORQUE alguien pidió editar la fecha: ahí
+   * ya hubo un toque y pedir un segundo para desplegar el calendario es
+   * repetir el mismo gesto. Apagado por defecto: donde el control está siempre
+   * en pantalla, abrirse solo sería invasivo.
+   */
+  abrirAlMontar?: boolean;
 }
 
 const WEEKDAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
@@ -46,8 +55,8 @@ function formatDisplay(d: Date): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-export function DatePicker({ value, onChange, placeholder = 'Elegir fecha', editable }: DatePickerProps) {
-  const [open, setOpen] = useState(false);
+export function DatePicker({ value, onChange, placeholder = 'Elegir fecha', editable, abrirAlMontar }: DatePickerProps) {
+  const [open, setOpen] = useState(!!abrirAlMontar);
   /*
    * Tres vistas en el mismo panel. Antes solo existían los días y se avanzaba
    * de a un mes: para una fecha de nacimiento de 1975 eran más de 600 clics en

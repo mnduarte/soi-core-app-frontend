@@ -11,6 +11,7 @@ import { useVeClinico } from '../lib/permisos';
 import { useUIStore } from '../store/ui.store';
 import { DatePicker } from '../components/common/DatePicker';
 import { Icon } from '../components/common/Icon';
+import { AgendarDictandoModal } from '../components/agenda/AgendarDictandoModal';
 import { Avatar } from '../components/common/Avatar';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { ResolveMenu } from '../components/common/ResolveMenu';
@@ -306,6 +307,13 @@ export default function AgendaPage() {
   // persona esperando en el teléfono. El `n` hace que elegir dos veces al mismo
   // paciente vuelva a disparar el efecto.
   const [buscarOpen, setBuscarOpen] = useState(false);
+  const [dictarOpen, setDictarOpen] = useState(false);
+  /** Nombre con el que abrir el buscador cuando lo manda el dictado. */
+  const [buscarNombre, setBuscarNombre] = useState('');
+  const [buscarId, setBuscarId] = useState('');
+  /** Se llegó al buscador dictando: "Buscar otro" devuelve al micrófono. */
+  const [volverAlDictado, setVolverAlDictado] = useState(false);
+  const [dictarModo, setDictarModo] = useState<'anotar' | 'buscar'>('anotar');
   const [prefill, setPrefill] = useState<{ id: string; name: string; n: number } | null>(null);
   // Turno a resaltar tras llegar desde el buscador. Se apaga solo: es un
   // "mirá acá", no un estado de selección que haya que deshacer.
@@ -424,16 +432,54 @@ export default function AgendaPage() {
             Con etiqueta y no solo la lupa: un ícono suelto al lado de un
             selector de vistas se lee como decoración y nadie lo toca. El texto
             dice el resultado ("buscar turno"), no el mecanismo. */}
-        <button
-          className="lb-find"
-          onClick={() => setBuscarOpen(true)}
-          title="¿Cuándo tiene turno un paciente?  ( / )"
-          aria-label="Buscar el turno de un paciente"
-        >
-          <Icon name="search" size={15} />
-          {!isMobile && <span>Buscar turno</span>}
-        </button>
+        {/*
+          Buscar y dictar, pegados — la misma pieza que "Anotar" abajo.
+
+          El micrófono vive al lado de cada acción, no suelto en una esquina:
+          así se elige por lo que querés hacer. Y como este botón está en TODAS
+          las vistas, reemplaza al micrófono suelto que antes aparecía solo en
+          Semana y Mes.
+
+          Los dos micrófonos abren la misma hoja: lo que decís decide si
+          termina agendando o buscando. Lo que cambia es con qué ejemplo abre,
+          que es lo que te dice qué se espera que digas.
+        */}
+        <div className="lb-anotar">
+          <button
+            className="lb-find lb-anotar__ppal"
+            onClick={() => setBuscarOpen(true)}
+            title="¿Cuándo tiene turno un paciente?  ( / )"
+            aria-label="Buscar el turno de un paciente"
+          >
+            <Icon name="search" size={15} />
+            {!isMobile && <span>Buscar turno</span>}
+          </button>
+          <button
+            className="lb-find lb-anotar__mic"
+            onClick={() => { setDictarModo('buscar'); setDictarOpen(true); }}
+            title="Preguntar diciendo una frase"
+            aria-label="Buscar dictando"
+          >
+            <Icon name="mic" size={15} />
+          </button>
+        </div>
       </div>
+
+      {/* Mismo criterio que el buscador: montado solo mientras está abierto,
+          así cada frase arranca en blanco sin limpiar estado a mano. */}
+      {dictarOpen && (
+        <AgendarDictandoModal
+          modo={dictarModo}
+          onClose={() => setDictarOpen(false)}
+          onCreado={f => setSelectedDate(new Date(`${f}T12:00:00-03:00`))}
+          onBuscar={(n, id) => {
+            setBuscarNombre(n ?? '');
+            setBuscarId(id ?? '');
+            setVolverAlDictado(dictarModo === 'buscar');
+            setBuscarOpen(true);
+          }}
+        />
+      )}
 
       {/* Montado solo mientras está abierto: así cada consulta arranca en
           blanco sin tener que limpiar estado a mano. */}
@@ -441,7 +487,22 @@ export default function AgendaPage() {
       <BuscarTurnoModal
         open
         now={now}
-        onClose={() => setBuscarOpen(false)}
+        nombreInicial={buscarNombre}
+        pacienteIdInicial={buscarId || undefined}
+        /* Solo si se llegó dictando: si entraste por "Buscar turno" a mano,
+           "Buscar otro" sigue devolviéndote a la lista, como siempre. */
+        onVolverAlDictado={
+          volverAlDictado
+            ? () => {
+                setBuscarOpen(false); setBuscarNombre(''); setBuscarId('');
+                setVolverAlDictado(false);
+                setDictarModo('buscar'); setDictarOpen(true);
+              }
+            : undefined
+        }
+        onClose={() => {
+          setBuscarOpen(false); setBuscarNombre(''); setBuscarId(''); setVolverAlDictado(false);
+        }}
         onVerFicha={clinico ? id => {
           setBuscarOpen(false);
           navigate(`/ficha-rapida/${id}`);
@@ -528,6 +589,7 @@ export default function AgendaPage() {
       >
       {view === 'libreta' && (
         <LibretaView
+          onDictar={() => { setDictarModo('anotar'); setDictarOpen(true); }}
           appts={dayList}
           patientMap={patientMap}
           selectedDate={selectedDate}

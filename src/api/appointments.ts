@@ -32,7 +32,40 @@ export interface CreateAppointmentInput {
   allowOverlap?: boolean;
 }
 
+/** Lo que el backend entendió de una frase. No agendó nada todavía. */
+export interface IntencionAgenda {
+  /** `agenda` es una pregunta sobre el día, sin nombre adentro. */
+  accion: 'agendar' | 'buscar' | 'agenda' | 'nada';
+  patientId: string | null;
+  /** El nombre REAL del paciente resuelto. Para mostrar: `nombreDicho` es lo
+   *  que se escuchó y puede estar mal escrito. */
+  patientNombre: string | null;
+  /** Lo que se entendió como nombre. Si no hubo match, es el alta posible. */
+  nombreDicho: string | null;
+  candidatos: { id: string; nombre: string }[];
+  /** YYYY-MM-DD */
+  fecha: string | null;
+  /** HH:MM */
+  hora: string | null;
+  duracionMin: number | null;
+  trabajo: string | null;
+  /** Para `agenda`: cuál de los turnos del día se pregunta. */
+  cual: 'proximo' | 'primero' | 'ultimo' | null;
+  falta: string[];
+}
+
 export const appointmentsApi = {
+  /**
+   * Entiende una frase y devuelve lo que haría, sin hacerlo.
+   *
+   * POST aunque no escriba nada: la frase lleva el nombre del paciente y eso
+   * no tiene por qué quedar en el historial del navegador ni en los logs.
+   */
+  interpretar: (texto: string) =>
+    apiClient
+      .post<{ data: IntencionAgenda }>('/appointments/interpret', { texto })
+      .then(r => r.data.data),
+
   findAll: (params: { from?: string; to?: string; patientId?: string }) =>
     apiClient.get<{ data: Appointment[] }>('/appointments', { params }).then(r => r.data.data),
 

@@ -52,6 +52,30 @@ interface Props {
   onAgendar: (p: Patient) => void;
   /** Lleva la agenda al día de ese turno y resalta la fila. */
   onIrAlTurno: (a: Appointment) => void;
+  /**
+   * Nombre con el que abrir ya buscando.
+   *
+   * Lo usa el dictado: "cuándo viene Federico" es una pregunta, no un turno,
+   * así que esa frase termina acá con el nombre puesto en vez de dejarte en un
+   * callejón diciéndote que abras el buscador.
+   */
+  nombreInicial?: string;
+  /**
+   * Paciente ya resuelto, para abrir mostrando SUS turnos.
+   *
+   * Lo manda el dictado: si la frase fue "cuándo viene Federico" y el
+   * intérprete lo encontró, dejar una lista filtrada para que lo vuelvas a
+   * elegir es pedirte que busques algo que ya está buscado.
+   */
+  pacienteIdInicial?: string;
+  /**
+   * Volver al dictado en vez de a la lista.
+   *
+   * Si llegaste acá diciendo una frase, "Buscar otro" tiene que devolverte al
+   * micrófono: mandarte a escribir a mano es cambiarte el modo de trabajo a
+   * mitad de camino. Sin esta prop, vuelve a la lista como siempre.
+   */
+  onVolverAlDictado?: () => void;
 }
 
 /** "Jueves 11 de septiembre" — pensado para leerse en voz alta, no para una tabla. */
@@ -82,8 +106,11 @@ export function BuscarTurnoModal({
   onVerFicha,
   onAgendar,
   onIrAlTurno,
+  nombreInicial,
+  pacienteIdInicial,
+  onVolverAlDictado,
 }: Props) {
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(nombreInicial ?? '');
   const [sel, setSel] = useState<Patient | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -214,6 +241,7 @@ export function BuscarTurnoModal({
    * direcciones del navegador.
    */
   const volver = () => {
+    if (onVolverAlDictado) return onVolverAlDictado();
     setSel(null);
     // En el siguiente frame: mientras hay un paciente elegido el input no está
     // montado, así que la ref todavía no apunta a nada.
@@ -243,6 +271,26 @@ export function BuscarTurnoModal({
     enabled: open && busca && !sel,
     staleTime: 30_000,
   });
+
+  /*
+   * Selección automática cuando el dictado ya sabe de quién hablamos.
+   *
+   * Va en un efecto y no durante el render porque depende de que la lista haya
+   * llegado; y se dispara una sola vez —`yaElegido`— para que no vuelva a
+   * elegirlo si después tocás "cambiar de paciente".
+   */
+  const yaElegido = useRef(false);
+  useEffect(() => {
+    if (!pacienteIdInicial || yaElegido.current || sel) return;
+    const p = pacientes.find(x => x._id === pacienteIdInicial);
+    if (!p) return;
+    yaElegido.current = true;
+    // Diferido y no en el cuerpo del efecto: un setState sincrónico ahí
+    // encadena renders y es error de lint en este proyecto. Mismo recurso que
+    // usa el dictado para arrancar el micrófono al abrirse.
+    const t = setTimeout(() => setSel(p), 0);
+    return () => clearTimeout(t);
+  }, [pacienteIdInicial, pacientes, sel]);
 
   // Sin nada escrito, la lista NO es alfabética: sería siempre la misma gente
   // (los apellidos con A) y no ayuda a nadie. Se muestra quién tiene turno

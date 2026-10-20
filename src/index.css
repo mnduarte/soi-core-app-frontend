@@ -2886,6 +2886,9 @@ table.tbl { width: 100%; border-collapse: collapse; }
 }
 .lb-find:hover { background: var(--brand-primary-100); }
 .lb-find svg { flex-shrink: 0; }
+/* Variante solo-ícono. Cuadrado y del mismo alto que el hermano con texto,
+   para que los dos apoyen en la misma línea de base. */
+.lb-find--ico { padding: 7px; width: 34px; justify-content: center; }
 
 /* Encabezado de la lista sugerida ("Con turno próximo"). */
 .bt-lbl__n {
@@ -5307,3 +5310,737 @@ table.tbl { width: 100%; border-collapse: collapse; }
   .ev-fila { grid-template-columns: 78px minmax(0, 1fr); }
   .ev-side { grid-column: 2; justify-content: flex-start; margin-top: 8px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Anotar dictando.
+
+   No es un formulario: lo que se confirma es un TURNO, y un turno ya tiene
+   forma conocida en esta app. Día y hora se leen como el turno y se editan
+   igual —hay un input nativo transparente encima de cada uno—, así que no
+   hay modo edición ni botón de lápiz. */
+
+.ag-ov {
+  position: fixed; inset: 0; z-index: 1100;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(60, 52, 34, .42);
+  animation: overlayFade .12s ease-out;
+}
+.ag-sheet {
+  position: relative;
+  width: 560px; max-width: 100%;
+  padding: 26px 26px 22px;
+  border-radius: 18px;
+  background: var(--bg-surface);
+  box-shadow: 0 18px 50px rgba(60, 52, 34, .22);
+}
+.ag-x {
+  position: absolute; top: 14px; right: 14px;
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 50%;
+  background: transparent; color: var(--text-tertiary); cursor: pointer;
+}
+.ag-x:hover { background: var(--bg-muted); color: var(--text-primary); }
+
+/* ── Decir la frase ── */
+/* Alto fijo, no mínimo: el texto crece renglón a renglón mientras hablás y,
+   con min-height, la tarjeta entera daba saltitos en cada palabra. */
+/* El campo ES el panel: una sola superficie para la frase. Alto fijo, no
+   mínimo — el texto crece renglón a renglón mientras hablás y con `min-height`
+   la tarjeta entera daba saltitos en cada palabra. */
+.ag-campo {
+  position: relative;
+  margin: 10px 0 14px;
+  border: 1px solid var(--border-default); border-radius: 12px;
+  background: var(--bg-muted);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.ag-campo.is-on { border-color: var(--fr-accent); background: var(--bg-surface); }
+.ag-texto {
+  display: block; width: 100%; height: 124px;
+  padding: 14px 16px; resize: none;
+  border: 0; border-radius: 12px; background: transparent;
+  font-family: var(--font-display); font-size: 18px; line-height: 1.45;
+  color: var(--text-primary);
+}
+.ag-texto:focus { outline: none; }
+.ag-texto::placeholder {
+  font-family: var(--font-sans); font-size: 14px; line-height: 1.55;
+  color: var(--text-placeholder);
+}
+/* Lo que todavía se está interpretando. Va superpuesto porque un textarea no
+   puede pintar la mitad de su contenido de otro color; se ubica abajo para no
+   taparle los renglones ya confirmados. */
+.ag-parcial {
+  position: absolute; left: 16px; right: 16px; bottom: 12px;
+  font-family: var(--font-display); font-size: 16px; line-height: 1.4;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+/* Solo el botón: el campo se lo quedó todo el ancho de arriba. */
+.ag-bar { display: flex; align-items: center; justify-content: center; }
+.ag-mic {
+  flex: 0 0 auto; width: 60px; height: 60px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--fr-accent); border-radius: 50%;
+  background: var(--bg-surface); color: var(--fr-accent);
+  cursor: pointer;
+  /* El dedo apoyado tiene que dictar, no seleccionar ni hacer scroll. */
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.ag-mic:disabled { opacity: .45; cursor: default; }
+/* Escuchando: relleno y tilde. Dos estados que se distinguen de un vistazo,
+   sin texto y sin parpadeo — al lado hay un panel que ya se está llenando
+   solo, y dos cosas moviéndose compiten por la misma mirada. */
+.ag-mic.is-on { background: var(--fr-accent); color: #fff; transform: scale(1.04); }
+@media (prefers-reduced-motion: reduce) { .ag-mic.is-on { transform: none; } }
+
+/* Alto fijo por lo mismo que el panel: el texto de abajo cambia en cada
+   estado y, sin reservar, empuja el modal. */
+.ag-pie {
+  height: 20px; margin-top: 10px;
+  font-size: 12.5px; color: var(--text-tertiary); text-align: center;
+}
+.ag-mal { color: var(--danger); }
+.ag-seg { font-variant-numeric: tabular-nums; color: var(--fr-accent); font-weight: 600; }
+.ag-pensando { color: var(--fr-accent); }
+
+/* ── El turno ── */
+.ag-dicho {
+  margin: 6px 0 14px;
+  font-size: 13px; font-style: italic; line-height: 1.45;
+  color: var(--text-tertiary);
+}
+.ag-turno {
+  padding: 18px 20px;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--fr-accent);
+  border-radius: 12px;
+  background: var(--bg-muted);
+}
+.ag-cuando { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; }
+
+/* El valor se lee; el input nativo va encima, invisible. Tocar el día abre el
+   calendario del sistema, que en tablet es exactamente lo que se quiere. */
+.ag-tap { position: relative; display: inline-block; cursor: pointer; }
+.ag-tap input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0;
+  opacity: 0; cursor: pointer; font: inherit;
+}
+.ag-tap::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -2px;
+  border-bottom: 1px dashed var(--border-strong);
+}
+.ag-tap:hover::after { border-bottom-color: var(--fr-accent); }
+
+.ag-dia {
+  font-family: var(--font-display); font-size: 21px; font-weight: 600;
+  color: var(--text-primary);
+}
+.ag-hora {
+  font-family: var(--font-display); font-size: 21px; font-weight: 600;
+  color: var(--fr-accent); font-variant-numeric: tabular-nums;
+}
+.ag-tap.is-falta { color: var(--danger); }
+.ag-dura { font-size: 13px; color: var(--text-tertiary); white-space: nowrap; }
+.ag-dura input {
+  width: 46px; margin-right: 3px; padding: 2px 4px;
+  border: 0; border-bottom: 1px dashed var(--border-strong);
+  background: transparent;
+  font-family: var(--font-sans); font-size: 13px; color: var(--text-tertiary);
+  text-align: right;
+}
+.ag-dura input:focus { outline: none; border-bottom-color: var(--fr-accent); color: var(--text-primary); }
+
+.ag-quien { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+.ag-quien > b {
+  display: block;
+  font-family: var(--font-display); font-size: 23px; font-weight: 600;
+  line-height: 1.2; color: var(--text-primary);
+}
+.ag-trabajo {
+  width: 100%; margin-top: 6px; padding: 2px 0;
+  border: 0; background: transparent;
+  font-family: var(--font-sans); font-size: 14px; color: var(--text-secondary);
+}
+.ag-trabajo:focus { outline: none; }
+.ag-trabajo::placeholder { color: var(--text-placeholder); }
+
+/* Falta el paciente. Lo que no se escuchó bien casi nunca es alguien nuevo:
+   primero los parecidos, y recién al final el alta. */
+.ag-falta { display: flex; flex-direction: column; gap: 8px; }
+.ag-falta > b {
+  font-family: var(--font-display); font-size: 18px; font-weight: 600;
+  color: var(--warning);
+}
+.ag-falta > span { font-size: 13px; color: var(--text-secondary); }
+.ag-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.ag-chips button {
+  padding: 7px 13px;
+  border: 1.5px solid var(--border-strong); border-radius: 999px;
+  background: var(--bg-surface);
+  font-family: var(--font-sans); font-size: 13.5px; font-weight: 600;
+  color: var(--text-primary); cursor: pointer;
+}
+.ag-chips button:hover { border-color: var(--fr-accent); color: var(--fr-accent); }
+.ag-nuevo {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px;
+  border: 1px dashed var(--border-strong); border-radius: 999px;
+  background: transparent;
+  font-family: var(--font-sans); font-size: 13px;
+  color: var(--text-secondary); cursor: pointer;
+}
+.ag-nuevo:hover { border-color: var(--fr-accent); color: var(--fr-accent); }
+.ag-nuevo:disabled { opacity: .6; cursor: default; }
+
+.ag-ojo {
+  display: flex; align-items: center; gap: 6px;
+  margin: 12px 0 0; padding: 9px 12px;
+  border: 1px solid var(--warning-border); border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  font-size: 12.5px; line-height: 1.45; color: var(--warning);
+}
+.ag-nota { margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+
+.ag-acciones { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.ag-volver {
+  padding: 11px 16px;
+  border: 0; background: transparent;
+  font-family: var(--font-sans); font-size: 14px; color: var(--text-tertiary);
+  cursor: pointer;
+}
+.ag-volver:hover { color: var(--text-primary); }
+/* La única acción rellena del modal: es la que deja algo escrito. */
+.ag-ok {
+  flex: 1; height: 50px;
+  border: 0; border-radius: 25px;
+  background: var(--fr-accent); color: #fff;
+  font-family: var(--font-sans); font-size: 15px; font-weight: 600;
+  cursor: pointer;
+}
+.ag-ok:disabled { opacity: .45; cursor: default; }
+
+@media (max-width: 560px) {
+  .ag-sheet { padding: 22px 18px 18px; border-radius: 16px; }
+  .ag-dia, .ag-hora { font-size: 19px; }
+  .ag-quien > b { font-size: 20px; }
+}
+
+/* Rótulo de sección del selector de horarios. Era un style inline repetido
+   dos veces adentro del popover; al salir a componente propio se nombra. */
+.sh-tit {
+  margin-bottom: 6px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-tertiary);
+}
+/* El selector de hora cuelga de acá, así que la posición absoluta del popover
+   se mide contra este span y no contra la tarjeta entera. */
+.ag-horawrap { position: relative; display: inline-block; }
+
+/* Buscador de paciente del modal. Mismas clases visuales que la fila de
+   anotar de la libreta: es el mismo gesto, tiene que verse igual. */
+.bp { position: relative; margin-top: 2px; }
+.bp__lupa {
+  position: absolute; left: 11px; top: 13px;
+  color: var(--text-tertiary); pointer-events: none;
+}
+.bp__input { width: 100%; padding-left: 32px; }
+.bp__pop {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40;
+  max-height: 272px; overflow-y: auto; overflow-x: hidden;
+  border: 1px solid var(--border-default); border-radius: 8px;
+  background: var(--bg-surface); box-shadow: var(--shadow-lg);
+}
+.bp__vacio { padding: 10px 12px; font-size: 12px; color: var(--text-tertiary); }
+.bp__fila {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px; cursor: pointer;
+}
+.bp__fila:last-child { border-bottom: 0; }
+.bp__fila:hover { background: var(--bg-hover); }
+/* Por clase y no por elemento: `> span` también alcanzaría al avatar si algún
+   día dejara de ser un div, y lo estiraría a lo ancho de la fila. */
+.bp__nom { flex: 1; min-width: 0; font-weight: 500; }
+.bp__os { flex-shrink: 0; font-size: 11px; color: var(--text-tertiary); }
+/* Crear va abajo y se lee como otra cosa: primero buscar entre los que ya
+   existen, crear como último recurso. */
+.bp__fila--nuevo { color: var(--text-secondary); border-top: 1px solid var(--border-subtle); }
+.bp__fila--nuevo .bp__nom { font-weight: 400; }
+
+/* ── Movimiento ──
+   Dos entradas, nada más. La hoja que llega, y el turno que aparece cuando
+   termina de interpretar: las dos son "algo entró", que es de los casos en que
+   animar explica. No se anima el cambio de un estado al otro del texto ni el
+   micrófono latiendo — el panel ya se está llenando solo y dos cosas
+   moviéndose compiten por la misma mirada. */
+@keyframes agEntra {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes agSube {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+/* 220ms para la hoja (alta de un panel) y curva que desacelera: algo llega y
+   se acomoda. */
+.ag-sheet { animation: agEntra 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* El resultado entra después de una espera, así que un pelo más largo: es lo
+   que estabas esperando y vale que se note que llegó. */
+.ag-res { animation: agSube 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* El cambio de estado del micrófono y del panel sí se acompañan, porque es un
+   objeto que sigue ahí cambiando de estado. Corto: responde a un toque. */
+.ag-mic { transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-sheet, .ag-res { animation: none; }
+  .ag-mic, .ag-campo { transition: none; }
+}
+
+/* ── Ajustes del modal de dictado: controles de la agenda ── */
+
+/* La fecha usa el DatePicker del proyecto, que trae su propio control.
+   Acá solo se le da el ancho y se pinta en rojo cuando falta el dato. */
+.ag-fecha { width: 190px; max-width: 100%; }
+.ag-fecha.is-falta .input { border-color: var(--danger); }
+
+/* Hora + duración en un solo control, igual que el de la libreta. */
+.ag-slotbtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 38px; padding: 0 12px;
+  background: var(--bg-surface); cursor: pointer;
+}
+.ag-slotbtn > svg { color: var(--text-tertiary); flex-shrink: 0; }
+.ag-slotbtn > .mono { font-weight: 600; }
+.ag-slotbtn > small { color: var(--text-tertiary); font-size: 11px; }
+.ag-slotbtn.is-falta { border-color: var(--danger); color: var(--danger); }
+.ag-cuando { gap: 8px; }
+
+/* Trabajo: chip que abre los frecuentes, como en la fila de anotar. */
+.ag-trabwrap { position: relative; display: inline-block; margin-top: 8px; }
+.ag-trabajo {
+  padding: 4px 0;
+  border: 0; background: transparent;
+  font-family: var(--font-sans); font-size: 14px;
+  color: var(--text-placeholder); cursor: pointer;
+}
+.ag-trabajo.is-puesto { color: var(--text-secondary); }
+.ag-trabajo:hover { color: var(--fr-accent); }
+.ag-trabpop {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
+  width: 320px; max-width: 86vw; padding: 10px;
+  border: 1px solid var(--border-default); border-radius: 10px;
+  background: var(--bg-surface); box-shadow: var(--shadow-lg);
+}
+.ag-trabpop .input { width: 100%; margin-bottom: 8px; }
+
+/* Encabezado del resultado: la frase y el volver, en la misma línea. */
+
+/* Anotar ya no ocupa todo el ancho: es la acción principal, no la única cosa
+   en pantalla. Alineada a la derecha, que es donde se confirma. */
+.ag-acciones { justify-content: flex-end; }
+.ag-ok { flex: 0 0 auto; height: 44px; padding: 0 28px; border-radius: 22px; }
+
+/* El micrófono respira con la voz. `--nivel` lo escribe useNivelVoz a 60fps
+   directo en el DOM; acá solo se decide qué significa. Transform y nada más:
+   corre en el compositor y no dispara layout. */
+.ag-mic.is-on {
+  transform: scale(calc(1 + var(--nivel, 0) * 0.16));
+  box-shadow: 0 0 0 calc(var(--nivel, 0) * 10px) color-mix(in srgb, var(--fr-accent) 18%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ag-mic.is-on { transform: none; box-shadow: none; }
+}
+
+@media (max-width: 560px) {
+  .ag-fecha { width: 100%; }
+}
+
+/* ── Vuelve el formato grande, y el control aparece solo al editar ── */
+
+/* El valor en reposo: se lee como el turno, no como un campo. El punteado
+   abajo es lo único que avisa que se puede tocar — un borde completo lo
+   convertiría otra vez en formulario. */
+.ag-tap {
+  padding: 0; border: 0; background: transparent;
+  text-align: left; cursor: pointer;
+}
+.ag-tap::after { bottom: -3px; }
+.ag-dia, .ag-hora { line-height: 1.2; }
+
+/* La duración acompaña a la hora: misma familia, un escalón abajo. Abre el
+   mismo popover, así que se comporta como parte del mismo control. */
+.ag-dura {
+  padding: 0; border: 0; background: transparent;
+  font-family: var(--font-sans); font-size: 13px;
+  color: var(--text-tertiary); cursor: pointer; white-space: nowrap;
+}
+.ag-dura:hover { color: var(--fr-accent); }
+
+/* Mientras se edita la fecha, el control ocupa el lugar del texto. Alto fijo
+   igual al del texto para que la fila no salte al cambiar de modo. */
+.ag-fecha { width: 200px; max-width: 100%; }
+
+
+/* La frase deja libre la esquina de la ✕. */
+.ag-dicho { padding-right: 40px; }
+/* Hora y duración son un control, pero no la misma palabra. */
+.ag-horawrap { display: inline-flex; align-items: baseline; gap: 10px; }
+
+/* ── Cerrar: un botón, no una equis suelta ──
+   Flotando sin fondo se leía como un signo tipográfico perdido en la esquina.
+   Con su propio círculo se reconoce como control y gana blanco táctil. */
+.ag-x {
+  top: 12px; right: 12px;
+  width: 34px; height: 34px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-muted);
+  color: var(--text-tertiary);
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.ag-x:hover { background: var(--bg-surface); border-color: var(--border-strong); color: var(--text-primary); }
+
+/* ── El micrófono escuchando ──
+   Dos señales que dicen cosas distintas y por eso no comparten propiedad:
+
+   · El LATIDO (anillo que late solo) dice "estoy escuchando" aunque estés
+     callado. Es constante, no depende de vos.
+   · El NIVEL (la escala del botón) dice "te estoy oyendo AHORA". Lo maneja
+     useNivelVoz con tu voz real.
+
+   El latido va en un pseudo-elemento y el nivel en el transform del botón: si
+   los dos animaran lo mismo, el último declarado ganaría y una de las dos
+   señales desaparecería. */
+@keyframes agLatido {
+  0%   { transform: scale(1);    opacity: .55; }
+  70%  { transform: scale(1.55); opacity: 0; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+.ag-mic.is-on::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: var(--fr-accent);
+  animation: agLatido 1.5s ease-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+/* El botón necesita contexto propio para que el anillo quede detrás. */
+.ag-mic { position: relative; isolation: isolate; }
+
+/* El redondo del pie es el mismo botón, en su otro papel: queda en el mismo
+   lugar de la pantalla en los dos estados, así no hay que volver a buscarlo. */
+.ag-mic--otra { flex: 0 0 auto; }
+.ag-mic--otra:hover { background: var(--fr-accent); color: #fff; }
+
+.ag-acciones { gap: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-mic.is-on::after { animation: none; opacity: .3; transform: none; }
+}
+
+/* ══ Menos acento ══
+   El color de marca lo define cada consultorio y acá estaba en todos lados:
+   la hora, el riel de la tarjeta, el contador, los hovers y el botón. Con una
+   marca saturada el modal entero se teñía.
+
+   Queda en TRES lugares, los únicos que lo necesitan: el micrófono mientras
+   escucha, el borde del panel mientras escucha, y "Anotar turno" —la acción
+   que deja algo escrito—. Todo lo demás vuelve a tinta. */
+
+/* La hora va en el marrón de sello, que es lo que usa el resto de la app para
+   horas y fechas. No era una decisión de color: era la convención, mal puesta. */
+.ag-hora { color: var(--ink-stamp); }
+
+/* El riel de la tarjeta solo tiene que separar, no gritar. */
+.ag-turno { border-left-color: var(--border-strong); }
+
+.ag-seg { color: var(--text-secondary); }
+.ag-pensando { color: var(--text-secondary); }
+
+/* Hovers en tinta: señalan que algo es tocable, no que sea importante. */
+.ag-tap:hover::after { border-bottom-color: var(--text-secondary); }
+.ag-dura:hover, .ag-trabajo:hover { color: var(--text-primary); }
+.bp__fila:hover .bp__nom { color: var(--text-primary); }
+.ag-chips button:hover,
+.ag-nuevo:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+/* ── El botón redondo, más sobrio ──
+   Relleno plano y saturado se veía de juguete. En reposo es un contorno de
+   tinta; escuchando se llena con el acento oscurecido —misma familia, menos
+   luminoso— y apoyado en una sombra que le da cuerpo. */
+.ag-mic {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+  box-shadow: 0 1px 2px rgba(60, 52, 34, .06);
+}
+.ag-mic:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+.ag-mic.is-on {
+  background: color-mix(in srgb, var(--fr-accent) 86%, #2C2A24);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(60, 52, 34, .18);
+}
+.ag-mic.is-on::after { background: var(--fr-accent); }
+
+/* El de "volver a decirlo" no es la acción principal: contorno siempre. */
+.ag-mic--otra {
+  width: 42px; height: 42px;
+  align-self: flex-start;
+  flex: 0 0 auto;
+}
+.ag-mic--otra:hover { background: var(--bg-muted); border-color: var(--text-secondary); color: var(--text-primary); }
+
+/* "Anotar turno": el único lleno, y también un punto más oscuro para que no
+   sea un bloque luminoso. */
+.ag-ok {
+  background: color-mix(in srgb, var(--fr-accent) 90%, #2C2A24);
+  box-shadow: 0 2px 8px rgba(60, 52, 34, .16);
+}
+.ag-ok:hover:not(:disabled) { background: var(--fr-accent); }
+
+/* ── Paciente a la izquierda, botón a la derecha ── */
+.ag-quien { display: flex; align-items: flex-start; gap: 14px; }
+.ag-quien__txt { flex: 1; min-width: 0; }
+.ag-nombre {
+  display: block;
+  font-family: var(--font-display); font-size: 23px; font-weight: 600;
+  line-height: 1.2; color: var(--text-primary);
+}
+
+/* ══ La onda ══
+   Dos cosas distintas en una sola figura:
+
+   · La FORMA la da la animación. Cada barra late con su propio retardo, así
+     que la onda se mueve aunque estés callado: dice "sigo escuchando".
+   · La ALTURA la da tu voz. `--nivel` lo escribe useNivelVoz con el micrófono
+     real y escala todo el conjunto: dice "te oigo a vos, ahora".
+
+   Separadas a propósito. Si la animación dependiera del nivel, en silencio se
+   congelaría y parecería colgada; si solo hubiera animación, se movería igual
+   aunque el micrófono no estuviera captando nada — que es exactamente la
+   mentira que hay que evitar. */
+.onda {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 0; margin: 0; overflow: hidden;
+  opacity: 0;
+  /* Se abre y se cierra DESDE EL CENTRO. El `scaleX` es el que se nota: la
+     onda crece hacia los dos lados al empezar a escuchar y se recoge al
+     parar. Es el arranque y el cierre que le faltaban al dictado, puestos en
+     lo único que de verdad cambia de estado.
+
+     Esta declaración gobierna la SALIDA —la curva pareja de algo que se va—;
+     la de `.is-on` gobierna la entrada. Entrar y salir no comparten curva:
+     entrar desacelera porque algo llega y se acomoda, salir no tiene nada
+     que aterrizar. */
+  transform: scaleX(0);
+  transition:
+    height 170ms cubic-bezier(.4, .2, 1, 1),
+    margin 170ms cubic-bezier(.4, .2, 1, 1),
+    opacity 140ms cubic-bezier(.4, .2, 1, 1),
+    transform 170ms cubic-bezier(.4, .2, 1, 1);
+}
+.onda.is-on {
+  transform: scaleX(1);
+  transition:
+    height 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    margin 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.onda--grande.is-on { height: 34px; margin: -2px 0 14px; opacity: 1; }
+/* En una barra de estado la onda acompaña al cronómetro: va en línea, del
+   alto del texto, y ocupa el lugar que antes tenía el punto rojo fijo. */
+.onda--chica { gap: 3px; }
+.onda--chica.is-on { height: 16px; margin: 0 2px 0 0; opacity: 1; }
+.onda--chica i { width: 3px; border-radius: 2px; }
+.onda i {
+  display: block; width: 5px;
+  border-radius: 3px;
+  background: var(--fr-accent);
+  /* La amplitud real: en silencio queda una onda viva pero chata. */
+  transform: scaleY(calc(0.2 + var(--nivel, 0) * 1.4));
+  animation: agOnda 1.1s ease-in-out infinite;
+}
+/* Más altas en el centro: le da perfil de onda en vez de fila pareja. Los
+   retardos van desparejos —no en escalera— para que no se lea como las luces
+   de un auto fantástico. */
+.onda i:nth-child(1) { height: 11px; animation-delay: -0.90s; }
+.onda i:nth-child(2) { height: 17px; animation-delay: -0.20s; }
+.onda i:nth-child(3) { height: 23px; animation-delay: -0.65s; }
+.onda i:nth-child(4) { height: 28px; animation-delay: -0.05s; }
+.onda i:nth-child(5) { height: 32px; animation-delay: -0.45s; }
+.onda i:nth-child(6) { height: 28px; animation-delay: -0.80s; }
+.onda i:nth-child(7) { height: 23px; animation-delay: -0.30s; }
+.onda i:nth-child(8) { height: 17px; animation-delay: -0.60s; }
+.onda i:nth-child(9) { height: 11px; animation-delay: -0.15s; }
+.onda--chica i:nth-child(1) { height: 5px; }
+.onda--chica i:nth-child(2) { height: 8px; }
+.onda--chica i:nth-child(3) { height: 11px; }
+.onda--chica i:nth-child(4) { height: 13px; }
+.onda--chica i:nth-child(5) { height: 15px; }
+.onda--chica i:nth-child(6) { height: 13px; }
+.onda--chica i:nth-child(7) { height: 11px; }
+.onda--chica i:nth-child(8) { height: 8px; }
+.onda--chica i:nth-child(9) { height: 5px; }
+@keyframes agOnda {
+  0%, 100% { opacity: .3; }
+  50%      { opacity: .95; }
+}
+
+/* ══ El esqueleto ══
+   Tiene la forma del turno que está por llegar: día, hora y duración arriba,
+   nombre y trabajo abajo. No es solo entretener la espera — reserva el
+   espacio, así que cuando llega el resultado no salta nada.
+
+   El brillo es un pseudo-elemento que se DESPLAZA. Animar la posición de un
+   degradado también sirve, pero `transform` corre en el compositor y no
+   obliga a repintar en cada cuadro. */
+.ag-esq {
+  position: relative; overflow: hidden;
+  margin: 12px 0 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-muted);
+}
+.ag-esq__fila { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ag-esq__sep { height: 1px; margin-bottom: 14px; background: var(--border-subtle); }
+.ag-esq span {
+  display: block; height: 14px; margin-bottom: 8px;
+  border-radius: 4px;
+  background: var(--border-subtle);
+}
+.ag-esq__fila span { margin-bottom: 0; height: 16px; }
+.ag-esq span:last-child { margin-bottom: 0; }
+.ag-esq::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--bg-surface) 75%, transparent) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: agBrillo 1.25s ease-in-out infinite;
+}
+@keyframes agBrillo {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onda i { animation: none; opacity: .6; }
+  .ag-esq::after { animation: none; opacity: 0; }
+  .onda { transition: none; }
+}
+
+/* Qué falta para poder anotar. Pegado al botón y a su izquierda: es lo que
+   mirás cuando el botón no responde. En terracota y no en rojo de error —no
+   está mal nada, falta un dato. */
+.ag-quefalta {
+  margin-right: auto;
+  font-size: 13px; color: var(--warning);
+}
+
+/* Anotar y dictar, pegados como un solo control: son el mismo trabajo por dos
+   caminos. La costura es el borde izquierdo del segundo, aclarado, para que se
+   lean como una pieza y no como dos botones que quedaron juntos de casualidad. */
+.lb-anotar { display: flex; flex-shrink: 0; }
+.lb-anotar__ppal {
+  min-width: 118px; justify-content: center;
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+}
+.lb-anotar__mic {
+  width: 46px; padding: 0; justify-content: center;
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, #fff 32%, transparent);
+}
+
+/* El par partido también en la barra. "Buscar turno" usa `.lb-find`, que es
+   contorno y no relleno, así que la costura va en el borde propio y no en un
+   blanco translúcido como en el botón de anotar. */
+.lb-find.lb-anotar__ppal { min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.lb-find.lb-anotar__mic {
+  width: 34px; padding: 0; justify-content: center;
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+  border-left-color: var(--brand-primary-100);
+}
+
+/* Por qué puerta entraste al dictado. No es otro diseño —las dos hojas son la
+   misma— es un rótulo que dice qué se espera que digas. Discreto a propósito:
+   lo mira quien duda, no estorba a quien ya sabe. */
+.ag-modo {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-bottom: 2px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.ag-modo svg { opacity: .8; }
+
+/* Micrófono adentro del campo del buscador. Sin fondo ni borde: vive dentro
+   de la caja de búsqueda, no al lado — una píldora ahí adentro se leería como
+   un segundo control. */
+.bt-mic {
+  flex-shrink: 0;
+  width: 28px; height: 28px; margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 50%;
+  background: transparent; color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.bt-mic:hover { background: var(--bg-muted); color: var(--text-primary); }
+.bt-mic.is-on { background: var(--fr-accent); color: #fff; }
+
+/* ══ Preguntar se ve distinto, apenas ══
+   No es otro diseño: es la misma hoja con otro color de escucha. Preguntar
+   lleva el marrón de sello —el que la app ya usa para horas y fechas, el color
+   de "esto se lee"—, y anotar conserva el acento del consultorio, que es el de
+   "esto se escribe". El rótulo de arriba nombra cuál de las dos es.
+
+   Alcanza con eso: si fueran dos diseños habría que aprender dos pantallas
+   para un mismo gesto. */
+.ag-modo--buscar { color: var(--ink-stamp); }
+.ag-sheet--buscar .ag-campo.is-on { border-color: var(--ink-stamp); }
+.ag-sheet--buscar .ag-mic.is-on {
+  background: color-mix(in srgb, var(--ink-stamp) 90%, #2C2A24);
+}
+.ag-sheet--buscar .ag-mic.is-on::after { background: var(--ink-stamp); }
+.ag-sheet--buscar .onda i { background: var(--ink-stamp); }
+.ag-sheet--buscar .ag-seg,
+.ag-sheet--buscar .ag-pensando { color: var(--ink-stamp); }
+.ag-sheet--buscar .ag-ok {
+  background: color-mix(in srgb, var(--ink-stamp) 90%, #2C2A24);
+}
+.ag-sheet--buscar .ag-ok:hover:not(:disabled) { background: var(--ink-stamp); }
+
+/* El cambio de estado de la barra de dictado.
+   Entra desde un poco más chica y transparente: se lee como que se abre, no
+   como que apareció de golpe. Solo `transform` y `opacity`, así que corre en
+   el compositor y la barra no cambia de tamaño real — lo de abajo no se
+   mueve ni un píxel.
+   220ms, que es lo que el proyecto usa para cambios de estado. */
+@keyframes evAbre {
+  from { opacity: 0; transform: scale(.94); }
+  to   { opacity: 1; transform: none; }
+}
+.ev-bar { animation: evAbre 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .ev-bar { animation: none; }
+  .onda, .onda.is-on { transition: none; transform: none; }
+}
+
+/* Campo + botón redondo en línea. El buscador lleva el `flex: 1` y su
+   desplegable se mide contra él, no contra la fila: por eso la lista sigue
+   saliendo del ancho del campo y no se mete debajo del botón. */
+.ag-conmic { display: flex; align-items: flex-start; gap: 10px; }
+.ag-conmic .bp { flex: 1; min-width: 0; }
+

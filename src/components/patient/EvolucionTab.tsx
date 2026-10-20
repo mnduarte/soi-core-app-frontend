@@ -4,6 +4,8 @@ import { clinicalEntriesApi, type ClinicalEntry } from '../../api/clinical-entri
 import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { Icon } from '../common/Icon';
+import { OndaVoz } from '../common/OndaVoz';
+import { useNivelVoz } from '../../hooks/useNivelVoz';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useDictado } from '../../hooks/useDictado';
 import { useFlip } from '../../hooks/useFlip';
@@ -90,6 +92,8 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
   const [borrador, setBorrador] = useState('');
   const [aBorrar, setABorrar] = useState<ClinicalEntry | null>(null);
   const dic = useDictado();
+  const barraRef = useRef<HTMLDivElement>(null);
+  useNivelVoz(dic.estado === 'grabando', barraRef);
   // El panel en vivo se mantiene pegado abajo mientras dicta: lo último que
   // dijo es lo que hay que poder leer, no lo primero.
   const vivoRef = useRef<HTMLDivElement>(null);
@@ -178,9 +182,19 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
     <>
       {/* Barra de carga: fija arriba de la línea de tiempo. Tres estados —
           reposo, grabando y transcripto— pero siempre la misma altura, para
-          que la lista de abajo no salte al cambiar de uno a otro. */}
+          que la lista de abajo no salte al cambiar de uno a otro.
+
+          El `key` por estado es a propósito: al cambiar, React reemplaza el
+          nodo y la animación de entrada vuelve a correr. Sin eso el contenido
+          se sustituía de un cuadro al otro y se sentía un corte seco.
+
+          Se anima con `scale` y no con alto: la barra conserva su tamaño y lo
+          que crece es el dibujo. Nada se mueve de lugar, que es la condición
+          para que esto explique algo en vez de empujar. */}
       {dic.estado === 'grabando' ? (
-        <div className="ev-bar">
+        /* El nivel se escribe acá: las variables CSS bajan a los hijos, así
+           que la onda lo lee sin medirlo por su cuenta. */
+        <div className="ev-bar" key="grabando" ref={barraRef}>
           {/* El estado a la izquierda y la acción a la derecha, en el MISMO
               borde donde está el micrófono cuando no grabás: arrancar y parar
               se tocan en el mismo lugar, no hay que ir a buscar el botón.
@@ -188,7 +202,12 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
               antes, al ocultar la frase en pantalla angosta, desaparecía el
               empuje y "Parar" se caía a la izquierda. */}
           <span className="ev-grabando">
-            <span className="ev-dot" aria-hidden="true" />
+            {/* La onda reemplaza al punto rojo fijo. El punto decía "está
+                grabando" y nada más; la onda además dice "te está oyendo",
+                que es la duda real cuando el reconocimiento tarda en mostrar
+                la primera palabra. Es el mismo componente que usa la hoja de
+                dictado de la agenda, en tamaño de barra. */}
+            <OndaVoz activa tam="chica" />
             <span className="ev-timer">{mmss(dic.segundos)}</span>
             <span className="ev-oyendo-hint">Cerca del micrófono, fuerte y claro</span>
           </span>
@@ -206,7 +225,7 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
           </button>
         </div>
       ) : (
-        <div className="ev-bar">
+        <div className="ev-bar" key="reposo">
           <input
             ref={notaRef}
             className="ev-in"
@@ -249,7 +268,14 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
               {dic.estado === 'grabando' ? (
                 <div className="ev-vivo" ref={vivoRef}>
                   {dic.texto}
-                  {dic.parcial && <i>{dic.parcial}</i>}
+                  {dic.parcial && (
+                    /* El espacio va ACÁ y no al unir: `agregar` separa bien el
+                       texto final, pero mientras hablás lo que está en curso se
+                       pintaba pegado a lo anterior. Solo se notaba al retomar
+                       —en el primer dictado no hay texto previo contra el cual
+                       pegarse—, y se leía como si hubiera perdido el espacio. */
+                    <i>{dic.texto ? ' ' : ''}{dic.parcial}</i>
+                  )}
                   {!dic.texto && !dic.parcial && (
               <em>Escuchando… hablá cerca del micrófono, fuerte y claro.</em>
             )}

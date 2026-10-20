@@ -5,6 +5,8 @@ import { useUIStore } from '../../store/ui.store';
 import { useAuthStore } from '../../store/auth.store';
 import { Icon } from '../common/Icon';
 import { useDictado } from '../../hooks/useDictado';
+import { OndaVoz } from '../common/OndaVoz';
+import { useNivelVoz } from '../../hooks/useNivelVoz';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import {
   PLANTILLAS_EJEMPLO,
@@ -89,6 +91,10 @@ export function ConsentTemplatesModal({
   // viniste.
   const [previa, setPrevia] = useState(false);
   const dic = useDictado();
+  /* El nivel se escribe en el propio botón: la onda es su único hijo que lo
+     usa, así que no hace falta subirlo más arriba. */
+  const recRef = useRef<HTMLButtonElement>(null);
+  useNivelVoz(dic.estado === 'grabando', recRef);
   const [aArchivar, setAArchivar] = useState<ConsentTemplate | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -324,7 +330,14 @@ export function ConsentTemplatesModal({
                     {dic.estado === 'grabando' && (
                       <div className="ct-oyendo">
                         {dic.texto}
-                        {dic.parcial && <i>{dic.parcial}</i>}
+                        {dic.parcial && (
+                          /* El espacio va ACÁ y no al unir: `agregar` separa bien el
+                             texto final, pero mientras hablás lo que está en curso se
+                             pintaba pegado a lo anterior. Solo se notaba al retomar
+                             —en el primer dictado no hay texto previo contra el cual
+                             pegarse—, y se leía como si hubiera perdido el espacio. */
+                          <i>{dic.texto ? ' ' : ''}{dic.parcial}</i>
+                        )}
                         {!dic.texto && !dic.parcial && <em>Escuchando…</em>}
                       </div>
                     )}
@@ -359,8 +372,15 @@ export function ConsentTemplatesModal({
                     <>
                       <span className="ct-sep" aria-hidden="true" />
                       {dic.estado === 'grabando' ? (
-                        <button type="button" className="ct-dic ct-dic--rec" onClick={pararYMeter}>
-                          <span className="ev-dot" /> Parar
+                        /* Misma onda que la evolución y la agenda: el punto
+                           fijo decía "graba", la onda dice además "te oye". */
+                        <button
+                          type="button"
+                          className="ct-dic ct-dic--rec"
+                          ref={recRef}
+                          onClick={pararYMeter}
+                        >
+                          <OndaVoz activa tam="chica" /> Parar
                         </button>
                       ) : (
                         <button

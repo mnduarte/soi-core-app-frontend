@@ -6044,3 +6044,19 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .ag-conmic { display: flex; align-items: flex-start; gap: 10px; }
 .ag-conmic .bp { flex: 1; min-width: 0; }
 
+
+/* De quién es el turno. Va en el cuerpo y no en el título del modal: ahí se
+   leía como el nombre de la pantalla y había que subir la vista al borde para
+   saber a quién pertenece lo que estás mirando. Acá queda pegado al turno que
+   identifica. */
+.bt-quien {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.bt-quien__txt { display: flex; flex-direction: column; min-width: 0; }
+.bt-quien b {
+  font-family: var(--font-display); font-size: 19px; font-weight: 600;
+  line-height: 1.2; color: var(--text-primary);
+}
+.bt-quien small { font-size: 12px; color: var(--text-tertiary); }

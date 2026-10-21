@@ -487,8 +487,17 @@ export function BuscarTurnoModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={sel ? nombre : 'Buscar turno de un paciente'}
-      sub={subtitulo}
+      /* El título NO cambia al elegir paciente. Antes el nombre ocupaba este
+         lugar y se leía como el título de la pantalla, no como de quién es el
+         turno: había que subir la vista hasta el borde para saber a quién
+         pertenece lo que estás mirando. Ahora el nombre vive pegado al turno,
+         abajo. */
+      /* El botón ORDENA ("Buscar turno") y la pantalla NOMBRA. Por eso acá va
+         un sustantivo y no un verbo: un título no le pide nada a nadie, dice
+         dónde estás. En plural porque un paciente puede tener varios, y el
+         mismo rótulo sirve mientras buscás y cuando ya elegiste. */
+      title="Búsqueda de turnos"
+      sub={sel ? undefined : subtitulo}
       width={520}
       /* Las acciones van al footer del Modal —la misma franja fija que usan
          NewPatient, RegisterPayment y los demás— y no sueltas al final del
@@ -632,6 +641,17 @@ export function BuscarTurnoModal({
         </>
       ) : (
         <div className="bt-card" ref={cardRef}>
+          {/* De quién es todo lo que sigue. Con avatar, igual que en la lista
+              de la que venís: el mismo paciente se reconoce por la misma
+              marca en las dos pantallas. */}
+          <div className="bt-quien">
+            <Avatar name={sel.name} lastName={sel.lastName} id={sel._id} size="sm" />
+            <span className="bt-quien__txt">
+              <b>{nombre}</b>
+              <small>{subtitulo}</small>
+            </span>
+          </div>
+
           {cargandoFicha ? (
             // Del mismo alto que el bloque real, así la tarjeta no da el salto
             // al llegar los datos. Mismo criterio que en la lista de búsqueda.

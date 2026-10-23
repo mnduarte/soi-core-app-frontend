@@ -28,6 +28,12 @@ const router = createBrowserRouter([
     lazy: () => import('./pages/AcceptInvitationPage').then(m => ({ Component: m.default })),
   },
   {
+    // El link que se manda por WhatsApp: "entrá acá e instalala". Sin
+    // `loader` porque el momento de instalar suele ser antes de entrar.
+    path: '/instalar',
+    lazy: () => import('./pages/InstalarPage').then(m => ({ Component: m.default })),
+  },
+  {
     // Pública de verdad: sin `loader`, porque quien entra es un paciente sin
     // cuenta. Lo único que la protege es el token del link.
     path: '/firmar-invitado/:token',

@@ -6060,3 +6060,108 @@ table.tbl { width: 100%; border-collapse: collapse; }
   line-height: 1.2; color: var(--text-primary);
 }
 .bt-quien small { font-size: 12px; color: var(--text-tertiary); }
+
+/* Cargar dictando, en el formulario de paciente. Una franja al lado del
+   escaneo por foto: cumplen el mismo papel —completar sin tipear— así que se
+   ven como dos caminos del mismo lugar y no como dos funciones distintas. */
+.np-dic {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 8px; padding: 9px 12px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+.np-dic > svg { flex-shrink: 0; color: var(--text-tertiary); }
+/* El texto se queda con el sobrante y NO empuja al botón: un item de flex
+   arranca en `min-width: auto` y una frase larga lo sacaría de la caja.
+
+   Alto CLAVADO, no mínimo: el renglón de abajo pasa de "Te escucho…" a una
+   frase larga mientras la persona habla, y con alto automático la tira
+   crecería y empujaría medio formulario en pleno dictado. */
+.np-dic__txt {
+  flex: 1; min-width: 0;
+  height: 34px;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+}
+.np-dic__guia,
+.np-dic__est {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* El recordatorio: siempre el mismo texto, en los dos estados. Que no cambie
+   es justamente su trabajo. */
+.np-dic__guia {
+  font-size: 12.5px; line-height: 1.35; color: var(--text-secondary);
+}
+.np-dic__est {
+  font-size: 11.5px; line-height: 1.35; color: var(--text-tertiary);
+}
+.np-dic__est--mal { color: var(--danger); }
+.np-dic .btn { flex-shrink: 0; }
+
+/* ===== Página /instalar =====================================================
+   Se abre desde un link de WhatsApp, casi siempre en una tablet y casi siempre
+   por alguien que todavía no entró nunca. Por eso: una sola columna, un solo
+   botón, y todo del tamaño de un dedo. */
+.inst {
+  min-height: 100dvh;
+  display: grid; place-items: center;
+  padding: 24px 16px;
+  background: var(--bg-app);
+}
+.inst__caja {
+  width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 32px 24px 28px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  text-align: center;
+}
+.inst__icono { width: 72px; height: 72px; border-radius: 16px; }
+.inst__caja h1 {
+  margin: 0; font-size: 26px; font-weight: 700;
+  letter-spacing: 0.04em; color: var(--brand-primary);
+}
+.inst__sub {
+  margin: -6px 0 2px; font-size: 14px; line-height: 1.45;
+  color: var(--text-secondary);
+}
+.inst__paso {
+  margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--text-primary);
+}
+.inst__pasos {
+  margin: 0; padding-left: 20px; text-align: left;
+  font-size: 14.5px; line-height: 1.65; color: var(--text-primary);
+}
+.inst__pasos li { margin-bottom: 4px; }
+.inst__ok {
+  margin: 0; font-size: 16px; font-weight: 600; color: var(--success);
+}
+.inst__ojo {
+  margin: 4px 0 0; padding: 10px 12px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  font-size: 13px; line-height: 1.45; color: var(--text-secondary);
+  text-align: left;
+}
+/* Alto de dedo y ancho completo: en una tablet esto se toca una vez y listo. */
+.inst__btn {
+  width: 100%; min-height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 4px;
+  padding: 0 18px;
+  background: var(--brand-primary); color: var(--text-inverse);
+  border: 1px solid var(--brand-primary); border-radius: 10px;
+  font-size: 16px; font-weight: 600; font-family: inherit;
+  text-decoration: none; cursor: pointer;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.inst__btn:active { background: var(--brand-primary-600); }
+.inst__btn--sec {
+  background: transparent; color: var(--brand-primary);
+  border-color: var(--border-strong);
+}
+.inst__btn--sec:active { background: var(--bg-hover); }
+@media (prefers-reduced-motion: reduce) {
+  .inst__btn { transition: none; }
+}

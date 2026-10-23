@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useDictado } from '../../hooks/useDictado';
+import { useNivelVoz } from '../../hooks/useNivelVoz';
+import { OndaVoz } from '../common/OndaVoz';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal, FormField } from '../common/Modal';
@@ -69,6 +72,17 @@ const EMPTY: FormState = {
 
 // Downscale a photo client-side (max edge ~1500px, JPEG) before sending — keeps
 // the payload small and the vision cost low without losing legibility.
+/**
+ * Qué decir, en el orden en que se suele decir. Queda a la vista TODO el rato
+ * que dura el dictado, no sólo antes de empezar: es un recordatorio para
+ * alguien que está hablando y no puede ponerse a leer.
+ *
+ * Son los campos que más se usan, no todos los que entiende el backend (también
+ * saca DNI, email, nº de afiliado, localidad y notas). Una lista completa se
+ * vuelve ilegible y deja de funcionar como recordatorio.
+ */
+const GUIA_DICTADO = 'nombre · edad · teléfono · obra social · domicilio';
+
 async function fileToScaledBase64(file: File, maxEdge = 1500): Promise<{ data: string; mediaType: string }> {
   const dataUrl: string = await new Promise((res, rej) => {
     const r = new FileReader();
@@ -145,6 +159,62 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
   const [duplicate, setDuplicate] = useState<ScanFichaResult['existing']>(null);
   const [dupReason, setDupReason] = useState<'name' | 'dni' | null>(null);
   const [dupDismissed, setDupDismissed] = useState(false);
+
+  /*
+   * Cargar dictando.
+   *
+   * Va al lado del escaneo por foto porque cumplen el mismo papel: completar
+   * la ficha sin tipear. La foto sirve cuando hay papel; el dictado, cuando el
+   * paciente está en el sillón y tenés las manos ocupadas.
+   *
+   * De corrido y no campo por campo: preguntar un dato a la vez obligaría a
+   * arrancar y parar el reconocedor seis veces, que es donde el dictado de
+   * Android se pone caprichoso. Y nadie habla de a un dato.
+   */
+  const dic = useDictado();
+  const dicBarraRef = useRef<HTMLDivElement>(null);
+  useNivelVoz(dic.estado === 'grabando', dicBarraRef);
+  const [dictando, setDictando] = useState(false);
+  const [dicError, setDicError] = useState('');
+
+  const aplicarDictado = async () => {
+    const texto = dic.parar().trim();
+    dic.descartar();
+    if (texto.length < 2) return;
+    setDictando(true);
+    setDicError('');
+    try {
+      const d = await patientsApi.dictar(texto);
+      // Si no se entendió NINGÚN campo hay que decirlo. Sin esto cada
+      // `?? x.campo` de abajo conserva lo que ya había y el formulario queda
+      // exactamente igual que antes, sin aviso: se lee como que el micrófono
+      // no escuchó. Pasó de verdad.
+      if (!Object.values(d).some(v => v)) {
+        setDicError('No se entendió. Probá de nuevo, más despacio.');
+        return;
+      }
+      // Campo por campo y solo lo que vino: lo que no se dijo vuelve null y
+      // no puede pisar lo que ya estaba escrito.
+      setData(x => ({
+        ...x,
+        fullName: d.fullName ?? x.fullName,
+        age: d.age ?? x.age,
+        birthDate: d.birthDate ?? x.birthDate,
+        dni: d.dni ?? x.dni,
+        phone: d.phone ?? x.phone,
+        email: d.email ?? x.email,
+        obraSocial: matchObra(d.obraSocial ?? '') ?? d.obraSocial ?? x.obraSocial,
+        nAfiliado: d.nAfiliado ?? x.nAfiliado,
+        address: d.address ?? x.address,
+        locality: d.locality ?? x.locality,
+        notes: d.notes ? [x.notes, d.notes].filter(Boolean).join(' · ') : x.notes,
+      }));
+    } catch {
+      setDicError('No se pudo interpretar. Probá de nuevo o cargalo a mano.');
+    } finally {
+      setDictando(false);
+    }
+  };
 
   // Reset on every open/close transition so the form is always blank when the
   // modal becomes visible again, even if the previous close came from a submit.
@@ -485,6 +555,48 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
         </div>
         {scanError && (
           <div style={{ fontSize: 12, color: 'var(--danger)' }}>{scanError}</div>
+        )}
+
+        {/* Cargar dictando. Mismo papel que la foto —completar sin tipear— y
+            por eso el mismo bloque: la foto sirve cuando hay papel, el dictado
+            cuando el paciente está enfrente y tenés las manos ocupadas. */}
+        {dic.soportado && !dic.bloqueado && (
+          <div className="np-dic" ref={dicBarraRef}>
+            {dic.estado === 'grabando' ? <OndaVoz activa tam="chica" /> : <Icon name="mic" size={15} />}
+
+            {/* Dos renglones de alto FIJO. Arriba el recordatorio de qué decir,
+                que no se mueve ni desaparece al empezar a hablar: hablando no
+                se puede mirar la pantalla y volver a leer, y sin esto el
+                profesional se queda a mitad de camino sin saber qué más decir.
+                Abajo lo único que cambia. El alto va clavado —no mínimo— para
+                que la tira no salte cuando el texto de abajo pasa de una
+                palabra a una frase larga. */}
+            <div className="np-dic__txt">
+              <div className="np-dic__guia">{GUIA_DICTADO}</div>
+              <div className={`np-dic__est${dicError && dic.estado !== 'grabando' && !dictando ? ' np-dic__est--mal' : ''}`}>
+                {dic.estado === 'grabando'
+                  ? [dic.texto, dic.parcial].filter(Boolean).join(' ') || 'Te escucho…'
+                  : dictando
+                    ? 'Repartiendo los datos…'
+                    : dicError || 'Decilo todo de corrido, sin frenar entre dato y dato.'}
+              </div>
+            </div>
+
+            {dic.estado === 'grabando' ? (
+              <button type="button" className="btn btn--primary btn--sm" onClick={aplicarDictado}>
+                Listo
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                disabled={dictando}
+                onClick={() => { setDicError(''); dic.descartar(); dic.empezar(); }}
+              >
+                Dictar
+              </button>
+            )}
+          </div>
         )}
       </div>
       )}

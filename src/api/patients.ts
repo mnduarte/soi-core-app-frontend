@@ -36,6 +36,22 @@ export interface Patient {
   balance?: number;
 }
 
+/** Lo que el servidor entendió de una frase. Todo opcional: lo que no se dijo
+ *  vuelve en null y no se toca el campo. */
+export interface DatosDictados {
+  fullName: string | null;
+  age: string | null;
+  birthDate: string | null;
+  dni: string | null;
+  phone: string | null;
+  email: string | null;
+  obraSocial: string | null;
+  nAfiliado: string | null;
+  address: string | null;
+  locality: string | null;
+  notes: string | null;
+}
+
 export const patientsApi = {
   findAll: (search?: string) =>
     apiClient.get<{ data: Patient[] }>('/patients', { params: { search } }).then(r => r.data.data),
@@ -67,6 +83,15 @@ export const patientsApi = {
       .then(r => r.data.data),
 
   // Crear paciente rápido desde agenda: solo nombre (se splitea automáticamente).
+  /**
+   * Reparte en campos lo que se dijo de un paciente. NO crea nada: llena el
+   * formulario para revisar, igual que el escaneo por foto.
+   */
+  dictar: (texto: string) =>
+    apiClient
+      .post<{ data: DatosDictados }>('/patients/dictar', { texto })
+      .then(r => r.data.data),
+
   quickCreate: (fullName: string) =>
     apiClient.post<{ data: Patient }>('/patients/quick-create', { fullName }).then(r => r.data.data),
 };

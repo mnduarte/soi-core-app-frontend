@@ -228,8 +228,8 @@ export default function FichaRapidaPage() {
     const h = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [searchOpen]);
 
   /**
@@ -765,8 +765,8 @@ export default function FichaRapidaPage() {
     const h = (e: MouseEvent) => {
       if (editRowRef.current && !editRowRef.current.contains(e.target as Node)) setEditPanel(null);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [editPanel, customTreatOpen, customAmountsOpen]);
   const updateItemMut = useMutation({
     mutationFn: (v: { workId: string; dto: Partial<CreateWorkInput> }) =>
@@ -1111,8 +1111,8 @@ export default function FichaRapidaPage() {
     const h = (e: MouseEvent) => {
       if (askRef.current && !askRef.current.contains(e.target as Node)) setAskPanel(false);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [askPanel, customAmountsOpen]);
   // Monto en edición dentro de la franja (null = todavía no lo tocó). Existe
   // porque 1 de cada 5 veces cobra solo una parte de lo que hizo, y 1 de cada
@@ -1153,8 +1153,8 @@ export default function FichaRapidaPage() {
     const h = (e: MouseEvent) => {
       if (cobroRef.current && !cobroRef.current.contains(e.target as Node)) setCobroPanel(false);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [cobroPanel, customAmountsOpen]);
   const [uncollect, setUncollect] = useState<{ work: Work; pagos: Transaction[] } | null>(null);
 
@@ -1347,8 +1347,8 @@ export default function FichaRapidaPage() {
     const h = (e: MouseEvent) => {
       if (epRef.current && !epRef.current.contains(e.target as Node)) setEpPanel(false);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [epPanel, customAmountsOpen]);
   const [epMethod, setEpMethod] = useState<PaymentMethod>('CASH');
   const [epDate, setEpDate] = useState(todayYMD());
@@ -1601,8 +1601,8 @@ export default function FichaRapidaPage() {
         setHechosPanelOpen(false);
       }
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [hechosPanelOpen]);
   /**
    * Visor de fotos. Guarda la LISTA y en cuál se está parado, no una foto
@@ -1755,14 +1755,14 @@ export default function FichaRapidaPage() {
   useEffect(() => {
     if (!workPanel) return;
     const h = (e: MouseEvent) => { if (workRef.current && !workRef.current.contains(e.target as Node)) setWorkPanel(null); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [workPanel]);
   useEffect(() => {
     if (!pagoPanel) return;
     const h = (e: MouseEvent) => { if (pagoRef.current && !pagoRef.current.contains(e.target as Node)) setPagoPanel(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
   }, [pagoPanel]);
 
   // Los trabajos ya hechos se colapsan (para no saturar cuando se acumulan).
@@ -3119,21 +3119,12 @@ export default function FichaRapidaPage() {
                       </button>
                     )}
                   </div>
-                  {/* Dictar va ANTES de Agregar y en secundario: es el
-                      atajo, no la acción principal. Si el navegador no sabe
-                      dictar no se muestra el botón en vez de mostrarlo roto. */}
-                  {dic.soportado && !dic.bloqueado && (
-                    <button
-                      type="button"
-                      className="btn btn--secondary btn--icon"
-                      onClick={() => { cerrarOperaciones(); arrancarDictado(); }}
-                      title="Dictar el plan de tratamiento"
-                      aria-label="Dictar el plan de tratamiento"
-                      style={{ height: 38, flexShrink: 0 }}
-                    >
-                      <Icon name="mic" size={isMobile ? 18 : 15} />
-                    </button>
-                  )}
+                  {/* Acción y micrófono pegados, a la derecha: la misma pieza
+                      que "Buscar turno" y "Anotar" en la agenda (.lb-anotar).
+                      Suelto ocupaba un lugar propio y se leía como un tercer
+                      botón sin relación con el de al lado. Si el navegador no
+                      sabe dictar, el par se muestra sin la mitad derecha. */}
+                  <div className="lb-addrow__par">
                   <button className={`btn btn--primary ${isMobile ? 'btn--icon' : ''}`} onClick={() => { cerrarOperaciones(); addTrabajo(); }} title="Agregar trabajo" style={{ height: 38, flexShrink: 0 }}>
                     {/* Sin spinner ni deshabilitado: la fila se dibuja al
                         instante y el campo queda vacío, así que no hay espera
@@ -3144,6 +3135,19 @@ export default function FichaRapidaPage() {
                         proporcionado al botón que lo contiene. */}
                     <Icon name="plus" size={isMobile ? 20 : 14} /> {!isMobile && 'Agregar'}
                   </button>
+                  {dic.soportado && !dic.bloqueado && (
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={() => { cerrarOperaciones(); arrancarDictado(); }}
+                      title="Dictar el plan de tratamiento"
+                      aria-label="Dictar el plan de tratamiento"
+                      style={{ height: 38, flexShrink: 0 }}
+                    >
+                      <Icon name="mic" size={isMobile ? 18 : 15} />
+                    </button>
+                  )}
+                  </div>
                 </div>
 
                 {/* Dictado: primero se escucha, después se revisa. Nunca
@@ -3285,7 +3289,22 @@ export default function FichaRapidaPage() {
                 {/* popover de chips (contextual al campo enfocado) */}
                 {workPanel === 'trabajo' && (
                   <div style={popover}>
-                    <div style={popTitle}>Trabajos frecuentes</div>
+                    {/* Cerrar a mano. Tocar afuera también cierra, pero en el
+                        celular la tarjeta tapa justo lo que querés mirar y no
+                        siempre hay un "afuera" cómodo que tocar. */}
+                    <div style={popCabecera}>
+                      <span style={{ ...popTitle, marginBottom: 0 }}>Trabajos frecuentes</span>
+                      <button
+                        type="button"
+                        className="lb-clear"
+                        title="Cerrar"
+                        aria-label="Cerrar las sugerencias"
+                        onPointerDown={e => e.preventDefault()}
+                        onClick={() => setWorkPanel(null)}
+                      >
+                        <Icon name="x" size={13} />
+                      </button>
+                    </div>
                     <div className="lb-chips" style={chipsWrap}>
                       {treatments.map(t => (
                         <button key={t} type="button" onMouseDown={e => e.preventDefault()} onClick={() => { addChip(t); setWorkPanel(null); }} className="lb-chip">{t}</button>
@@ -4024,6 +4043,11 @@ const label: CSSProperties = {
    distintos. */
 const emptyRow: CSSProperties = {
   padding: 24, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13,
+};
+/** Título del popover + la cruz, en la misma línea. */
+const popCabecera: CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  gap: 8, marginBottom: 6,
 };
 const dollarPrefix: CSSProperties = {
   position: 'absolute', left: 10, top: 10, color: 'var(--text-tertiary)',

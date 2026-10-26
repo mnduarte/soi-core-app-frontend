@@ -6174,3 +6174,15 @@ table.tbl { width: 100%; border-collapse: collapse; }
   color: var(--text-placeholder);
   cursor: help;
 }
+
+/* Agregar + micrófono como una sola pieza, igual que .lb-anotar en la agenda.
+   La costura va en un blanco translúcido porque los dos son de relleno. */
+.lb-addrow__par { display: flex; flex-shrink: 0; }
+.lb-addrow__par > .btn:first-child {
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+}
+.lb-addrow__par > .btn:last-child:not(:first-child) {
+  width: 44px; padding: 0; justify-content: center;
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, #fff 32%, transparent);
+}

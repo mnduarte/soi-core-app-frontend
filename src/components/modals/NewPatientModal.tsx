@@ -192,6 +192,29 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
     }
   };
 
+  /**
+   * Se manda solo al dejar de hablar, como el plan y la agenda.
+   *
+   * Acá además resuelve un problema propio del formulario: el botón "Listo"
+   * vive en la tira de arriba, y mientras dictás lo normal es bajar para ver
+   * qué campos faltan. Quedaba fuera de pantalla y había que subir hasta
+   * arriba para rematar el dictado. Si se manda solo, no hay a dónde volver.
+   *
+   * Tres segundos y medio, no dos y medio: acá se dictan varios datos
+   * seguidos —nombre, edad, obra social, teléfono— y entre uno y otro se
+   * piensa. Es la misma razón por la que agendar espera más que buscar.
+   */
+  const aplicarRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    aplicarRef.current = () => void aplicarDictado();
+  });
+  const dicVivo = [dic.texto, dic.parcial].filter(Boolean).join(' ');
+  useEffect(() => {
+    if (dic.estado !== 'grabando' || !dicVivo) return;
+    const t = setTimeout(() => aplicarRef.current(), 3500);
+    return () => clearTimeout(t);
+  }, [dicVivo, dic.estado]);
+
   // Reset on every open/close transition so the form is always blank when the
   // modal becomes visible again, even if the previous close came from a submit.
   // En edición no lo blanqueamos: se precarga con el paciente (efecto de abajo).
@@ -560,7 +583,7 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
                     ? [dic.texto, dic.parcial].filter(Boolean).join(' ') || 'Te escucho…'
                     : dictando
                       ? 'Repartiendo los datos…'
-                      : dicError || 'Decilo todo de corrido, sin frenar entre dato y dato.'}
+                      : dicError || 'Decilo todo de corrido. Se carga solo cuando dejás de hablar.'}
               </div>
             </div>
 

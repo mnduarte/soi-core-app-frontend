@@ -75,6 +75,15 @@ interface Props {
  * En celular casi no se usa: soltar el botón envía al instante.
  */
 const SILENCIO_MS = 2500;
+/**
+ * Agendar espera un poco más que preguntar.
+ *
+ * No es la misma frase. Para buscar ya sabés a quién buscás y lo decís de
+ * corrido; para agendar hay que acordarse del nombre del paciente, y esa pausa
+ * en el medio cortaba la frase al mandar a los 2,5s. Tres segundos y medio es
+ * lo que dura pensar un apellido sin que la espera se note.
+ */
+const SILENCIO_ANOTAR_MS = 3500;
 
 /** Hoy en el huso del consultorio, como YYYY-MM-DD. */
 const hoyISO = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
@@ -240,9 +249,12 @@ export function AgendarDictandoModal({
   // cuerpo del efecto.
   useEffect(() => {
     if (dic.estado !== 'grabando' || !dictado) return;
-    const t = setTimeout(() => enviarRef.current(), SILENCIO_MS);
+    const t = setTimeout(
+      () => enviarRef.current(),
+      modo === 'buscar' ? SILENCIO_MS : SILENCIO_ANOTAR_MS,
+    );
     return () => clearTimeout(t);
-  }, [dictado, dic.estado]);
+  }, [dictado, dic.estado, modo]);
 
   /**
    * Abre escuchando.

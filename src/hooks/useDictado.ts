@@ -115,7 +115,37 @@ const agregar = (acumulado: string, tramo: string) => {
   if (!acumulado) return t;
   if (t.startsWith(acumulado)) return t;
   if (acumulado.endsWith(t)) return acumulado;
-  return unir(acumulado, t);
+  return unirSolapado(acumulado, t);
+};
+
+/**
+ * Pega dos tramos descontando lo que se repite entre el final de uno y el
+ * principio del otro.
+ *
+ * El caso real: cuando el reconocedor se corta solo a mitad de frase, lo que
+ * estaba a medio confirmar se arrastra como base de la tanda siguiente. Si el
+ * motor después re-emite esa misma parte con una palabra MÁS —"treinta mil"
+ * pasa a "treinta mil pesos"— ninguna de las guardas de arriba la reconoce
+ * (no empieza igual, no termina igual) y se pegaba entera: "…treinta mil
+ * treinta mil pesos". Eso es lo que se veía como "a veces duplica".
+ *
+ * Pide DOS palabras de solape como mínimo. Con una sola se comería
+ * repeticiones legítimas —"sí, sí"— y es peor borrar algo que se dijo que
+ * dejar una palabra de más.
+ */
+const unirSolapado = (acumulado: string, tramo: string) => {
+  const a = acumulado.split(/\s+/);
+  const b = tramo.split(/\s+/);
+  const normal = (xs: string[]) =>
+    xs.join(' ').toLowerCase().replace(/[.,;:¿?¡!]/g, '');
+
+  for (let n = Math.min(a.length, b.length); n >= 2; n--) {
+    if (normal(a.slice(-n)) !== normal(b.slice(0, n))) continue;
+    const resto = b.slice(n).join(' ');
+    // El tramo no traía nada nuevo: ya estaba todo.
+    return resto ? unir(acumulado, resto) : acumulado;
+  }
+  return unir(acumulado, tramo);
 };
 
 export function useDictado(idioma = 'es-AR') {

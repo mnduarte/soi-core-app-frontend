@@ -6186,3 +6186,14 @@ table.tbl { width: 100%; border-collapse: collapse; }
   border-top-left-radius: 0; border-bottom-left-radius: 0;
   border-left: 1px solid color-mix(in srgb, #fff 32%, transparent);
 }
+
+/* El bloque de dictado, pegado arriba mientras se graba. El cuerpo del modal
+   es el que scrollea (overflow:auto), asi que `sticky` se ancla ahi. El -4px
+   come el padding del cuerpo para que no quede una franja de fondo arriba. */
+.np-bloque--dictando {
+  position: sticky; top: -4px; z-index: 5;
+  box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-bloque--dictando { box-shadow: none; }
+}

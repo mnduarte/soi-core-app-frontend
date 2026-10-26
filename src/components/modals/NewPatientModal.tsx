@@ -482,6 +482,13 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
       {/* Scan de la ficha por foto — solo al crear (en edición no aplica). */}
       {!editing && clinico && (
       <div
+        /* Mientras dictás queda pegado arriba del formulario.
+           Lo normal al dictar es bajar para ver qué campos faltan, y el
+           control del dictado —el recordatorio de qué decir y el botón de
+           terminar— se iba de pantalla: había que subir hasta arriba para
+           rematar la frase. `sticky` no cambia el flujo, así que no mueve
+           nada al empezar a grabar. */
+        className={dic.estado === 'grabando' ? 'np-bloque np-bloque--dictando' : 'np-bloque'}
         style={{
           border: '1px dashed var(--brand-primary-100)',
           background: 'var(--brand-primary-50)',

@@ -17,9 +17,32 @@ import { useInstalarApp } from '../../hooks/useInstalarApp';
  */
 export function AvisosPWA() {
   const {
-    needRefresh: [hayVersionNueva, setHayVersionNueva],
+    needRefresh: [hayVersionNueva],
     updateServiceWorker,
-  } = useRegisterSW();
+  } = useRegisterSW({
+    /*
+     * Cuándo se pregunta si hay versión nueva.
+     *
+     * Por defecto el navegador consulta UNA vez, al registrar el service
+     * worker, y después cuando se le canta. Eso era la demora de diez segundos
+     * al abrir, y peor: una sesión larga podía pasar el día entero con la
+     * versión vieja sin enterarse.
+     *
+     * Acá se pregunta en los tres momentos que importan: al arrancar, cada vez
+     * que la app vuelve al frente —que es cuando alguien la retoma— y cada
+     * minuto mientras está abierta. Es un pedido chico por un archivo que el
+     * servidor contesta con 304 si no cambió; al lado del heartbeat de datos
+     * que ya corre cada diez segundos, no se nota.
+     */
+    onRegisteredSW(_url, r) {
+      if (!r) return;
+      void r.update();
+      setInterval(() => void r.update(), 60_000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void r.update();
+      });
+    },
+  });
   const { modo, instalar, descartar, marcarComoInstalada } = useInstalarApp();
   /*
    * ¿Está abierta como app instalada o como pestaña del navegador?
@@ -44,32 +67,107 @@ export function AvisosPWA() {
   );
   const yaAplicada = useRef(false);
 
+  /**
+   * ¿Ya hizo algo en esta sesión?
+   *
+   * Es lo que separa un momento seguro de uno peligroso. Recargar cuando
+   * recién abrió la app no le saca nada a nadie; recargar mientras está
+   * cobrando le cambia la pantalla debajo de la mano.
+   */
+  const interactuo = useRef(false);
+
+  /**
+   * Freno contra el bucle de recargas.
+   *
+   * Recargar solo es cómodo hasta que algo impide que la versión nueva se
+   * active: ahí la app vuelve a abrir, vuelve a encontrar la actualización
+   * pendiente y vuelve a recargar, para siempre, sin que nadie pueda usarla.
+   *
+   * Si ya se recargó sola hace menos de un minuto, no se insiste: queda el
+   * cartel, que al menos es algo que se puede tocar o ignorar.
+   */
+  const puedeRecargarSola = () => {
+    try {
+      const ultima = Number(sessionStorage.getItem('soi.pwa-recarga') ?? 0);
+      if (Date.now() - ultima < 60_000) return false;
+      sessionStorage.setItem('soi.pwa-recarga', String(Date.now()));
+    } catch { /* sin storage: que siga, es el camino bueno */ }
+    return true;
+  };
   useEffect(() => {
-    if (!hayVersionNueva || instalada || yaAplicada.current) return;
-    yaAplicada.current = true;
-    // `false` = no recargar ahora. Solo destraba la versión nueva.
-    void updateServiceWorker(false);
+    const marcar = () => { interactuo.current = true; };
+    document.addEventListener('pointerdown', marcar, { once: true });
+    document.addEventListener('keydown', marcar, { once: true });
+    return () => {
+      document.removeEventListener('pointerdown', marcar);
+      document.removeEventListener('keydown', marcar);
+    };
+  }, []);
+
+  /**
+   * Aplicar la versión nueva, sola, en los momentos en que no molesta.
+   *
+   * En el navegador (no instalada) se destraba en silencio y entra al
+   * recargar, como antes.
+   *
+   * Instalada hay dos momentos seguros, y en los dos se recarga sin preguntar:
+   *  · Recién abrió y todavía no tocó nada.
+   *  · Volvió a la app después de tenerla atrás — retomarla ES el corte.
+   *
+   * Si aparece en pleno uso no se toca nada: queda el cartel, que ahora no se
+   * puede posponer. Y aunque lo ignore, la próxima vez que salga y vuelva se
+   * actualiza sola. Esa es la garantía de que nadie se queda con una versión
+   * vieja sin haber decidido quedarse.
+   */
+  useEffect(() => {
+    if (!hayVersionNueva || yaAplicada.current) return;
+
+    if (!instalada) {
+      yaAplicada.current = true;
+      // `false` = no recargar ahora. Solo destraba la versión nueva.
+      void updateServiceWorker(false);
+      return;
+    }
+
+    if (!interactuo.current && puedeRecargarSola()) {
+      yaAplicada.current = true;
+      void updateServiceWorker(true);
+      return;
+    }
+
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible' || yaAplicada.current) return;
+      if (!puedeRecargarSola()) return;
+      yaAplicada.current = true;
+      void updateServiceWorker(true);
+    };
+    document.addEventListener('visibilitychange', alVolver);
+    return () => document.removeEventListener('visibilitychange', alVolver);
   }, [hayVersionNueva, instalada, updateServiceWorker]);
 
   /*
-   * Hay una versión nueva.
+   * Hay una versión nueva y apareció en pleno uso.
    *
-   * Solo dentro de la app instalada (ver `instalada` arriba). Avisa y espera:
-   * no se actualiza solo porque recargar sin permiso cambiaría la pantalla
-   * debajo de la mano de alguien que está cobrando.
+   * Solo dentro de la app instalada (ver `instalada` arriba) y solo si ya
+   * estaba trabajando: si acababa de abrir, el efecto de arriba ya recargó y
+   * acá no se llega nunca.
+   *
+   * No tiene "Después". Posponer era quedarse con la versión vieja sin fecha
+   * de vencimiento, y lo que se arrastra suele ser justo un arreglo. Si no lo
+   * toca, igual se actualiza sola la próxima vez que salga y vuelva a la app.
    */
   if (hayVersionNueva && instalada) {
     return (
       <div className="pwa-nueva" role="status">
         <div className="pwa-nueva__txt">
           <strong>Hay una versión nueva</strong>
-          <span>Trae las últimas mejoras. Se aplica en un segundo.</span>
+          <span>Se aplica en un segundo, o sola cuando vuelvas a la app.</span>
         </div>
         <div className="pwa-nueva__btns">
-          <button className="btn btn--ghost btn--sm" onClick={() => setHayVersionNueva(false)}>
-            Después
-          </button>
-          <button className="btn btn--primary btn--sm" onClick={() => void updateServiceWorker(true)}>
+          <button
+            className="btn btn--primary btn--sm"
+            onClick={() => { yaAplicada.current = true; void updateServiceWorker(true); }}
+          >
             Actualizar
           </button>
         </div>

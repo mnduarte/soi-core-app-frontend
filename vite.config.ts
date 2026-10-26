@@ -26,11 +26,13 @@ export default defineConfig({
      * a pantalla completa, sin la barra del navegador —que en una tablet se
      * come una fila entera de la agenda.
      *
-     * `registerType: 'prompt'` y no 'autoUpdate' a propósito: la app guarda una
-     * copia de sí misma para abrir rápido, así que una versión nueva recién
-     * entra al reabrirla. Con 'autoUpdate' eso pasa sin avisar y en medio del
-     * uso —cambiaría la pantalla debajo de la mano de alguien que está
-     * cobrando—. Acá avisamos y que decida (ver ActualizacionPWA).
+     * `registerType: 'prompt'` y no 'autoUpdate', pero NO para preguntar
+     * siempre: para elegir CUÁNDO se aplica. Con 'autoUpdate' la recarga puede
+     * caer en medio del uso y cambiar la pantalla debajo de la mano de alguien
+     * que está cobrando. Con 'prompt', AvisosPWA decide: al abrir y al volver
+     * a la app —los dos momentos en que no se pierde nada— se actualiza sola y
+     * sin preguntar; solo si aparece en pleno trabajo se muestra el cartel, y
+     * ese cartel ya no se puede posponer.
      */
     VitePWA({
       registerType: 'prompt',

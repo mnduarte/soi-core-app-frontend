@@ -491,7 +491,16 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
         className={dic.estado === 'grabando' ? 'np-bloque np-bloque--dictando' : 'np-bloque'}
         style={{
           border: '1px dashed var(--brand-primary-100)',
-          background: 'var(--brand-primary-50)',
+          // Pegado arriba necesita tapar lo que pasa por debajo, y
+          // `--brand-primary-50` NO es un color sólido: brand.ts lo arma como
+          // el color de la clínica al 8%, para teñir lo de atrás. Scrolleando
+          // junto al resto eso no se nota; quieto, se ve el formulario pasar a
+          // través. El degradado de un solo color apoya ese mismo 8% sobre el
+          // fondo de la tarjeta: se ve idéntico, pero es opaco.
+          background:
+            dic.estado === 'grabando'
+              ? 'linear-gradient(var(--brand-primary-50), var(--brand-primary-50)), var(--bg-surface)'
+              : 'var(--brand-primary-50)',
           borderRadius: 10,
           padding: '12px 14px',
           marginBottom: 16,

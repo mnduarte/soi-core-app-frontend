@@ -42,3 +42,38 @@ export async function toWebP(
     if (url) URL.revokeObjectURL(url);
   }
 }
+
+/**
+ * Lee un archivo de imagen y lo devuelve en base64 listo para mandarle a la
+ * API de visión, reescalado si hace falta.
+ *
+ * El tope de 1500px no es por peso sino porque es más o menos lo que el modelo
+ * usa: mandar una foto de 4000px no mejora la lectura, solo la encarece. Para
+ * un odontograma, donde cada diente mide unos pocos píxeles, conviene que la
+ * FOTO sea de cerca — agrandarla acá no agrega información que no esté.
+ */
+export async function fileToScaledBase64(file: File, maxEdge = 1500): Promise<{ data: string; mediaType: string }> {
+  const dataUrl: string = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error('read'));
+    r.readAsDataURL(file);
+  });
+  const img: HTMLImageElement = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error('img'));
+    i.src = dataUrl;
+  });
+  const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return { data: dataUrl.split(',')[1] ?? '', mediaType: file.type || 'image/jpeg' };
+  ctx.drawImage(img, 0, 0, w, h);
+  const out = canvas.toDataURL('image/jpeg', 0.85);
+  return { data: out.split(',')[1] ?? '', mediaType: 'image/jpeg' };
+}

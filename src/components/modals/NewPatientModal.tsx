@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal, FormField } from '../common/Modal';
 import { SectionLabel } from '../common/Toggle';
 import { Icon } from '../common/Icon';
+import { fileToScaledBase64 } from '../../lib/image';
 import { patientsApi, type Patient, type ScanFichaResult } from '../../api/patients';
 import { patientAge } from '../../lib/format';
 import { DatePicker } from '../common/DatePicker';
@@ -83,31 +84,6 @@ const EMPTY: FormState = {
  */
 const GUIA_DICTADO = 'nombre · edad · teléfono · obra social · domicilio';
 
-async function fileToScaledBase64(file: File, maxEdge = 1500): Promise<{ data: string; mediaType: string }> {
-  const dataUrl: string = await new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = () => rej(new Error('read'));
-    r.readAsDataURL(file);
-  });
-  const img: HTMLImageElement = await new Promise((res, rej) => {
-    const i = new Image();
-    i.onload = () => res(i);
-    i.onerror = () => rej(new Error('img'));
-    i.src = dataUrl;
-  });
-  const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return { data: dataUrl.split(',')[1] ?? '', mediaType: file.type || 'image/jpeg' };
-  ctx.drawImage(img, 0, 0, w, h);
-  const out = canvas.toDataURL('image/jpeg', 0.85);
-  return { data: out.split(',')[1] ?? '', mediaType: 'image/jpeg' };
-}
 
 // Map an extracted obra social string to one of the chip options (else '').
 function matchObra(v?: string): string | undefined {
@@ -573,12 +549,18 @@ export function NewPatientModal({ open, onClose, editPatientId, onCreated, initi
                 palabra a una frase larga. */}
             <div className="np-dic__txt">
               <div className="np-dic__guia">{GUIA_DICTADO}</div>
-              <div className={`np-dic__est${dicError && dic.estado !== 'grabando' && !dictando ? ' np-dic__est--mal' : ''}`}>
-                {dic.estado === 'grabando'
-                  ? [dic.texto, dic.parcial].filter(Boolean).join(' ') || 'Te escucho…'
-                  : dictando
-                    ? 'Repartiendo los datos…'
-                    : dicError || 'Decilo todo de corrido, sin frenar entre dato y dato.'}
+              <div className={`np-dic__est${dic.error || (dicError && dic.estado !== 'grabando' && !dictando) ? ' np-dic__est--mal' : ''}`}>
+                {/* El error del reconocedor gana: si el micrófono no está
+                    entrando audio, decirlo importa más que seguir mostrando
+                    "Te escucho…", que es justo la mentira que nos costó
+                    encontrar el problema en el celular. */}
+                {dic.error
+                  ? dic.error
+                  : dic.estado === 'grabando'
+                    ? [dic.texto, dic.parcial].filter(Boolean).join(' ') || 'Te escucho…'
+                    : dictando
+                      ? 'Repartiendo los datos…'
+                      : dicError || 'Decilo todo de corrido, sin frenar entre dato y dato.'}
               </div>
             </div>
 

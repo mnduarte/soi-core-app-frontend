@@ -14,11 +14,15 @@ import { useEffect, type RefObject } from 'react';
  * el modal entero sesenta veces por segundo para mover un círculo: se escribe
  * directo en el DOM, que es exactamente para lo que existen las variables CSS.
  *
- * ── Por qué puede no andar, y está bien ──
+ * ── Por qué NO corre en el celular ──
  * Abre su propio micrófono, además del que ya tiene el reconocimiento de voz.
- * Casi todos los navegadores lo permiten; si alguno no, no pasa nada: el
- * elemento se queda quieto y el dictado sigue funcionando igual. Es decoración
- * informativa, no una pieza del mecanismo.
+ * En escritorio los dos lo comparten sin problema. En el celular no: Android
+ * suele entregar el micrófono en EXCLUSIVA, así que este se lo quedaba y el
+ * reconocedor escuchaba silencio. El dictado no fallaba con un error — fallaba
+ * calladito, con la pantalla en "Te escucho…" para siempre.
+ *
+ * Era decoración rompiendo el mecanismo. En pantallas táctiles no se abre nada
+ * y la onda late con su animación de base, que es lo único que se pierde.
  */
 export function useNivelVoz(activo: boolean, ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -31,6 +35,9 @@ export function useNivelVoz(activo: boolean, ref: RefObject<HTMLElement | null>)
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) return;
+    // El micrófono es de a uno en el celular: se lo dejamos al que transcribe.
+    // `coarse` es el puntero del dedo — justo los aparatos donde pasa.
+    if (window.matchMedia('(pointer: coarse)').matches) return;
 
     let stream: MediaStream | null = null;
     let ctx: AudioContext | null = null;

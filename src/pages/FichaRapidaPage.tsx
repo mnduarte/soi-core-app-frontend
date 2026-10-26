@@ -4,12 +4,15 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { appointmentsApi } from '../api/appointments';
 import { patientsApi, type Patient } from '../api/patients';
 import { transactionsApi, type Transaction, type PaymentMethod } from '../api/transactions';
-import { worksApi, type Work, type WorkStatus, type CreateWorkInput } from '../api/works';
+import { worksApi, type Work, type WorkStatus, type CreateWorkInput, type TrabajoDictado } from '../api/works';
 import { clinicsApi } from '../api/clinics';
 import { useUIStore } from '../store/ui.store';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useFlip } from '../hooks/useFlip';
 import { Icon } from '../components/common/Icon';
+import { OndaVoz } from '../components/common/OndaVoz';
+import { useDictado } from '../hooks/useDictado';
+import { useNivelVoz } from '../hooks/useNivelVoz';
 import { VisorFotos, type FotoVisor } from '../components/common/VisorFotos';
 import { FichaEsqueleto } from '../components/patient/FichaEsqueleto';
 import { Desplegable } from '../components/common/Desplegable';
@@ -21,6 +24,7 @@ import { ConsentimientosTab } from '../components/patient/ConsentimientosTab';
 import { consentsApi } from '../api/consents';
 import { clinicalEntriesApi } from '../api/clinical-entries';
 import { OdontogramCard } from '../components/patient/OdontogramCard';
+import { CargarDesdeFotoModal } from '../components/patient/CargarDesdeFotoModal';
 import { GalleryContainer } from '../components/gallery/GalleryContainer';
 import { CustomTreatmentsModal } from '../components/common/CustomTreatmentsModal';
 import { SectionHeader } from '../components/common/SectionHeader';
@@ -507,8 +511,51 @@ export default function FichaRapidaPage() {
   const invalidateTx = () => qc.invalidateQueries({ queryKey: ['transactions', id] });
 
   // ---- alta de trabajo ----
+  // Panel de chips que se abre al enfocar los inputs (ahorra espacio vertical
+  // vs. tenerlos siempre visibles). Es contextual: al enfocar "Trabajo" muestra
+  // trabajos frecuentes, al enfocar "Precio" muestra montos, y 'dictado' es el
+  // panel de voz. Cierra al elegir un chip, al agregar/pagar, o al click afuera.
+  const [workPanel, setWorkPanel] = useState<'trabajo' | 'monto' | 'dictado' | null>(null);
   const [twDesc, setTwDesc] = useState('');
   const [twAmount, setTwAmount] = useState('');
+
+  /**
+   * ¿La ficha está vacía? Entonces este paciente todavía no se cargó nunca y
+   * puede venir de una ficha de papel.
+   *
+   * La regla es el estado: no se guarda en ningún lado si ya se ofreció. Si
+   * cargó algo —por foto o a mano— deja de estar vacía y el ofrecimiento se va
+   * solo; si cerró el modal sin hacer nada, sigue vacía y sigue ahí. No hay
+   * flag que mantener ni que pueda quedar desincronizado.
+   *
+   * Sí, a un paciente nuevo de verdad también le va a aparecer. Está bien: los
+   * pacientes de papel entran DE A UNO como pacientes nuevos, y ese es
+   * justamente el momento. Por eso es una línea discreta y no un botón grande:
+   * va a estar ahí para siempre en el alta de cualquiera.
+   */
+  const fichaVacia =
+    summary != null &&
+    summary.hechosCount === 0 &&
+    summary.pendienteCount === 0 &&
+    // También sin plata registrada. Un paciente sin trabajos pero con pagos
+    // cargados no viene del papel: alguien ya viene usando SOI con él, y
+    // ofrecerle la carga inicial ahí es ofrecer empezar algo que ya empezó.
+    pagos.length === 0;
+  const [cargarFotoOpen, setCargarFotoOpen] = useState(false);
+
+  // ---- dictar el plan ----
+  //
+  // Lo dictado NO entra solo a la ficha: queda como propuesta para revisar.
+  // Con el nombre de un paciente, equivocarse es molesto; con un precio, el
+  // "Falta cobrar" pasa a decir otra cosa y nadie se entera. Dictar ahorra
+  // tipear, no ahorra mirar.
+  const dic = useDictado();
+  const dicRef = useRef<HTMLDivElement>(null);
+  useNivelVoz(dic.estado === 'grabando', dicRef);
+  const [dicProps, setDicProps] = useState<TrabajoDictado[] | null>(null);
+  const [dicPensando, setDicPensando] = useState(false);
+  const [dicError, setDicError] = useState('');
+  const [dicGuardando, setDicGuardando] = useState(false);
   const addItemMut = useMutation({
     mutationFn: (dto: { description: string; price?: number; status?: WorkStatus }) =>
       worksApi.create({ patientId: id!, ...dto }),
@@ -587,6 +634,122 @@ export default function FichaRapidaPage() {
       showToast('No se pudo agregar', 'error');
     }
   };
+
+  // ---- dictar el plan: arrancar, interpretar, confirmar ----
+
+  const arrancarDictado = () => {
+    setDicError(''); setDicProps(null);
+    dic.descartar(); dic.empezar();
+    setWorkPanel('dictado');
+  };
+
+  const cerrarDictado = () => {
+    dic.parar(); dic.descartar();
+    setDicProps(null); setDicError(''); setDicPensando(false);
+    setWorkPanel(null);
+  };
+
+  const interpretarDictado = async () => {
+    const texto = dic.parar().trim();
+    dic.descartar();
+    if (texto.length < 3) { cerrarDictado(); return; }
+    setDicPensando(true); setDicError('');
+    try {
+      const props = await worksApi.dictar(texto);
+      if (!props.length) { setDicError('No se entendió ningún trabajo. Probá de nuevo.'); return; }
+      setDicProps(props);
+    } catch {
+      setDicError('No se pudo interpretar. Probá de nuevo o cargalo a mano.');
+    } finally {
+      setDicPensando(false);
+    }
+  };
+
+  /**
+   * Se crean de a uno y en orden, no todos juntos.
+   *
+   * En paralelo llegan desordenados y la lista queda con los trabajos mezclados
+   * respecto de como se dictaron. Son dos o tres por vez: el orden vale más que
+   * los milisegundos.
+   *
+   * Tampoco se dibujan optimistas como en el alta de a uno: ahí el Dr. acaba de
+   * tipear y no hay nada que esperar, acá recién revisó una lista y una espera
+   * corta con el botón en "Agregando…" se lee como que se está guardando.
+   */
+  const confirmarDictado = async () => {
+    if (!dicProps?.length) return;
+    setDicGuardando(true);
+    let creados = 0;
+    try {
+      for (const t of dicProps) {
+        const desc = t.descripcion.trim();
+        if (!desc) continue;
+        await worksApi.create({
+          patientId: id!,
+          // La pieza va pegada a la descripción, no en un campo aparte: es
+          // como se lee en la fila ("Corona — 26") y como se escribe a mano.
+          description: t.pieza ? `${desc} — ${t.pieza}` : desc,
+          toothNumber: t.pieza ?? undefined,
+          price: t.precio ?? 0,
+          status: PENDING,
+        });
+        creados++;
+      }
+      qc.invalidateQueries({ queryKey: ['works', id] });
+      showToast(creados === 1 ? 'Trabajo agregado' : `${creados} trabajos agregados`, 'success');
+      cerrarDictado();
+    } catch {
+      // Los que ya entraron quedan: se refresca para que se vean y se dice
+      // cuántos faltaron, en vez de dejar la lista mintiendo.
+      qc.invalidateQueries({ queryKey: ['works', id] });
+      showToast(
+        creados ? `Se agregaron ${creados} de ${dicProps.length}` : 'No se pudo agregar',
+        'error',
+      );
+      setDicProps(dicProps.slice(creados));
+    } finally {
+      setDicGuardando(false);
+    }
+  };
+
+  /**
+   * Se manda solo cuando dejás de hablar, sin tocar "Listo".
+   *
+   * Dictar un trabajo es corto —"caries, cuarenta mil"— y rematarlo con un
+   * botón es más trabajo que el dictado. Dos segundos y medio sin que cambie
+   * lo transcripto es que terminaste. Mismo valor que la agenda, que ya está
+   * calibrado: con 1,5s cortaba a mitad de frase, y repetir molesta mucho más
+   * que esperar un segundo de más.
+   *
+   * El disparo vive adentro del timeout, no en el cuerpo del efecto, así que
+   * no es un setState sincrónico durante el render.
+   */
+  const interpretarRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    interpretarRef.current = () => void interpretarDictado();
+  });
+  const dictadoVivo = [dic.texto, dic.parcial].filter(Boolean).join(' ');
+  useEffect(() => {
+    // No hace falta mirar qué panel está abierto: este `dic` es el del plan
+    // y solo graba cuando ese panel lo arrancó.
+    if (dic.estado !== 'grabando' || !dictadoVivo) return;
+    const t = setTimeout(() => interpretarRef.current(), 2500);
+    return () => clearTimeout(t);
+  }, [dictadoVivo, dic.estado]);
+
+  const editarProp = (i: number, campo: 'descripcion' | 'precio', valor: string) =>
+    setDicProps(old =>
+      (old ?? []).map((t, j) =>
+        j !== i
+          ? t
+          : campo === 'descripcion'
+            ? { ...t, descripcion: valor }
+            : { ...t, precio: valor ? Number(valor.replace(/[^\d]/g, '')) : null },
+      ),
+    );
+
+  const quitarProp = (i: number) =>
+    setDicProps(old => (old ?? []).filter((_, j) => j !== i));
 
   // ---- edición / toggle / borrado de trabajo ----
   const [editItem, setEditItem] = useState<string | null>(null);
@@ -1586,11 +1749,6 @@ export default function FichaRapidaPage() {
   // En celular las dos columnas se reemplazan por pestañas segmentadas
   // (Trabajos · N | Pagos · N); en tablet/desktop se muestran las dos hojas.
 
-  // Panel de chips que se abre al enfocar los inputs (ahorra espacio vertical
-  // vs. tenerlos siempre visibles). Es contextual: al enfocar "Trabajo" muestra
-  // trabajos frecuentes, al enfocar "Precio" muestra montos. Cierra al elegir
-  // un chip, al agregar/pagar, o al hacer click afuera.
-  const [workPanel, setWorkPanel] = useState<'trabajo' | 'monto' | null>(null);
   const [pagoPanel, setPagoPanel] = useState(false);
   const workRef = useRef<HTMLDivElement>(null);
   const pagoRef = useRef<HTMLDivElement>(null);
@@ -2961,6 +3119,21 @@ export default function FichaRapidaPage() {
                       </button>
                     )}
                   </div>
+                  {/* Dictar va ANTES de Agregar y en secundario: es el
+                      atajo, no la acción principal. Si el navegador no sabe
+                      dictar no se muestra el botón en vez de mostrarlo roto. */}
+                  {dic.soportado && !dic.bloqueado && (
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--icon"
+                      onClick={() => { cerrarOperaciones(); arrancarDictado(); }}
+                      title="Dictar el plan de tratamiento"
+                      aria-label="Dictar el plan de tratamiento"
+                      style={{ height: 38, flexShrink: 0 }}
+                    >
+                      <Icon name="mic" size={isMobile ? 18 : 15} />
+                    </button>
+                  )}
                   <button className={`btn btn--primary ${isMobile ? 'btn--icon' : ''}`} onClick={() => { cerrarOperaciones(); addTrabajo(); }} title="Agregar trabajo" style={{ height: 38, flexShrink: 0 }}>
                     {/* Sin spinner ni deshabilitado: la fila se dibuja al
                         instante y el campo queda vacío, así que no hay espera
@@ -2972,6 +3145,142 @@ export default function FichaRapidaPage() {
                     <Icon name="plus" size={isMobile ? 20 : 14} /> {!isMobile && 'Agregar'}
                   </button>
                 </div>
+
+                {/* Dictado: primero se escucha, después se revisa. Nunca
+                    entra nada a la ficha sin pasar por acá — ver el comentario
+                    del estado. El panel usa el mismo popover que los chips,
+                    anclado a la fila. */}
+                {workPanel === 'dictado' && (
+                  <div style={popover} ref={dicRef}>
+                    {dicProps ? (
+                      <>
+                        <div style={popTitle}>
+                          {dicProps.length === 1 ? 'Un trabajo' : `${dicProps.length} trabajos`} — revisá y confirmá
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                          {dicProps.map((t, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input
+                                className="input"
+                                value={t.descripcion}
+                                onChange={e => editarProp(i, 'descripcion', e.target.value)}
+                                style={{ flex: '1 1 120px', minWidth: 0, height: 34 }}
+                              />
+                              <div style={{ position: 'relative', width: 110, flexShrink: 0 }}>
+                                <span style={dollarPrefix}>$</span>
+                                <input
+                                  className="input"
+                                  inputMode="numeric"
+                                  placeholder="0"
+                                  value={t.precio != null ? String(t.precio) : ''}
+                                  onChange={e => editarProp(i, 'precio', e.target.value)}
+                                  style={{ width: '100%', height: 34, paddingLeft: 20 }}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--icon"
+                                title="Sacar este trabajo"
+                                aria-label={`Sacar ${t.descripcion}`}
+                                onClick={() => quitarProp(i)}
+                                style={{ height: 34, flexShrink: 0 }}
+                              >
+                                <Icon name="x" size={13} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {/* El total, a la vista antes de confirmar. Es lo
+                            único que el dictado puede romper de verdad: un
+                            trabajo mal escrito se corrige en la fila, un
+                            precio mal escuchado se va al "Falta cobrar" y no
+                            lo mira nadie más. Acá se ve de una. */}
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <span style={{ marginRight: 'auto', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                            Total{' '}
+                            <b style={{ color: 'var(--text-primary)' }}>
+                              {fmtMoney(dicProps.reduce((a, t) => a + (t.precio ?? 0), 0))}
+                            </b>
+                          </span>
+                          <button type="button" className="btn btn--ghost btn--sm" onClick={cerrarDictado} disabled={dicGuardando}>
+                            Cancelar
+                          </button>
+                          {/* A mano, sin cerrar y volver a abrir: lo más
+                              probable después de leer la propuesta es querer
+                              decirlo otra vez. */}
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--sm"
+                            onClick={arrancarDictado}
+                            disabled={dicGuardando}
+                          >
+                            <Icon name="mic" size={13} /> Volver a dictar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--primary btn--sm"
+                            onClick={confirmarDictado}
+                            disabled={dicGuardando || !dicProps.length}
+                          >
+                            {dicGuardando
+                              ? 'Agregando…'
+                              : dicProps.length === 1 ? 'Agregar' : `Agregar los ${dicProps.length}`}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* El recordatorio de qué decir queda a la vista
+                            mientras hablás, igual que en el alta de paciente:
+                            hablando no se puede leer la pantalla. */}
+                        <div style={popTitle}>Decí el trabajo, la pieza si corresponde, y el precio</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {dic.estado === 'grabando' && <OndaVoz activa tam="chica" />}
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {dicPensando
+                              ? 'Armando los trabajos…'
+                              : dic.error || dicError
+                                ? dic.error ?? dicError
+                                : [dic.texto, dic.parcial].filter(Boolean).join(' ') || 'Te escucho…'}
+                          </span>
+                          <button type="button" className="btn btn--ghost btn--sm" onClick={cerrarDictado} disabled={dicPensando}>
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--primary btn--sm"
+                            onClick={dicError ? arrancarDictado : interpretarDictado}
+                            disabled={dicPensando}
+                          >
+                            {dicError ? 'Volver a decirlo' : 'Listo'}
+                          </button>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                          Podés decir varios seguidos. Se manda solo cuando dejás de hablar.
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Sólo con la ficha vacía. Es una línea y no un botón:
+                    vive en el alta de cualquier paciente nuevo, así que tiene
+                    que poder ignorarse sin esfuerzo. */}
+                {fichaVacia && workPanel !== 'dictado' && (
+                  <button
+                    type="button"
+                    onClick={() => { cerrarOperaciones(); setCargarFotoOpen(true); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      marginTop: 8, padding: 0, border: 0, background: 'none',
+                      font: 'inherit', fontSize: 12.5, color: 'var(--brand-primary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Icon name="camera" size={14} />
+                    ¿Viene de una ficha en papel? Cargala con una foto
+                  </button>
+                )}
 
                 {/* popover de chips (contextual al campo enfocado) */}
                 {workPanel === 'trabajo' && (
@@ -3230,6 +3539,14 @@ export default function FichaRapidaPage() {
 
       <CustomAmountsModal open={customAmountsOpen} initial={quickAmounts} onClose={() => setCustomAmountsOpen(false)} />
       <CustomTreatmentsModal open={customTreatOpen} initial={treatments} onClose={() => setCustomTreatOpen(false)} />
+      {cargarFotoOpen && (
+        <CargarDesdeFotoModal
+          open
+          onClose={() => setCargarFotoOpen(false)}
+          patientId={id!}
+          nombre={patient?.name}
+        />
+      )}
 
       {/* Modal del odontograma */}
       {odoOpen && patient && (

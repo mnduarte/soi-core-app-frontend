@@ -38,6 +38,10 @@ export default function PatientsPage() {
     mutationFn: (id: string) => patientsApi.hardRemove(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['patients'] });
+      // Se limpia la búsqueda: lo normal es haber buscado a esa persona para
+      // borrarla, y al desaparecer quedaba un campo con texto y una lista
+      // vacía, que se lee como que se borró de más.
+      setSearch('');
       showToast('Paciente eliminado');
     },
     onError: () => showToast('No se pudo eliminar', 'error'),

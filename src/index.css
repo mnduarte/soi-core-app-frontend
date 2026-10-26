@@ -6165,3 +6165,12 @@ table.tbl { width: 100%; border-collapse: collapse; }
 @media (prefers-reduced-motion: reduce) {
   .inst__btn { transition: none; }
 }
+
+/* Nota de evolución cerrada: pasaron 24h y ya no se edita ni se borra. Ocupa
+   el lugar de los botones que había, para que la fila no cambie de forma. */
+.ev-sellada {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  color: var(--text-placeholder);
+  cursor: help;
+}

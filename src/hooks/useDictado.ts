@@ -71,6 +71,17 @@ const getSR = (): ConstructorSR | null => {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 };
 
+/**
+ * El dictado necesita contexto seguro (https o localhost).
+ *
+ * El objeto existe igual en http, así que el botón aparece y después no pasa
+ * nada: el caso típico es entrar al servidor de desarrollo desde el celular
+ * por la IP de la red (http://192.168.x.x), donde en la compu —que entra por
+ * localhost, que sí cuenta como seguro— funciona perfecto. Se distingue para
+ * poder decir qué pasa en vez de "este navegador no deja dictar".
+ */
+const contextoSeguro = () => window.isSecureContext !== false;
+
 const MENSAJES: Record<string, string> = {
   'not-allowed': 'No nos diste permiso para usar el micrófono.',
   'service-not-allowed': 'Este navegador no deja dictar acá. Escribí la nota a mano.',
@@ -108,7 +119,9 @@ const agregar = (acumulado: string, tramo: string) => {
 };
 
 export function useDictado(idioma = 'es-AR') {
-  const [soportado] = useState(() => getSR() !== null);
+  const [soportado] = useState(() => getSR() !== null && contextoSeguro());
+  /** Soportado por el navegador pero apagado por entrar sin https. */
+  const [inseguro] = useState(() => getSR() !== null && !contextoSeguro());
   const [estado, setEstado] = useState<EstadoDictado>('inactivo');
   const [texto, setTexto] = useState('');
   const [parcial, setParcial] = useState('');
@@ -128,6 +141,17 @@ export function useDictado(idioma = 'es-AR') {
   const parcialRef = useRef('');
   /** Se reasigna en cada render para que `onend` llame a la versión viva. */
   const arrancarRef = useRef<(base: string) => void>(() => {});
+  /**
+   * Tandas seguidas que terminaron sin una sola palabra.
+   *
+   * Una sola no dice nada: "no-speech" salta cada vez que alguien hace una
+   * pausa larga, y por eso se ignora. Pero varias seguidas SIN que se haya
+   * transcripto nunca nada no es una pausa, es que el reconocedor no está
+   * recibiendo audio —otra app con el micrófono tomado, por ejemplo— y hay que
+   * decirlo. Antes se reiniciaba en silencio para siempre y la pantalla se
+   * quedaba en "Te escucho…" sin una sola pista de qué pasaba.
+   */
+  const mudas = useRef(0);
 
   // Timer del contador. Va aparte del motor porque la API no informa duración.
   useEffect(() => {
@@ -143,6 +167,7 @@ export function useDictado(idioma = 'es-AR') {
 
       // Instancia nueva en cada tanda: ver regla 2 del comentario de arriba.
       const m = new SR();
+      if (!base) mudas.current = 0;
       baseRef.current = base;
       finalRef.current = base;
       parcialRef.current = '';
@@ -160,6 +185,7 @@ export function useDictado(idioma = 'es-AR') {
           if (r.isFinal) firme = agregar(firme, t);
           else enCurso = agregar(enCurso, t);
         }
+        if (firme || enCurso) mudas.current = 0;
         finalRef.current = agregar(baseRef.current, firme);
         parcialRef.current = enCurso;
         setTexto(finalRef.current);
@@ -167,9 +193,20 @@ export function useDictado(idioma = 'es-AR') {
       };
 
       m.onerror = e => {
-        // "no-speech" pasa todo el tiempo cuando el Dr. hace una pausa larga;
-        // no es un error que haya que mostrarle a nadie.
-        if (e.error === 'no-speech' || e.error === 'aborted') return;
+        if (e.error === 'aborted') return;
+        // "no-speech" pasa todo el tiempo cuando el Dr. hace una pausa larga,
+        // así que una sola vez no se muestra. Tres seguidas sin haber
+        // transcripto NADA ya no es una pausa: no está entrando audio.
+        if (e.error === 'no-speech') {
+          if (finalRef.current.trim()) return;
+          if (++mudas.current < 3) return;
+          setError(
+            'No se escuchó nada. Cerrá otras apps que usen el micrófono y probá de nuevo.',
+          );
+          quiereGrabar.current = false;
+          setEstado('inactivo');
+          return;
+        }
         setError(MENSAJES[e.error] ?? 'No se pudo dictar. Probá escribiendo la nota.');
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setBloqueado(true);
         quiereGrabar.current = false;
@@ -291,7 +328,11 @@ export function useDictado(idioma = 'es-AR') {
     /** Lo que todavía está interpretando, para mostrarlo en gris. */
     parcial,
     segundos,
-    error,
+    error:
+      error ??
+      (inseguro
+        ? 'El dictado necesita una conexión segura (https). Entrá por el link de la app.'
+        : null),
     empezar,
     parar,
     descartar,

@@ -54,6 +54,13 @@ export interface CreateWorkInput {
   notes?: string;
 }
 
+/** Un trabajo propuesto por el dictado. Todavía NO existe: hay que confirmarlo. */
+export interface TrabajoDictado {
+  descripcion: string;
+  pieza: string | null;
+  precio: number | null;
+}
+
 export const worksApi = {
   // status: 'pending' (plan) | 'done' (historial, ordenado por fecha de hecho) |
   // un estado puntual; q busca texto/monto; limit pagina el historial; from/to
@@ -80,4 +87,20 @@ export const worksApi = {
       .then(r => r.data.data),
 
   remove: (workId: string) => apiClient.delete(`/works/${workId}`),
+
+  /**
+   * Interpreta un plan dictado. No crea nada: devuelve la propuesta para que
+   * el odontólogo la revise. Un precio mal escuchado que entrara solo a la
+   * ficha sería plata mal contada sin que nadie la haya visto.
+   */
+  /** Lo mismo pero leyendo la columna del plan en la ficha de papel. */
+  scanPlan: (image: string, mediaType: string) =>
+    apiClient
+      .post<{ data: TrabajoDictado[] }>('/works/scan-plan', { image, mediaType })
+      .then(r => r.data.data),
+
+  dictar: (texto: string) =>
+    apiClient
+      .post<{ data: TrabajoDictado[] }>('/works/dictar', { texto })
+      .then(r => r.data.data),
 };

@@ -37,6 +37,14 @@ const horaCorta = (iso: string) => {
 /** Lo que tarda el panel en irse. Tiene que coincidir con la animación del
  *  CSS: si acá fuera más corto, el nodo se desmonta a mitad del movimiento. */
 const SALIDA_MS = 180;
+/**
+ * Lo que dura la ventana para editar o borrar una nota.
+ *
+ * El número vive también en el backend (`EDIT_WINDOW_MS` en
+ * clinical-entries.service.ts), que es quien manda: acá está para no ofrecer
+ * botones que el servidor va a rechazar. Si allá cambia, cambiarlo acá.
+ */
+const VENTANA_EDICION_MS = 24 * 60 * 60 * 1000;
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${DOS(s % 60)}`;
 
@@ -88,6 +96,15 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
 
   const [nota, setNota] = useState('');
   const notaRef = useRef<HTMLInputElement>(null);
+  /**
+   * La hora de abrir la pestaña, para saber qué notas ya están cerradas.
+   *
+   * Se toma UNA vez y no en cada fila: leer el reloj durante el render es una
+   * función impura y el compilador de React la rechaza. Que una nota de 23:59
+   * siga editable hasta que se recargue la pantalla no le importa a nadie; el
+   * que manda es el backend, que la rechaza igual.
+   */
+  const [abiertoEn] = useState(() => Date.now());
   const [editando, setEditando] = useState<string | null>(null);
   const [borrador, setBorrador] = useState('');
   const [aBorrar, setABorrar] = useState<ClinicalEntry | null>(null);
@@ -347,6 +364,12 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
         ) : (
           ordenadas.map(e => {
             const editado = e.updatedAt !== e.createdAt;
+            // A las 24 horas la nota queda sellada: el backend no la deja
+            // editar ni borrar porque es historia clínica. Hay que mirarlo acá
+            // también — si no, se ofrecen dos botones que tienen GARANTIZADO
+            // fallar, y el cartel de confirmación promete algo que no va a
+            // pasar. Pasó: "dice que no se puede borrar la nota".
+            const sellada = abiertoEn - new Date(e.createdAt).getTime() > VENTANA_EDICION_MS;
             // Solo se puede nombrar al profesional si es el que está logueado:
             // todavía no hay endpoint para resolver a los demás usuarios.
             const mio = !!user && e.professionalId === user.id;
@@ -431,19 +454,34 @@ export function EvolucionTab({ patientId, stack, photos, onFotos, onZoom }: Prop
                           {fotos.length > 0 && <b>{fotos.length}</b>}
                         </button>
                       )}
-                      <button
-                        type="button"
-                        title="Editar la nota"
-                        onClick={() => {
-                          setEditando(e._id);
-                          setBorrador(e.content);
-                        }}
-                      >
-                        <Icon name="edit" size={13} />
-                      </button>
-                      <button type="button" title="Borrar la nota" onClick={() => setABorrar(e)}>
-                        <Icon name="trash" size={13} />
-                      </button>
+                      {sellada ? (
+                        // No se esconde sin más: que el lugar quede vacío haría
+                        // pensar que falta algo. El ícono dice que la nota ya
+                        // es historia clínica cerrada, que es una propiedad del
+                        // registro y no una falla.
+                        <span
+                          className="ev-sellada"
+                          title="Cerrada: la historia clínica no se edita ni se borra después de 24 horas"
+                        >
+                          <Icon name="history" size={12} />
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            title="Editar la nota"
+                            onClick={() => {
+                              setEditando(e._id);
+                              setBorrador(e.content);
+                            }}
+                          >
+                            <Icon name="edit" size={13} />
+                          </button>
+                          <button type="button" title="Borrar la nota" onClick={() => setABorrar(e)}>
+                            <Icon name="trash" size={13} />
+                          </button>
+                        </>
+                      )}
                     </span>
                   )}
                 </div>
